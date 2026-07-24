@@ -1,0 +1,13 @@
+node_modules/
+.expo/
+android/
+ios/
+*.log
+
+# The android/ and ios/ rules above target the generated native project dirs.
+# Re-include the bundled notification sound assets that live under those names so
+# they're committed and shipped in EAS builds (EAS respects .gitignore).
+!assets/sounds/android/
+!assets/sounds/android/**
+!assets/sounds/IOS/
+!assets/sounds/IOS/**

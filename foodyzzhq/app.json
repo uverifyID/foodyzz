@@ -1,0 +1,90 @@
+{
+  "expo": {
+    "name": "FoodyzzHQ",
+    "slug": "foodyzzhq",
+    "version": "1.1.2",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "newArchEnabled": false,
+    "androidStatusBar": {
+      "backgroundColor": "#86B54F",
+      "barStyle": "dark-content"
+    },
+    "splash": {
+      "image": "./assets/images/logo/mainpage/splashscreen.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#86B54F"
+    },
+    "icon": "./assets/images/logo/icon/appicon.png",
+    "scheme": "com.rajshrestha.foodyzzhq",
+    "plugins": [
+      "./withAndroidPathFix",
+      "./withNotificationSounds",
+      "./withFmtConstevalFix",
+      "./withFirebaseAuthSwiftOptFix",
+      "expo-font",
+      "expo-notifications",
+      "@react-native-firebase/app",
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Allow FoodyzzHQ to access your camera to scan bike QR codes and review customer driver license photos.",
+          "microphonePermission": "$(PRODUCT_NAME) does not record audio. Microphone access is included by an audio library used only to play notification sounds.",
+          "recordAudioAndroid": false
+        }
+      ],
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "Allow FoodyzzHQ to use your location so customers can see your live position on the map while you deliver their bike."
+        }
+      ],
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "compileSdkVersion": 35,
+            "targetSdkVersion": 35,
+            "buildToolsVersion": "35.0.0"
+          },
+          "ios": {
+            "useFrameworks": "static",
+            "deploymentTarget": "15.1",
+            "extraPods": [
+              {
+                "name": "RecaptchaEnterprise",
+                "version": "~> 18.9.1"
+              }
+            ]
+          }
+        }
+      ]
+    ],
+    "ios": {
+      "supportsTablet": true,
+      "infoPlist": {
+        "NSCameraUsageDescription": "Allow FoodyzzHQ to access your camera to scan bike QR codes and review customer driver license photos.",
+        "NSMicrophoneUsageDescription": "$(PRODUCT_NAME) does not record audio. Microphone access is included by an audio library used only to play notification sounds.",
+        "NSLocationWhenInUseUsageDescription": "Allow FoodyzzHQ to use your location so customers can see your live position on the map while you deliver their bike.",
+        "ITSAppUsesNonExemptEncryption": false
+      },
+      "bundleIdentifier": "com.foodyzzHQ",
+      "googleServicesFile": "./GoogleService-Info.plist"
+    },
+    "android": {
+      "googleServicesFile": "./google-services.json",
+      "package": "com.foodyzzHQ",
+      "edgeToEdgeEnabled": false,
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/images/logo/icon/appicon.png",
+        "backgroundColor": "#86B54F"
+      },
+      "permissions": [
+        "android.permission.CAMERA",
+        "android.permission.ACCESS_FINE_LOCATION",
+        "android.permission.ACCESS_COARSE_LOCATION"
+      ]
+    },
+    "owner": "rajshrestha"
+  }
+}

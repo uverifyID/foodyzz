@@ -1,0 +1,43 @@
+{
+  "name": "functions",
+  "scripts": {
+    "lint": "eslint --ext .js,.ts .",
+    "build": "tsc",
+    "build:watch": "tsc --watch",
+    "serve": "npm run build && firebase emulators:start --only functions",
+    "shell": "npm run build && firebase functions:shell",
+    "start": "npm run shell",
+    "deploy": "firebase deploy --only functions",
+    "logs": "firebase functions:log",
+    "test": "npm run build && firebase emulators:exec --only firestore,auth --project demo-foodyzz \"jest --runInBand\"",
+    "qa": "npm run build && firebase emulators:exec --only firestore,auth --project demo-foodyzz \"jest --runInBand qa-smoke\"",
+    "test:watch": "firebase emulators:exec --only firestore,auth --project demo-foodyzz \"jest --runInBand --watch\"",
+    "backfill:counts": "node scripts/backfill-platform-counts.js",
+    "seed:emulator": "node scripts/seed-emulator.js",
+    "seed:logistics": "node scripts/seed-logistics.js"
+  },
+  "engines": {
+    "node": "22"
+  },
+  "main": "lib/index.js",
+  "dependencies": {
+    "firebase-admin": "^12.1.0",
+    "firebase-functions": "^6.0.0",
+    "nodemailer": "^6.10.1",
+    "stripe": "^15.12.0"
+  },
+  "devDependencies": {
+    "@types/jest": "^29.5.12",
+    "@types/nodemailer": "^8.0.1",
+    "@typescript-eslint/eslint-plugin": "^6.14.0",
+    "@typescript-eslint/parser": "^6.14.0",
+    "eslint": "^8.56.0",
+    "eslint-config-google": "^0.14.0",
+    "eslint-plugin-import": "^2.29.1",
+    "firebase-functions-test": "^3.1.0",
+    "jest": "^29.7.0",
+    "ts-jest": "^29.2.5",
+    "typescript": "^5.3.3"
+  },
+  "private": true
+}

@@ -1,0 +1,160 @@
+rules_version = '2';
+
+// ============================================================================
+// HARDENED RULES — deployed 2026-06-25.
+// Previous version allowed ANY authenticated user to write ANY providers/orders/
+// promos doc (incl. provider bank details). This version owner-scopes the
+// sensitive writes while preserving every real write path:
+//   - providers/orders: scoped to the owner (see helpers); admins bypass.
+//   - order UPDATE stays broad so providers can advance status (dispatch flow).
+//   - messages/supportMessages/promos: unchanged (broad) — see TODOs.
+// Admin identity = the `admin:true` custom claim (same check bulkBroadcast uses).
+// NOTE: phone on doc ids/fields is digits-only ("14022039987"); the auth claim
+// is E.164 ("+14022039987"), matched via '+' concat.
+// ============================================================================
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isAdmin() {
+      return request.auth != null && request.auth.token.admin == true;
+    }
+
+    // Digits-only phone field, prefixed with '+', must equal the E.164 claim.
+    function ownsPhoneField(digitsPhone) {
+      return request.auth != null
+             && ('+' + digitsPhone) == request.auth.token.phone_number;
+    }
+
+    // Public, NON-sensitive config docs — `global` (commission, fees, publishableKey,
+    // Google Maps client key, legal links) AND `logistics` (bike models, rates, fees,
+    // delivery windows). Readable pre-auth so the login screen can show the T&C link and
+    // the rental flow can price. Stripe SECRETS live in apiConfigSecret/* (denied to all
+    // clients below); functions read those via the admin SDK and merge them in.
+    match /apiConfig/{docId} {
+      allow read: if true;
+      // Admin hub (GlobalConfigTab) writes bike rates / fees / delivery windows here.
+      // NON-sensitive config only — Stripe secrets live in apiConfigSecret/* (still deny-all).
+      allow write: if isAdmin();
+    }
+
+    // Server-only secrets (Stripe secretKey / webhook secret). Never readable or
+    // writable by any client — only Cloud Functions (admin SDK) can access them.
+    match /apiConfigSecret/{doc} {
+      allow read, write: if false;
+    }
+
+    // Providers - any authed user may read (browse stores); only the owning
+    // phone (or an admin) may write. Protects bankAccount / Stripe fields.
+    match /providers/{providerId} {
+      allow read: if request.auth != null;
+      allow create, update: if ownsPhoneField(request.resource.data.phoneNumber) || isAdmin();
+      allow delete: if ownsPhoneField(resource.data.phoneNumber) || isAdmin();
+
+      // Redacted public reviews (first name + stars + comment only), written by the
+      // onOrderUpdatedUpdateStats function so any authed customer can browse them.
+      match /reviews/{reviewId} {
+        allow read: if request.auth != null;
+        allow write: if false;
+      }
+    }
+
+    // Users (customers) - self-only profile writes; admin may write (block flag).
+    match /users/{userId} {
+      allow read: if request.auth != null;
+      allow write: if (request.auth != null && request.auth.token.phone_number == userId)
+                   || isAdmin();
+    }
+
+    // Orders - carry the customer's charge & authorization amounts, so READ is
+    // restricted to the owning customer or an admin. Providers must NEVER see these
+    // amounts; they read the redacted `providerOrders` mirror instead (below).
+    // CREATE must be by the customer themselves (or admin). UPDATE stays broad so
+    // a provider (not the customer) can advance order status.
+    // TODO: tighten UPDATE to {owning customer} OR {assigned provider} OR admin.
+    match /orders/{orderId} {
+      allow read: if request.auth != null
+                  && (resource.data.customerPhone == request.auth.token.phone_number || isAdmin());
+      allow create: if (request.auth != null
+                        && request.resource.data.customerPhone == request.auth.token.phone_number)
+                    || isAdmin();
+      allow update: if request.auth != null;
+    }
+
+    // Provider-safe order mirror — a copy of each order with the customer's charge /
+    // authorization fields stripped by the onOrderWriteMirrorForProvider function.
+    // Authed read (the scrubsHQ broadcast feed needs it); writes are server-only.
+    match /providerOrders/{orderId} {
+      allow read: if request.auth != null;
+      allow write: if false;
+    }
+
+    // Promos - unchanged (broad).
+    // TODO: owner-scope writes. The id is `${phone}_${zip}_${promoId}` and the
+    //       rules language has no string split, so add an `ownerPhone` (digits)
+    //       field on create, then: allow write: if ownsPhoneField(request.resource.data.ownerPhone) || isAdmin();
+    match /promos/{promoId} {
+      allow read, write: if request.auth != null;
+    }
+
+    // Support messages - unchanged (broad: customers, providers, admin all post).
+    match /supportMessages/{messageId} {
+      allow read: if request.auth != null;
+      allow create: if request.auth != null;
+      allow update: if request.auth != null;
+    }
+
+    // Order chat messages - unchanged.
+    match /messages/{messageId} {
+      allow read: if request.auth != null;
+      allow create: if request.auth != null;
+    }
+
+    // Archived users - self-only (account-deletion flow).
+    match /archivedUsers/{userId} {
+      allow create: if request.auth != null
+                    && request.auth.token.phone_number == userId;
+    }
+
+    // Archived providers - self-only (provider account-deletion / "Purge HQ Record"
+    // flow). The doc id is `${phone}_${zip}`, so unlike archivedUsers we can't key on
+    // the id; scope by the owning phone FIELD on the archived copy instead, exactly
+    // like the providers rule. Without this the set() hit the default-deny below and
+    // surfaced as "Archival sequence failed."
+    match /archivedProviders/{archivedId} {
+      allow create: if ownsPhoneField(request.resource.data.phoneNumber) || isAdmin();
+    }
+
+    // Physical bike inventory. Any authed client reads it — the customer app needs
+    // live availability per model to quote a rental, and FoodyzzHQ needs it to pick
+    // the bike it hands over. Writes are admin (fleet management from the admin hub)
+    // or server-side, so a customer can never mark a bike available/rented.
+    match /bikes/{bikeId} {
+      allow read: if request.auth != null;
+      allow write: if isAdmin();
+
+      // Append-only rental history per bike. Admin-only: it names the renter.
+      match /history/{entryId} {
+        allow read: if isAdmin();
+        allow write: if false;
+      }
+    }
+
+    // Aggregated daily stats and per-provider performance rollups, written by
+    // Cloud Functions. Only the admin hub reads them.
+    match /stats/{date} {
+      allow read: if isAdmin();
+      allow write: if false;
+    }
+
+    match /providerPerformance/{providerId} {
+      allow read: if isAdmin();
+      allow write: if false;
+    }
+
+    // Default deny all other collections
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

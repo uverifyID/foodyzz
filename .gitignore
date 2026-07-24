@@ -1,0 +1,56 @@
+# ── Dependencies ─────────────────────────────────────────────
+node_modules/
+
+# ── Build output ─────────────────────────────────────────────
+build/
+dist/
+out/
+.next/
+web-build/
+/functions/lib/
+*.tsbuildinfo
+
+# ── Expo / React Native ──────────────────────────────────────
+.expo/
+.expo-shared/
+
+# ── Native build artifacts (iOS / Android) ───────────────────
+**/ios/Pods/
+**/ios/build/
+**/ios/DerivedData/
+**/*.xcworkspace/xcuserdata/
+**/*.xcodeproj/xcuserdata/
+**/android/build/
+**/android/.gradle/
+**/android/app/build/
+**/android/.cxx/
+*.keystore
+*.jks
+
+# ── Secrets & credentials — DO NOT COMMIT ────────────────────
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p8
+*.p12
+*.mobileprovision
+*serviceAccount*.json
+*service-account*.json
+google-services.json
+GoogleService-Info.plist
+
+# ── Logs (includes logs/git PAT file + runtime logs) ─────────
+logs/
+*.log
+firebase-debug*.log
+firestore-debug.log
+ui-debug.log
+.firebase/
+
+# ── OS / editor cruft ────────────────────────────────────────
+.DS_Store
+.idea/
+.vscode/
+*.swp

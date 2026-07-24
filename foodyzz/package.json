@@ -1,0 +1,72 @@
+{
+  "name": "foodyzz-customer",
+  "version": "1.0.0",
+  "main": "./app/index.tsx",
+  "scripts": {
+    "start": "cross-env NODE_OPTIONS=--max-old-space-size=8192 expo start",
+    "android": "cross-env NODE_OPTIONS=--max-old-space-size=8192 expo run:android",
+    "ios": "cross-env NODE_OPTIONS=--max-old-space-size=8192 expo run:ios",
+    "web": "cross-env NODE_OPTIONS=--max-old-space-size=8192 expo start --web",
+    "postinstall": "patch-package"
+  },
+  "dependencies": {
+    "@expo-google-fonts/inter": "0.2.3",
+    "@expo-google-fonts/jetbrains-mono": "0.2.3",
+    "@expo-google-fonts/space-grotesk": "0.2.3",
+    "@react-native-async-storage/async-storage": "2.1.2",
+    "@react-native-firebase/app": "^22.4.0",
+    "@react-native-firebase/auth": "^22.4.0",
+    "@react-native-firebase/firestore": "^22.4.0",
+    "@react-native-firebase/functions": "^22.4.0",
+    "@react-native-firebase/storage": "^22.4.0",
+    "@react-navigation/bottom-tabs": "^6.5.20",
+    "@react-navigation/native": "^6.1.17",
+    "@react-navigation/native-stack": "^6.9.26",
+    "@stripe/stripe-react-native": "0.45.0",
+    "expo": "^53.0.27",
+    "expo-asset": "~11.1.7",
+    "expo-av": "~15.1.7",
+    "expo-build-properties": "~0.14.8",
+    "expo-clipboard": "~7.1.5",
+    "expo-constants": "~17.1.8",
+    "expo-dev-client": "~5.2.4",
+    "expo-device": "~7.1.4",
+    "expo-font": "~13.3.2",
+    "expo-haptics": "~14.1.4",
+    "expo-image-manipulator": "~13.1.7",
+    "expo-image-picker": "~16.1.4",
+    "expo-linking": "~7.1.7",
+    "expo-notifications": "~0.31.5",
+    "expo-splash-screen": "~0.30.10",
+    "expo-status-bar": "~2.2.3",
+    "expo-system-ui": "~5.0.11",
+    "lucide-react-native": "1.17.0",
+    "nativewind": "2.0.11",
+    "react": "19.0.0",
+    "react-native": "0.79.6",
+    "react-native-maps": "1.20.1",
+    "react-native-qrcode-svg": "^6.3.21",
+    "react-native-safe-area-context": "5.4.0",
+    "react-native-screens": "~4.11.1",
+    "react-native-svg": "15.11.2"
+  },
+  "devDependencies": {
+    "@babel/core": "^7.29.7",
+    "@types/react": "~19.0.0",
+    "cross-env": "^7.0.3",
+    "patch-package": "^8.0.1",
+    "postinstall-postinstall": "^2.1.0",
+    "tailwindcss": "3.3.2",
+    "typescript": "~5.8.3"
+  },
+  "expo": {
+    "doctor": {
+      "reactNativeDirectoryCheck": {
+        "//": "expo-av is deprecated in SDK 53 (removed in SDK 54); still works and is used only for notification-sound playback in soundPlayer.ts. Deferring the expo-audio migration to the SDK 54 bump — silence the advisory until then.",
+        "exclude": [
+          "expo-av"
+        ]
+      }
+    }
+  }
+}

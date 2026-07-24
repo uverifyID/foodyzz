@@ -1,0 +1,80 @@
+# ===================================================================
+# UniHamper Admin Hub — https://admin.unihamper.com
+# Create React App static build (no client-side router — tabs via state)
+# This file is copied into the build/dist output by react-scripts.
+# ===================================================================
+
+Options -Indexes
+AddDefaultCharset UTF-8
+DirectoryIndex index.html
+
+# ===================================================================
+# Canonical host + HTTPS
+# ===================================================================
+<IfModule mod_rewrite.c>
+  RewriteEngine On
+
+  # http -> https ; www -> non-www
+  RewriteCond %{HTTPS} !=on [OR]
+  RewriteCond %{HTTP_HOST} ^www\.(.+)$ [NC]
+  RewriteRule ^ https://admin.unihamper.com%{REQUEST_URI} [L,R=301]
+
+  # SPA fallback: any non-file / non-dir request serves the app shell (200)
+  RewriteCond %{REQUEST_FILENAME} !-f
+  RewriteCond %{REQUEST_FILENAME} !-d
+  RewriteRule ^ /index.html [L]
+</IfModule>
+
+# ===================================================================
+# Keep the admin hub out of search engines (also see robots.txt)
+# ===================================================================
+<IfModule mod_headers.c>
+  Header set X-Robots-Tag "noindex, nofollow, noarchive"
+</IfModule>
+
+# ===================================================================
+# Compression
+# ===================================================================
+<IfModule mod_deflate.c>
+  AddOutputFilterByType DEFLATE text/html text/plain text/css text/xml \
+    application/javascript application/json image/svg+xml application/manifest+json
+</IfModule>
+
+# ===================================================================
+# Caching — CRA fingerprints assets under /static, so they're immutable
+# ===================================================================
+<IfModule mod_expires.c>
+  ExpiresActive On
+  ExpiresByType text/html               "access plus 0 seconds"
+  ExpiresByType text/css                "access plus 1 year"
+  ExpiresByType application/javascript  "access plus 1 year"
+  ExpiresByType image/png               "access plus 1 year"
+  ExpiresByType image/jpeg              "access plus 1 year"
+  ExpiresByType image/svg+xml           "access plus 1 year"
+  ExpiresByType image/x-icon            "access plus 1 year"
+  ExpiresByType font/woff2              "access plus 1 year"
+</IfModule>
+
+<IfModule mod_headers.c>
+  <FilesMatch "\.(css|js|png|jpe?g|svg|ico|woff2)$">
+    Header set Cache-Control "public, max-age=31536000, immutable"
+  </FilesMatch>
+  <FilesMatch "\.html$">
+    Header set Cache-Control "no-cache, must-revalidate"
+  </FilesMatch>
+
+  # Security headers
+  Header set X-Content-Type-Options "nosniff"
+  Header set X-Frame-Options "SAMEORIGIN"
+  Header set Referrer-Policy "strict-origin-when-cross-origin"
+  Header set Permissions-Policy "geolocation=(), camera=(), microphone=()"
+  Header always set Strict-Transport-Security "max-age=31536000"
+  Header unset X-Powered-By
+</IfModule>
+
+# ===================================================================
+# Block hidden / sensitive files
+# ===================================================================
+<FilesMatch "^\.(?!well-known)">
+  Require all denied
+</FilesMatch>

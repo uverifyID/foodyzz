@@ -1,0 +1,18 @@
+diff --git a/node_modules/@stripe/stripe-react-native/ios/StripeSwiftInterop.h b/node_modules/@stripe/stripe-react-native/ios/StripeSwiftInterop.h
+index c7a804d..b89941c 100644
+--- a/node_modules/@stripe/stripe-react-native/ios/StripeSwiftInterop.h
++++ b/node_modules/@stripe/stripe-react-native/ios/StripeSwiftInterop.h
+@@ -11,7 +11,12 @@
+ @protocol STPPaymentCardTextFieldDelegate;
+ @protocol STPCardFormViewDelegate;
+ 
+-typedef NS_ENUM(NSUInteger, STPPaymentStatus);
++// STPPaymentStatus is a Swift enum backed by Int → the generated
++// stripe_react_native-Swift.h forward-declares it as NSInteger. This hand-written
++// decl used NSUInteger; Xcode 26 (Apple Clang 21) promotes the underlying-type
++// mismatch from a warning to a hard error ("enumeration redeclared with different
++// underlying type"). Match the real type. See stripe/stripe-react-native#2357.
++typedef NS_ENUM(NSInteger, STPPaymentStatus);
+ 
+ // stripe_react_native-Swift.h also depends on these headers.
+ #import <React/RCTBridgeModule.h>

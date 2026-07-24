@@ -1,0 +1,66 @@
+rules_version = '2';
+
+// Foodyzz Cloud Storage rules.
+//
+// The only thing in this bucket is customer identity documents, so the default is
+// deny and every path is opened deliberately.
+//
+// IMPORTANT: Storage rules cannot read Firestore. That means we cannot express
+// "a provider may read this licence because they have an active order for this
+// customer" the way the Firestore rules do. Access is therefore driven purely by
+// the auth token: the owning customer (phone claim) and Foodyzz staff (admin
+// claim). FoodyzzHQ devices are staff devices and carry the admin claim.
+service firebase.storage {
+  match /b/{bucket}/o {
+
+    // Foodyzz staff: the admin hub and FoodyzzHQ delivery devices.
+    function isAdmin() {
+      return request.auth != null && request.auth.token.admin == true;
+    }
+
+    // The customer the document belongs to. Licence paths are keyed by the E.164
+    // phone number, which is exactly what the phone-auth token carries.
+    function ownsPhone(phone) {
+      return request.auth != null && request.auth.token.phone_number == phone;
+    }
+
+    // driverLicenses/{phone}/front.jpg | back.jpg  (see services/driverLicense.ts)
+    //
+    // Read  — the owner, so they can see what they submitted; and staff, for the
+    //         manual review in the admin hub and the ID check at delivery.
+    // Write — the OWNER ONLY. Staff review licences, they never replace one, and a
+    //         staff-writable path would let any HQ device forge a customer's ID.
+    //         Capped at 10 MB and restricted to images so the path can't be used
+    //         as general-purpose storage.
+    match /driverLicenses/{phone}/{fileName} {
+      allow read: if ownsPhone(phone) || isAdmin();
+      allow write: if ownsPhone(phone)
+                   && request.resource.size < 10 * 1024 * 1024
+                   && request.resource.contentType.matches('image/.*');
+    }
+
+    // addressProofs/{phone}/front.jpg — same ownership model as the licence.
+    match /addressProofs/{phone}/{fileName} {
+      allow read: if ownsPhone(phone) || isAdmin();
+      allow write: if ownsPhone(phone)
+                   && request.resource.size < 10 * 1024 * 1024
+                   && request.resource.contentType.matches('image/.*');
+    }
+
+    // bikeCondition/{orderId}/*.jpg — handover photos taken by FoodyzzHQ with the
+    // customer present. Staff write them; both sides read them, so any authed user
+    // may read (the path is keyed by an unguessable order id).
+    match /bikeCondition/{orderId}/{fileName} {
+      allow read: if request.auth != null;
+      allow write: if isAdmin()
+                   && request.resource.size < 10 * 1024 * 1024
+                   && request.resource.contentType.matches('image/.*');
+    }
+
+    // Everything else is denied. Admin-SDK access (Cloud Functions) bypasses these
+    // rules entirely, so server-side cleanup still works.
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}

@@ -1,0 +1,9 @@
+{
+  "expo.jsEngine": "hermes",
+  "EX_DEV_CLIENT_NETWORK_INSPECTOR": "true",
+  "newArchEnabled": "false",
+  "ios.deploymentTarget": "15.1",
+  "ios.useFrameworks": "static",
+  "apple.extraPods": "[{\"name\":\"RecaptchaEnterprise\",\"version\":\"~> 18.9.1\"}]",
+  "apple.privacyManifestAggregationEnabled": "true"
+}

@@ -1,0 +1,83 @@
+{
+  "expo": {
+    "name": "Foodyzz",
+    "slug": "foodyzz",
+    "scheme": "com.rajshrestha.foodyzz",
+    "version": "1.1.2",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "icon": "./assets/images/logo/icon/appicon.png",
+    "plugins": [
+      "./withAndroidPathFix",
+      "./withNotificationSounds",
+      "./withFmtConstevalFix",
+      "./withFirebaseAuthSwiftOptFix",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Allow Foodyzz to access your photos so you can upload your driver license.",
+          "cameraPermission": "Allow Foodyzz to use your camera to photograph your driver license."
+        }
+      ],
+      "expo-font",
+      "expo-notifications",
+      "@react-native-firebase/app",
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "compileSdkVersion": 35,
+            "targetSdkVersion": 35,
+            "buildToolsVersion": "35.0.0"
+          },
+          "ios": {
+            "useFrameworks": "static",
+            "deploymentTarget": "15.1",
+            "extraPods": [
+              {
+                "name": "RecaptchaEnterprise",
+                "version": "~> 18.9.1"
+              }
+            ]
+          }
+        }
+      ],
+      "expo-asset",
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/images/logo/mainpage/splashscreen.png",
+          "imageWidth": 300,
+          "resizeMode": "contain",
+          "backgroundColor": "#FFFFFF"
+        }
+      ]
+    ],
+    "sdkVersion": "53.0.0",
+    "newArchEnabled": false,
+    "platforms": [
+      "ios",
+      "android"
+    ],
+    "android": {
+      "package": "com.foodyzz",
+      "googleServicesFile": "./google-services.json",
+      "edgeToEdgeEnabled": false,
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/images/logo/icon/appicon.png",
+        "backgroundColor": "#FFFFFF"
+      }
+    },
+    "ios": {
+      "bundleIdentifier": "com.foodyzz",
+      "googleServicesFile": "./GoogleService-Info.plist",
+      "infoPlist": {
+        "NSCameraUsageDescription": "Allow $(PRODUCT_NAME) to access your camera to photograph your driver license for bike rental verification.",
+        "NSMicrophoneUsageDescription": "$(PRODUCT_NAME) does not record audio. Microphone access is included by an audio library used only to play notification sounds.",
+        "ITSAppUsesNonExemptEncryption": false
+      },
+      "appleTeamId": "59BW5VWV38"
+    },
+    "owner": "rajshrestha"
+  }
+}

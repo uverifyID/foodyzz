@@ -1,0 +1,29 @@
+# dependencies
+/node_modules
+
+# next.js
+/.next/
+/out/
+
+# production
+/build
+
+# misc
+.DS_Store
+*.pem
+
+# debug
+npm-debug.log*
+
+# env files (contain SMTP + service account secrets)
+.env
+.env*.local
+.env.production
+service-account*.json
+
+# typescript
+*.tsbuildinfo
+next-env.d.ts
+
+# local backups / archives (don't commit)
+*.zip

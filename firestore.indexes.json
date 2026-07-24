@@ -1,0 +1,281 @@
+{
+  "indexes": [
+    {
+      "collectionGroup": "orders",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "customerPhone",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "createdAt",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "orders",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "status",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "providerId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "createdAt",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "orders",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "providerId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "status",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "orders",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "providerId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "createdAt",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "orders",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "providerId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "payoutStatus",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "createdAt",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "orders",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "providerId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "status",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "createdAt",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "orders",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "status",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "payoutStatus",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "createdAt",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "providerOrders",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "providerId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "status",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "createdAt",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "providerOrders",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "providerId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "createdAt",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "providerOrders",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "providerId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "status",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "providerOrders",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "providerId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "payoutStatus",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "createdAt",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "messages",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "orderId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "timestamp",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "promos",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "providerId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "isActive",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "promos",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "expirationDate",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "isActive",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "providers",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "onboarded",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "zipCode",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "supportMessages",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "userPhone",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "timestamp",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "orders",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "depositStatus",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "depositReleaseAt",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "orders",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "billingSchedule.status",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "billingSchedule.nextChargeAt",
+          "order": "ASCENDING"
+        }
+      ]
+    }
+  ],
+  "fieldOverrides": []
+}
