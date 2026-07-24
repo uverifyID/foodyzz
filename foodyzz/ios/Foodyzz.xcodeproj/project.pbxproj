@@ -7,45 +7,45 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
-		108082183BFE33E2B2D252F0 /* Pods_Foodyzz.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = AE5A40EAD9BFFA42347F959B /* Pods_Foodyzz.framework */; };
 		13B07FBF1A68108700A75B9A /* Images.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 13B07FB51A68108700A75B9A /* Images.xcassets */; };
-		1D0A0F0D130A4CE3A73D4C9A /* happybell.caf in Resources */ = {isa = PBXBuildFile; fileRef = 7CFBC3C6A4B7417EA1753754 /* happybell.caf */; };
-		28FDE7F7F1CD31799285A789 /* ExpoModulesProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 53AD272EDF896FA409BB1406 /* ExpoModulesProvider.swift */; };
+		156F184F76714F76BC3E174E /* officering.caf in Resources */ = {isa = PBXBuildFile; fileRef = 219118D617FA4CEC93F88DC0 /* officering.caf */; };
+		3A4C74ABA7F921E067679B49 /* Pods_Foodyzz.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 748051F4396FA45A91D80DF0 /* Pods_Foodyzz.framework */; };
+		3C81386FB100475FBC328FE2 /* oldphone.caf in Resources */ = {isa = PBXBuildFile; fileRef = AF66EDD4F9E041B487F6D0CF /* oldphone.caf */; };
+		3D3E2F9476290FB503958B8D /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = A484EC7DD0A1D5607C290D18 /* PrivacyInfo.xcprivacy */; };
 		3E461D99554A48A4959DE609 /* SplashScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = AA286B85B6C04FC6940260E9 /* SplashScreen.storyboard */; };
-		89AA4EBEB59D499BB6AB3368 /* bell.caf in Resources */ = {isa = PBXBuildFile; fileRef = EE45F884964A49DCB7E27D58 /* bell.caf */; };
-		8E6A299210464C32B0BEA8F8 /* vintage.caf in Resources */ = {isa = PBXBuildFile; fileRef = 36375203915C487F90BF7D40 /* vintage.caf */; };
-		9367175E99D5483985BD987C /* oldphone.caf in Resources */ = {isa = PBXBuildFile; fileRef = 860A160B00FF4B098FC4FFA7 /* oldphone.caf */; };
-		9715E8B21E8A421A864155F7 /* GoogleService-Info.plist in Resources */ = {isa = PBXBuildFile; fileRef = 409BEC0DDFE04BB2AEF1A82B /* GoogleService-Info.plist */; };
-		975C8154DB5245979ABDD0C5 /* quicktone.caf in Resources */ = {isa = PBXBuildFile; fileRef = C3BE502BDD84415DA3BDE118 /* quicktone.caf */; };
-		A4FC9CA2F21227108E95138B /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = C295021A45C944351A3C53AE /* PrivacyInfo.xcprivacy */; };
-		A9EF82FAD3184F3FA1FEA084 /* officering.caf in Resources */ = {isa = PBXBuildFile; fileRef = 9AF12065A92C4CDAB7188B12 /* officering.caf */; };
+		897D3E3C1BDD4F05B89B59E5 /* doorbell.caf in Resources */ = {isa = PBXBuildFile; fileRef = 8CD7AE098FDB4566A3D5DB92 /* doorbell.caf */; };
+		8B6A7B9A8538491583A8C769 /* GoogleService-Info.plist in Resources */ = {isa = PBXBuildFile; fileRef = E4FF02E16D3448979B868C77 /* GoogleService-Info.plist */; };
+		902490AA344768B61071D874 /* ExpoModulesProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9368EF29688B0120FFCD4227 /* ExpoModulesProvider.swift */; };
+		9656A58180544BB1B4DFD133 /* bell.caf in Resources */ = {isa = PBXBuildFile; fileRef = 0E55AE4E4CA54F198161CE35 /* bell.caf */; };
 		BB2F792D24A3F905000567C9 /* Expo.plist in Resources */ = {isa = PBXBuildFile; fileRef = BB2F792C24A3F905000567C9 /* Expo.plist */; };
+		D12E68DA63284BB3A827EE93 /* happybell.caf in Resources */ = {isa = PBXBuildFile; fileRef = 130C0C82ADB94A82BBB0C53B /* happybell.caf */; };
+		D2267E2229EE45299F83DF80 /* quicktone.caf in Resources */ = {isa = PBXBuildFile; fileRef = 6F72A8A55E71423883B309A5 /* quicktone.caf */; };
+		E267FD43D84F4EAB94412B5F /* confirmation.caf in Resources */ = {isa = PBXBuildFile; fileRef = 9927238AC58041E390E3F2FF /* confirmation.caf */; };
+		EA708D29FFE84D9F81BBD803 /* vintage.caf in Resources */ = {isa = PBXBuildFile; fileRef = C807B8B3FD324D9B91F7485B /* vintage.caf */; };
 		F11748422D0307B40044C1D9 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = F11748412D0307B40044C1D9 /* AppDelegate.swift */; };
-		F1498EF00362417882C67BA0 /* doorbell.caf in Resources */ = {isa = PBXBuildFile; fileRef = 9B611A662A08485F81454E24 /* doorbell.caf */; };
-		F1882016A24B42FC95D657B4 /* confirmation.caf in Resources */ = {isa = PBXBuildFile; fileRef = 9FD36003B5B443F8B0BCDB0A /* confirmation.caf */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
+		0E55AE4E4CA54F198161CE35 /* bell.caf */ = {isa = PBXFileReference; explicitFileType = undefined; fileEncoding = undefined; includeInIndex = 0; lastKnownFileType = unknown; name = bell.caf; path = Foodyzz/bell.caf; sourceTree = "<group>"; };
+		130C0C82ADB94A82BBB0C53B /* happybell.caf */ = {isa = PBXFileReference; explicitFileType = undefined; fileEncoding = undefined; includeInIndex = 0; lastKnownFileType = unknown; name = happybell.caf; path = Foodyzz/happybell.caf; sourceTree = "<group>"; };
 		13B07F961A680F5B00A75B9A /* Foodyzz.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Foodyzz.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		13B07FB51A68108700A75B9A /* Images.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; name = Images.xcassets; path = Foodyzz/Images.xcassets; sourceTree = "<group>"; };
 		13B07FB61A68108700A75B9A /* Info.plist */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.plist.xml; name = Info.plist; path = Foodyzz/Info.plist; sourceTree = "<group>"; };
-		1CBC8791BFCC33B3C5BE1FA4 /* Pods-Foodyzz.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-Foodyzz.release.xcconfig"; path = "Target Support Files/Pods-Foodyzz/Pods-Foodyzz.release.xcconfig"; sourceTree = "<group>"; };
-		36375203915C487F90BF7D40 /* vintage.caf */ = {isa = PBXFileReference; explicitFileType = undefined; fileEncoding = undefined; includeInIndex = 0; lastKnownFileType = unknown; name = vintage.caf; path = Foodyzz/vintage.caf; sourceTree = "<group>"; };
-		409BEC0DDFE04BB2AEF1A82B /* GoogleService-Info.plist */ = {isa = PBXFileReference; explicitFileType = undefined; fileEncoding = 4; includeInIndex = 0; lastKnownFileType = text.plist.xml; name = "GoogleService-Info.plist"; path = "Foodyzz/GoogleService-Info.plist"; sourceTree = "<group>"; };
-		53AD272EDF896FA409BB1406 /* ExpoModulesProvider.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = ExpoModulesProvider.swift; path = "Pods/Target Support Files/Pods-Foodyzz/ExpoModulesProvider.swift"; sourceTree = "<group>"; };
-		7A8A86875C49401689C59AC4 /* Pods-Foodyzz.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-Foodyzz.debug.xcconfig"; path = "Target Support Files/Pods-Foodyzz/Pods-Foodyzz.debug.xcconfig"; sourceTree = "<group>"; };
-		7CFBC3C6A4B7417EA1753754 /* happybell.caf */ = {isa = PBXFileReference; explicitFileType = undefined; fileEncoding = undefined; includeInIndex = 0; lastKnownFileType = unknown; name = happybell.caf; path = Foodyzz/happybell.caf; sourceTree = "<group>"; };
-		860A160B00FF4B098FC4FFA7 /* oldphone.caf */ = {isa = PBXFileReference; explicitFileType = undefined; fileEncoding = undefined; includeInIndex = 0; lastKnownFileType = unknown; name = oldphone.caf; path = Foodyzz/oldphone.caf; sourceTree = "<group>"; };
-		9AF12065A92C4CDAB7188B12 /* officering.caf */ = {isa = PBXFileReference; explicitFileType = undefined; fileEncoding = undefined; includeInIndex = 0; lastKnownFileType = unknown; name = officering.caf; path = Foodyzz/officering.caf; sourceTree = "<group>"; };
-		9B611A662A08485F81454E24 /* doorbell.caf */ = {isa = PBXFileReference; explicitFileType = undefined; fileEncoding = undefined; includeInIndex = 0; lastKnownFileType = unknown; name = doorbell.caf; path = Foodyzz/doorbell.caf; sourceTree = "<group>"; };
-		9FD36003B5B443F8B0BCDB0A /* confirmation.caf */ = {isa = PBXFileReference; explicitFileType = undefined; fileEncoding = undefined; includeInIndex = 0; lastKnownFileType = unknown; name = confirmation.caf; path = Foodyzz/confirmation.caf; sourceTree = "<group>"; };
+		219118D617FA4CEC93F88DC0 /* officering.caf */ = {isa = PBXFileReference; explicitFileType = undefined; fileEncoding = undefined; includeInIndex = 0; lastKnownFileType = unknown; name = officering.caf; path = Foodyzz/officering.caf; sourceTree = "<group>"; };
+		546E37062A6DEEB39CD3EC20 /* Pods-Foodyzz.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-Foodyzz.debug.xcconfig"; path = "Target Support Files/Pods-Foodyzz/Pods-Foodyzz.debug.xcconfig"; sourceTree = "<group>"; };
+		6F72A8A55E71423883B309A5 /* quicktone.caf */ = {isa = PBXFileReference; explicitFileType = undefined; fileEncoding = undefined; includeInIndex = 0; lastKnownFileType = unknown; name = quicktone.caf; path = Foodyzz/quicktone.caf; sourceTree = "<group>"; };
+		748051F4396FA45A91D80DF0 /* Pods_Foodyzz.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; path = Pods_Foodyzz.framework; sourceTree = BUILT_PRODUCTS_DIR; };
+		835C144419C9CEF451E7FDE9 /* Pods-Foodyzz.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-Foodyzz.release.xcconfig"; path = "Target Support Files/Pods-Foodyzz/Pods-Foodyzz.release.xcconfig"; sourceTree = "<group>"; };
+		8CD7AE098FDB4566A3D5DB92 /* doorbell.caf */ = {isa = PBXFileReference; explicitFileType = undefined; fileEncoding = undefined; includeInIndex = 0; lastKnownFileType = unknown; name = doorbell.caf; path = Foodyzz/doorbell.caf; sourceTree = "<group>"; };
+		9368EF29688B0120FFCD4227 /* ExpoModulesProvider.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = ExpoModulesProvider.swift; path = "Pods/Target Support Files/Pods-Foodyzz/ExpoModulesProvider.swift"; sourceTree = "<group>"; };
+		9927238AC58041E390E3F2FF /* confirmation.caf */ = {isa = PBXFileReference; explicitFileType = undefined; fileEncoding = undefined; includeInIndex = 0; lastKnownFileType = unknown; name = confirmation.caf; path = Foodyzz/confirmation.caf; sourceTree = "<group>"; };
+		A484EC7DD0A1D5607C290D18 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; includeInIndex = 1; name = PrivacyInfo.xcprivacy; path = Foodyzz/PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 		AA286B85B6C04FC6940260E9 /* SplashScreen.storyboard */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = file.storyboard; name = SplashScreen.storyboard; path = Foodyzz/SplashScreen.storyboard; sourceTree = "<group>"; };
-		AE5A40EAD9BFFA42347F959B /* Pods_Foodyzz.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; path = Pods_Foodyzz.framework; sourceTree = BUILT_PRODUCTS_DIR; };
+		AF66EDD4F9E041B487F6D0CF /* oldphone.caf */ = {isa = PBXFileReference; explicitFileType = undefined; fileEncoding = undefined; includeInIndex = 0; lastKnownFileType = unknown; name = oldphone.caf; path = Foodyzz/oldphone.caf; sourceTree = "<group>"; };
 		BB2F792C24A3F905000567C9 /* Expo.plist */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.plist.xml; path = Expo.plist; sourceTree = "<group>"; };
-		C295021A45C944351A3C53AE /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; includeInIndex = 1; name = PrivacyInfo.xcprivacy; path = Foodyzz/PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
-		C3BE502BDD84415DA3BDE118 /* quicktone.caf */ = {isa = PBXFileReference; explicitFileType = undefined; fileEncoding = undefined; includeInIndex = 0; lastKnownFileType = unknown; name = quicktone.caf; path = Foodyzz/quicktone.caf; sourceTree = "<group>"; };
+		C807B8B3FD324D9B91F7485B /* vintage.caf */ = {isa = PBXFileReference; explicitFileType = undefined; fileEncoding = undefined; includeInIndex = 0; lastKnownFileType = unknown; name = vintage.caf; path = Foodyzz/vintage.caf; sourceTree = "<group>"; };
+		E4FF02E16D3448979B868C77 /* GoogleService-Info.plist */ = {isa = PBXFileReference; explicitFileType = undefined; fileEncoding = 4; includeInIndex = 0; lastKnownFileType = text.plist.xml; name = "GoogleService-Info.plist"; path = "Foodyzz/GoogleService-Info.plist"; sourceTree = "<group>"; };
 		ED297162215061F000B7C4FE /* JavaScriptCore.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = JavaScriptCore.framework; path = System/Library/Frameworks/JavaScriptCore.framework; sourceTree = SDKROOT; };
-		EE45F884964A49DCB7E27D58 /* bell.caf */ = {isa = PBXFileReference; explicitFileType = undefined; fileEncoding = undefined; includeInIndex = 0; lastKnownFileType = unknown; name = bell.caf; path = Foodyzz/bell.caf; sourceTree = "<group>"; };
 		F11748412D0307B40044C1D9 /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = AppDelegate.swift; path = Foodyzz/AppDelegate.swift; sourceTree = "<group>"; };
 		F11748442D0722820044C1D9 /* Foodyzz-Bridging-Header.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; name = "Foodyzz-Bridging-Header.h"; path = "Foodyzz/Foodyzz-Bridging-Header.h"; sourceTree = "<group>"; };
 /* End PBXFileReference section */
@@ -55,7 +55,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				108082183BFE33E2B2D252F0 /* Pods_Foodyzz.framework in Frameworks */,
+				3A4C74ABA7F921E067679B49 /* Pods_Foodyzz.framework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -71,16 +71,16 @@
 				13B07FB51A68108700A75B9A /* Images.xcassets */,
 				13B07FB61A68108700A75B9A /* Info.plist */,
 				AA286B85B6C04FC6940260E9 /* SplashScreen.storyboard */,
-				409BEC0DDFE04BB2AEF1A82B /* GoogleService-Info.plist */,
-				EE45F884964A49DCB7E27D58 /* bell.caf */,
-				9FD36003B5B443F8B0BCDB0A /* confirmation.caf */,
-				9B611A662A08485F81454E24 /* doorbell.caf */,
-				7CFBC3C6A4B7417EA1753754 /* happybell.caf */,
-				9AF12065A92C4CDAB7188B12 /* officering.caf */,
-				860A160B00FF4B098FC4FFA7 /* oldphone.caf */,
-				C3BE502BDD84415DA3BDE118 /* quicktone.caf */,
-				36375203915C487F90BF7D40 /* vintage.caf */,
-				C295021A45C944351A3C53AE /* PrivacyInfo.xcprivacy */,
+				E4FF02E16D3448979B868C77 /* GoogleService-Info.plist */,
+				0E55AE4E4CA54F198161CE35 /* bell.caf */,
+				9927238AC58041E390E3F2FF /* confirmation.caf */,
+				8CD7AE098FDB4566A3D5DB92 /* doorbell.caf */,
+				130C0C82ADB94A82BBB0C53B /* happybell.caf */,
+				219118D617FA4CEC93F88DC0 /* officering.caf */,
+				AF66EDD4F9E041B487F6D0CF /* oldphone.caf */,
+				6F72A8A55E71423883B309A5 /* quicktone.caf */,
+				C807B8B3FD324D9B91F7485B /* vintage.caf */,
+				A484EC7DD0A1D5607C290D18 /* PrivacyInfo.xcprivacy */,
 			);
 			name = Foodyzz;
 			sourceTree = "<group>";
@@ -89,19 +89,9 @@
 			isa = PBXGroup;
 			children = (
 				ED297162215061F000B7C4FE /* JavaScriptCore.framework */,
-				AE5A40EAD9BFFA42347F959B /* Pods_Foodyzz.framework */,
+				748051F4396FA45A91D80DF0 /* Pods_Foodyzz.framework */,
 			);
 			name = Frameworks;
-			sourceTree = "<group>";
-		};
-		6D856102347FCD5594D90734 /* Pods */ = {
-			isa = PBXGroup;
-			children = (
-				7A8A86875C49401689C59AC4 /* Pods-Foodyzz.debug.xcconfig */,
-				1CBC8791BFCC33B3C5BE1FA4 /* Pods-Foodyzz.release.xcconfig */,
-			);
-			name = Pods;
-			path = Pods;
 			sourceTree = "<group>";
 		};
 		832341AE1AAA6A7D00B99B32 /* Libraries */ = {
@@ -118,8 +108,8 @@
 				832341AE1AAA6A7D00B99B32 /* Libraries */,
 				83CBBA001A601CBA00E9B192 /* Products */,
 				2D16E6871FA4F8E400B85C8A /* Frameworks */,
-				6D856102347FCD5594D90734 /* Pods */,
-				CC3E9EFBF3CF978AB9F106A0 /* ExpoModulesProviders */,
+				F6FEB766D7DF2FBC2A606BF9 /* Pods */,
+				901A009CC83002B3E4B1523D /* ExpoModulesProviders */,
 			);
 			indentWidth = 2;
 			sourceTree = "<group>";
@@ -134,6 +124,14 @@
 			name = Products;
 			sourceTree = "<group>";
 		};
+		901A009CC83002B3E4B1523D /* ExpoModulesProviders */ = {
+			isa = PBXGroup;
+			children = (
+				F31AE046C5E8D30A49D5BD0F /* Foodyzz */,
+			);
+			name = ExpoModulesProviders;
+			sourceTree = "<group>";
+		};
 		BB2F792B24A3F905000567C9 /* Supporting */ = {
 			isa = PBXGroup;
 			children = (
@@ -143,20 +141,22 @@
 			path = Foodyzz/Supporting;
 			sourceTree = "<group>";
 		};
-		BE23DF9682092EC17B164BA3 /* Foodyzz */ = {
+		F31AE046C5E8D30A49D5BD0F /* Foodyzz */ = {
 			isa = PBXGroup;
 			children = (
-				53AD272EDF896FA409BB1406 /* ExpoModulesProvider.swift */,
+				9368EF29688B0120FFCD4227 /* ExpoModulesProvider.swift */,
 			);
 			name = Foodyzz;
 			sourceTree = "<group>";
 		};
-		CC3E9EFBF3CF978AB9F106A0 /* ExpoModulesProviders */ = {
+		F6FEB766D7DF2FBC2A606BF9 /* Pods */ = {
 			isa = PBXGroup;
 			children = (
-				BE23DF9682092EC17B164BA3 /* Foodyzz */,
+				546E37062A6DEEB39CD3EC20 /* Pods-Foodyzz.debug.xcconfig */,
+				835C144419C9CEF451E7FDE9 /* Pods-Foodyzz.release.xcconfig */,
 			);
-			name = ExpoModulesProviders;
+			name = Pods;
+			path = Pods;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -167,14 +167,14 @@
 			buildConfigurationList = 13B07F931A680F5B00A75B9A /* Build configuration list for PBXNativeTarget "Foodyzz" */;
 			buildPhases = (
 				08A4A3CD28434E44B6B9DE2E /* [CP] Check Pods Manifest.lock */,
-				C1470E5B7B0E35C24192CCCA /* [Expo] Configure project */,
+				A4B5FC606DB6F9293D907FDC /* [Expo] Configure project */,
 				13B07F871A680F5B00A75B9A /* Sources */,
 				13B07F8C1A680F5B00A75B9A /* Frameworks */,
 				13B07F8E1A680F5B00A75B9A /* Resources */,
 				00DD1BFF1BD5951E006B06BC /* Bundle React Native code and images */,
 				800E24972A6A228C8D4807E9 /* [CP] Copy Pods Resources */,
-				8B4904DE68949F12799C1673 /* [CP] Embed Pods Frameworks */,
-				191F8E3DCA0FA52FEDCDCEBE /* [CP-User] [RNFB] Core Configuration */,
+				FBD2C259E44476EBBDAD206C /* [CP] Embed Pods Frameworks */,
+				646EB6B15E2FB7BADB1A523F /* [CP-User] [RNFB] Core Configuration */,
 			);
 			buildRules = (
 			);
@@ -224,16 +224,16 @@
 				BB2F792D24A3F905000567C9 /* Expo.plist in Resources */,
 				13B07FBF1A68108700A75B9A /* Images.xcassets in Resources */,
 				3E461D99554A48A4959DE609 /* SplashScreen.storyboard in Resources */,
-				9715E8B21E8A421A864155F7 /* GoogleService-Info.plist in Resources */,
-				89AA4EBEB59D499BB6AB3368 /* bell.caf in Resources */,
-				F1882016A24B42FC95D657B4 /* confirmation.caf in Resources */,
-				F1498EF00362417882C67BA0 /* doorbell.caf in Resources */,
-				1D0A0F0D130A4CE3A73D4C9A /* happybell.caf in Resources */,
-				A9EF82FAD3184F3FA1FEA084 /* officering.caf in Resources */,
-				9367175E99D5483985BD987C /* oldphone.caf in Resources */,
-				975C8154DB5245979ABDD0C5 /* quicktone.caf in Resources */,
-				8E6A299210464C32B0BEA8F8 /* vintage.caf in Resources */,
-				A4FC9CA2F21227108E95138B /* PrivacyInfo.xcprivacy in Resources */,
+				8B6A7B9A8538491583A8C769 /* GoogleService-Info.plist in Resources */,
+				9656A58180544BB1B4DFD133 /* bell.caf in Resources */,
+				E267FD43D84F4EAB94412B5F /* confirmation.caf in Resources */,
+				897D3E3C1BDD4F05B89B59E5 /* doorbell.caf in Resources */,
+				D12E68DA63284BB3A827EE93 /* happybell.caf in Resources */,
+				156F184F76714F76BC3E174E /* officering.caf in Resources */,
+				3C81386FB100475FBC328FE2 /* oldphone.caf in Resources */,
+				D2267E2229EE45299F83DF80 /* quicktone.caf in Resources */,
+				EA708D29FFE84D9F81BBD803 /* vintage.caf in Resources */,
+				3D3E2F9476290FB503958B8D /* PrivacyInfo.xcprivacy in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -277,7 +277,7 @@
 			shellScript = "diff \"${PODS_PODFILE_DIR_PATH}/Podfile.lock\" \"${PODS_ROOT}/Manifest.lock\" > /dev/null\nif [ $? != 0 ] ; then\n    # print error to STDERR\n    echo \"error: The sandbox is not in sync with the Podfile.lock. Run 'pod install' or update your CocoaPods installation.\" >&2\n    exit 1\nfi\n# This output is used by Xcode 'outputs' to avoid re-running this script phase.\necho \"SUCCESS\" > \"${SCRIPT_OUTPUT_FILE_0}\"\n";
 			showEnvVarsInLog = 0;
 		};
-		191F8E3DCA0FA52FEDCDCEBE /* [CP-User] [RNFB] Core Configuration */ = {
+		646EB6B15E2FB7BADB1A523F /* [CP-User] [RNFB] Core Configuration */ = {
 			isa = PBXShellScriptBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -388,25 +388,7 @@
 			shellScript = "\"${PODS_ROOT}/Target Support Files/Pods-Foodyzz/Pods-Foodyzz-resources.sh\"\n";
 			showEnvVarsInLog = 0;
 		};
-		8B4904DE68949F12799C1673 /* [CP] Embed Pods Frameworks */ = {
-			isa = PBXShellScriptBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-			);
-			inputPaths = (
-				"${PODS_ROOT}/Target Support Files/Pods-Foodyzz/Pods-Foodyzz-frameworks.sh",
-				"${PODS_XCFRAMEWORKS_BUILD_DIR}/hermes-engine/Pre-built/hermes.framework/hermes",
-			);
-			name = "[CP] Embed Pods Frameworks";
-			outputPaths = (
-				"${TARGET_BUILD_DIR}/${FRAMEWORKS_FOLDER_PATH}/hermes.framework",
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-			shellPath = /bin/sh;
-			shellScript = "\"${PODS_ROOT}/Target Support Files/Pods-Foodyzz/Pods-Foodyzz-frameworks.sh\"\n";
-			showEnvVarsInLog = 0;
-		};
-		C1470E5B7B0E35C24192CCCA /* [Expo] Configure project */ = {
+		A4B5FC606DB6F9293D907FDC /* [Expo] Configure project */ = {
 			isa = PBXShellScriptBuildPhase;
 			alwaysOutOfDate = 1;
 			buildActionMask = 2147483647;
@@ -425,6 +407,24 @@
 			shellPath = /bin/sh;
 			shellScript = "# This script configures Expo modules and generates the modules provider file.\nbash -l -c \"./Pods/Target\\ Support\\ Files/Pods-Foodyzz/expo-configure-project.sh\"\n";
 		};
+		FBD2C259E44476EBBDAD206C /* [CP] Embed Pods Frameworks */ = {
+			isa = PBXShellScriptBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputPaths = (
+				"${PODS_ROOT}/Target Support Files/Pods-Foodyzz/Pods-Foodyzz-frameworks.sh",
+				"${PODS_XCFRAMEWORKS_BUILD_DIR}/hermes-engine/Pre-built/hermes.framework/hermes",
+			);
+			name = "[CP] Embed Pods Frameworks";
+			outputPaths = (
+				"${TARGET_BUILD_DIR}/${FRAMEWORKS_FOLDER_PATH}/hermes.framework",
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "\"${PODS_ROOT}/Target Support Files/Pods-Foodyzz/Pods-Foodyzz-frameworks.sh\"\n";
+			showEnvVarsInLog = 0;
+		};
 /* End PBXShellScriptBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
@@ -433,7 +433,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				F11748422D0307B40044C1D9 /* AppDelegate.swift in Sources */,
-				28FDE7F7F1CD31799285A789 /* ExpoModulesProvider.swift in Sources */,
+				902490AA344768B61071D874 /* ExpoModulesProvider.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -442,7 +442,7 @@
 /* Begin XCBuildConfiguration section */
 		13B07F941A680F5B00A75B9A /* Debug */ = {
 			isa = XCBuildConfiguration;
-			baseConfigurationReference = 7A8A86875C49401689C59AC4 /* Pods-Foodyzz.debug.xcconfig */;
+			baseConfigurationReference = 546E37062A6DEEB39CD3EC20 /* Pods-Foodyzz.debug.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CLANG_ENABLE_MODULES = YES;
@@ -479,7 +479,7 @@
 		};
 		13B07F951A680F5B00A75B9A /* Release */ = {
 			isa = XCBuildConfiguration;
-			baseConfigurationReference = 1CBC8791BFCC33B3C5BE1FA4 /* Pods-Foodyzz.release.xcconfig */;
+			baseConfigurationReference = 835C144419C9CEF451E7FDE9 /* Pods-Foodyzz.release.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CLANG_ENABLE_MODULES = YES;
