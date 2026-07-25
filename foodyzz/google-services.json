@@ -1,0 +1,82 @@
+{
+  "project_info": {
+    "project_number": "392804438663",
+    "project_id": "foodyzz-27b3e",
+    "storage_bucket": "foodyzz-27b3e.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:392804438663:android:3d5705b7cade0837e75e22",
+        "android_client_info": {
+          "package_name": "com.foodyzz"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "392804438663-buaufkj6pvbodovf4li5homral1eccnn.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBlXLcAMSwTlGPUfj3s0KF49fzqIBSDXmQ"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "392804438663-buaufkj6pvbodovf4li5homral1eccnn.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "392804438663-hbagug7p8dirjm3c35qagvlbnugkp1vg.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.foodyzzHQ"
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:392804438663:android:23496cb8d24f918fe75e22",
+        "android_client_info": {
+          "package_name": "com.foodyzzHQ"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "392804438663-buaufkj6pvbodovf4li5homral1eccnn.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBlXLcAMSwTlGPUfj3s0KF49fzqIBSDXmQ"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "392804438663-buaufkj6pvbodovf4li5homral1eccnn.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "392804438663-hbagug7p8dirjm3c35qagvlbnugkp1vg.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.foodyzzHQ"
+              }
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
