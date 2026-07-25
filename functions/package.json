@@ -15,7 +15,8 @@
     "backfill:counts": "node scripts/backfill-platform-counts.js",
     "seed:emulator": "node scripts/seed-emulator.js",
     "seed:logistics": "node scripts/seed-logistics.js",
-    "mfa:enable-totp": "node scripts/enable-totp-mfa.js"
+    "mfa:enable-totp": "node scripts/enable-totp-mfa.js",
+    "mfa:verify-email": "node scripts/verify-admin-email.js"
   },
   "engines": {
     "node": "22"
