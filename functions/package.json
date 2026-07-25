@@ -14,7 +14,8 @@
     "test:watch": "firebase emulators:exec --only firestore,auth --project demo-foodyzz \"jest --runInBand --watch\"",
     "backfill:counts": "node scripts/backfill-platform-counts.js",
     "seed:emulator": "node scripts/seed-emulator.js",
-    "seed:logistics": "node scripts/seed-logistics.js"
+    "seed:logistics": "node scripts/seed-logistics.js",
+    "mfa:enable-totp": "node scripts/enable-totp-mfa.js"
   },
   "engines": {
     "node": "22"
