@@ -1,0 +1,62 @@
+# .easignore — controls what EAS Build uploads.
+# When present, EAS uses THIS instead of .gitignore.
+# Mirrors the repo .gitignore, EXCEPT it intentionally does NOT ignore
+# google-services.json / GoogleService-Info.plist, so the Firebase config
+# files reach the build server (they stay out of git via .gitignore).
+
+# ── Dependencies ─────────────────────────────────────────────
+node_modules/
+
+# ── Build output ─────────────────────────────────────────────
+build/
+dist/
+out/
+.next/
+web-build/
+*.tsbuildinfo
+
+# ── Expo / React Native ──────────────────────────────────────
+.expo/
+.expo-shared/
+
+# ── Native build artifacts (iOS / Android) ───────────────────
+**/ios/Pods/
+**/ios/build/
+**/ios/DerivedData/
+**/*.xcworkspace/xcuserdata/
+**/*.xcodeproj/xcuserdata/
+**/android/build/
+**/android/.gradle/
+**/android/app/build/
+**/android/.cxx/
+*.keystore
+*.jks
+
+# ── Secrets & credentials — DO NOT UPLOAD ────────────────────
+# NOTE: google-services.json and GoogleService-Info.plist are deliberately
+# NOT listed here — EAS needs them for the Firebase Gradle plugin.
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p8
+*.p12
+*.mobileprovision
+*serviceAccount*.json
+*service-account*.json
+*firebase-adminsdk*.json
+
+# ── Logs ─────────────────────────────────────────────────────
+logs/
+*.log
+firebase-debug*.log
+firestore-debug.log
+ui-debug.log
+.firebase/
+
+# ── OS / editor cruft ────────────────────────────────────────
+.DS_Store
+.idea/
+.vscode/
+*.swp
