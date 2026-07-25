@@ -39,8 +39,12 @@ web-build/
 *serviceAccount*.json
 *service-account*.json
 *firebase-adminsdk*.json
-google-services.json
-GoogleService-Info.plist
+# NOTE: google-services.json / GoogleService-Info.plist are intentionally NOT
+# ignored — they are committed so EAS Build can find them. EAS validates the
+# googleServicesFile with `git check-ignore --no-index` (pattern-only), so an
+# ignore pattern here makes EAS reject the file even when it's git-tracked.
+# These are client Firebase configs (keys ship in the app binary); the real
+# secret is the *firebase-adminsdk*.json key above, which stays ignored.
 
 # ── Logs (includes logs/git PAT file + runtime logs) ─────────
 logs/
