@@ -85,6 +85,11 @@
         "android.permission.ACCESS_COARSE_LOCATION"
       ]
     },
-    "owner": "rajshrestha"
+    "owner": "rajshrestha",
+    "extra": {
+      "eas": {
+        "projectId": "1b192be3-913a-49f6-a188-e1009f35e60b"
+      }
+    }
   }
 }
