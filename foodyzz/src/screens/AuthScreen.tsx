@@ -110,9 +110,6 @@ export default function AuthScreen({ onAuthenticated }: { onAuthenticated: (user
           style={{ width: 200, height: 200 }}
           resizeMode="contain"
         />
-        <Text className="text-3xl font-black uppercase mt-6 tracking-tighter">
-          Foody.<Text className="text-brand-green-dark">zz</Text>
-        </Text>
       </View>
 
       {!confirm ? (

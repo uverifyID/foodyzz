@@ -14,7 +14,6 @@ import * as SplashScreen from 'expo-splash-screen';
 import * as Notifications from 'expo-notifications';
 import Constants from 'expo-constants';
 import { StripeProvider } from '@stripe/stripe-react-native';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 
 // Firebase initialization and Auth state
 import { db, saveFcmToken, onAuthStateChanged, signOutClean } from './services/firebase';
@@ -25,7 +24,6 @@ import type { FirebaseAuthTypes } from '@react-native-firebase/auth';
 import AppNavigator from './navigation/AppNavigator';
 import AuthScreen from './screens/AuthScreen';
 import OnboardingWizard from './screens/OnboardingWizard';
-import OnboardingSlider from './screens/OnboardingSlider';
 import ErrorBoundary from './components/ErrorBoundary';
 import { UserProfileProvider, useUserProfile } from './context/UserProfileContext';
 import { StripeReadyContext } from './context/StripeReadyContext';
@@ -60,20 +58,10 @@ export default function App() {
   const [initializing, setInitializing] = useState(true);
   const [manualLogin, setManualLogin] = useState(false);
   const [stripeKey, setStripeKey] = useState<string | null>(null);
-  // First-run walkthrough gate. null = flag not yet read from storage.
-  // AsyncStorage is wiped on (re)install, so an absent flag = fresh install.
-  const [introSeen, setIntroSeen] = useState<boolean | null>(null);
 
   // Diagnostic mount log
   useEffect(() => {
     if (__DEV__) console.log('🚀 Customer App component mounted');
-  }, []);
-
-  // Read the first-run flag once on mount
-  useEffect(() => {
-    AsyncStorage.getItem('@intro_seen')
-      .then((v) => setIntroSeen(v === 'true'))
-      .catch(() => setIntroSeen(false));
   }, []);
 
   // Load fonts as defined in tailwind.config.js aliases
@@ -273,13 +261,13 @@ export default function App() {
 
   // Hide splash screen when fonts are ready (loaded, errored, or timed out) and auth is initialized
   useEffect(() => {
-    if (fontsReady && !initializing && introSeen !== null) {
+    if (fontsReady && !initializing) {
       SplashScreen.hideAsync();
     }
-  }, [fontsReady, initializing, introSeen]);
+  }, [fontsReady, initializing]);
 
   // Loading state fallback
-  if (!fontsReady || initializing || introSeen === null) {
+  if (!fontsReady || initializing) {
     return (
       <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: '#507425' }}>
         <ActivityIndicator size="large" color="#FFFFFF" />
@@ -289,22 +277,6 @@ export default function App() {
           <Text style={{ color: '#000' }}>Auth: {initializing ? '⏳' : '✓'}</Text>
         </View>
       </View>
-    );
-  }
-
-  // Fresh install: show the walkthrough slider before anything else (sign-in, etc.)
-  if (introSeen === false) {
-    return (
-      <SafeAreaProvider>
-        <OnboardingSlider
-          onDone={() => {
-            // Dismiss first so the UX never depends on the write succeeding; persist
-            // best-effort (worst case: onboarding reshows next launch).
-            setIntroSeen(true);
-            AsyncStorage.setItem('@intro_seen', 'true').catch(() => {});
-          }}
-        />
-      </SafeAreaProvider>
     );
   }
 

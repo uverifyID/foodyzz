@@ -38,6 +38,7 @@ web-build/
 *.mobileprovision
 *serviceAccount*.json
 *service-account*.json
+*firebase-adminsdk*.json
 google-services.json
 GoogleService-Info.plist
 

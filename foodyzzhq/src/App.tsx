@@ -26,7 +26,6 @@ import type { FirebaseAuthTypes } from '@react-native-firebase/auth';
 import ProviderNavigator from './navigation/ProviderNavigator';
 import AuthScreen from './screens/AuthScreen'; // Assuming a similar auth flow for providers
 import ProviderOnboardingWizard from './screens/ProviderOnboardingWizard';
-import OnboardingSlider from './screens/OnboardingSlider';
 import { ActiveStoreContext } from './contexts/ActiveStoreContext';
 import ErrorBoundary from './components/ErrorBoundary';
 
@@ -56,9 +55,6 @@ export default function App() {
   const [onboarded, setOnboarded] = useState<boolean | null>(null);
   const [profileReady, setProfileReady] = useState(false);
   const [stripeKey, setStripeKey] = useState('');
-  // First-run walkthrough gate. null = flag not yet read from storage.
-  // AsyncStorage is wiped on (re)install, so an absent flag = fresh install.
-  const [introSeen, setIntroSeen] = useState<boolean | null>(null);
   // Zip of the active store; doubles as a re-mount key for the provider UI so a
   // store switch forces every screen to re-read getActiveProviderId().
   const [activeStoreZip, setActiveStoreZip] = useState<string | null>(null);
@@ -311,22 +307,15 @@ export default function App() {
     return () => { cancelled = true; sub.remove(); };
   }, [user]);
 
-  // Read the first-run flag once on mount
-  useEffect(() => {
-    ReactNativeAsyncStorage.getItem('@intro_seen')
-      .then((v) => setIntroSeen(v === 'true'))
-      .catch(() => setIntroSeen(false));
-  }, []);
-
   // Hide splash screen when fonts are ready (loaded, errored, or timed out) and auth is initialized
   useEffect(() => {
-    if (fontsReady && !initializing && introSeen !== null) {
+    if (fontsReady && !initializing) {
       SplashScreen.hideAsync();
     }
-  }, [fontsReady, initializing, introSeen]);
+  }, [fontsReady, initializing]);
 
   // Loading state fallback
-  if (!fontsReady || initializing || introSeen === null) {
+  if (!fontsReady || initializing) {
     return (
       <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: '#FFFFFF' }}>
         <ActivityIndicator size="large" color="#507425" />
@@ -336,23 +325,6 @@ export default function App() {
           <Text style={{ color: '#000' }}>Auth: {initializing ? '⏳' : '✓'}</Text>
         </View>
       </View>
-    );
-  }
-
-  // Fresh install: show the walkthrough slider before anything else (sign-in, etc.)
-  if (introSeen === false) {
-    return (
-      <SafeAreaProvider>
-        <StatusBar style="dark" translucent={false} />
-        <OnboardingSlider
-          onDone={() => {
-            // Dismiss first so the UX never depends on the write succeeding; persist
-            // best-effort (worst case: onboarding reshows next launch).
-            setIntroSeen(true);
-            ReactNativeAsyncStorage.setItem('@intro_seen', 'true').catch(() => {});
-          }}
-        />
-      </SafeAreaProvider>
     );
   }
 
