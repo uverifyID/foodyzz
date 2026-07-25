@@ -3257,6 +3257,111 @@ export const bulkBroadcast = onCall({memory: "512MiB", timeoutSeconds: 300}, asy
 // the mobile apps resolve a code with a single read. See firestore.rules.
 // ============================================================================
 
+// ── Marketing-site contact form ──────────────────────────────────────────────
+// Public HTTPS endpoint for the foodyzz.com "Contact Us" form. Validates, rate
+// limits per IP, stores an audit record in `contactMessages` (server-only via
+// rules default-deny), and emails the submission to the platform admin via the
+// same cached SMTP transport the lifecycle emails use (apiConfigSecret/smtp;
+// recipient = getAdminNotifyEmail(), i.e. adminEmail or rajshrestha@gmail.com).
+const CONTACT_ALLOWED_ORIGINS = new Set([
+  "https://foodyzz.com",
+  "https://www.foodyzz.com",
+  "http://localhost:8000", // local preview of website/
+  "http://127.0.0.1:8000",
+]);
+const CONTACT_MAX_PER_HOUR = 5;
+const CONTACT_TOPICS = new Set(["general", "plans", "order", "coverage", "partnership", "press"]);
+
+export const contactForm = onRequest({cors: false, memory: "256MiB", timeoutSeconds: 30}, async (req, res) => {
+  // CORS: reflect only known origins (the browser enforces; curl can always POST,
+  // which is fine — the rate limit and validation still apply).
+  const origin = String(req.headers.origin || "");
+  if (CONTACT_ALLOWED_ORIGINS.has(origin)) {
+    res.set("Access-Control-Allow-Origin", origin);
+    res.set("Vary", "Origin");
+  }
+  res.set("Access-Control-Allow-Methods", "POST, OPTIONS");
+  res.set("Access-Control-Allow-Headers", "Content-Type");
+  if (req.method === "OPTIONS") {
+    res.status(204).send("");
+    return;
+  }
+  if (req.method !== "POST") {
+    res.status(405).json({ok: false, error: "Method not allowed."});
+    return;
+  }
+
+  try {
+    const body: any = req.body || {};
+
+    // Honeypot: bots fill every field; humans never see this one. Pretend success
+    // so the bot learns nothing.
+    if (typeof body.website === "string" && body.website.trim() !== "") {
+      res.json({ok: true});
+      return;
+    }
+
+    const name = String(body.name || "").trim().slice(0, 120);
+    const email = String(body.email || "").trim().slice(0, 200);
+    const phone = String(body.phone || "").trim().slice(0, 30);
+    const topic = CONTACT_TOPICS.has(String(body.topic)) ? String(body.topic) : "general";
+    const message = String(body.message || "").trim().slice(0, 4000);
+
+    if (!name || !message || !/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email)) {
+      res.status(400).json({ok: false, error: "Please provide your name, a valid email, and a message."});
+      return;
+    }
+
+    // Per-IP hourly rate limit via a transactional counter doc keyed by ip+hour.
+    // Docs are tiny and self-partition by hour; a cleanup pass isn't necessary
+    // but old docs can be TTL'd later if desired.
+    const ip = String(req.headers["x-forwarded-for"] || req.ip || "unknown").split(",")[0].trim();
+    const hourKey = new Date().toISOString().slice(0, 13); // e.g. 2026-07-24T20
+    const rlRef = db.collection("contactRateLimits").doc(`${ip.replace(/[^a-zA-Z0-9.:]/g, "_")}_${hourKey}`);
+    const allowed = await db.runTransaction(async (t) => {
+      const snap = await t.get(rlRef);
+      const count = (snap.data()?.count as number | undefined) ?? 0;
+      if (count >= CONTACT_MAX_PER_HOUR) return false;
+      t.set(rlRef, {count: count + 1, updatedAt: FieldValue.serverTimestamp()}, {merge: true});
+      return true;
+    });
+    if (!allowed) {
+      res.status(429).json({ok: false, error: "Too many messages — please try again in an hour."});
+      return;
+    }
+
+    // Audit record (clients cannot read/write this collection — rules default-deny).
+    const docRef = await db.collection("contactMessages").add({
+      name, email, phone, topic, message,
+      origin: origin || null,
+      receivedAt: new Date().toISOString(),
+    });
+
+    // Email the admin. Plain-text-ish HTML; user content is escaped to keep the
+    // email renderer from interpreting submitted markup.
+    const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+    const adminEmail = await getAdminNotifyEmail();
+    await sendEmail(
+      adminEmail,
+      `[Foodyzz Contact] ${topic}: ${name}`,
+      emailLayout({
+        brand: "Foodyzz",
+        title: "New contact form message",
+        intro: `Topic: ${esc(topic)} · Ref: ${docRef.id}`,
+        bodyHtml:
+          `<p style="margin:0 0 8px;color:#475569;font-size:14px"><b>From:</b> ${esc(name)} &lt;${esc(email)}&gt;${phone ? ` · ${esc(phone)}` : ""}</p>` +
+          `<p style="margin:0 0 16px;color:#0f172a;font-size:14px;line-height:1.6;white-space:pre-wrap">${esc(message)}</p>` +
+          `<p style="margin:0;color:#94a3b8;font-size:12px">Reply directly to the sender's email above.</p>`,
+      }),
+    );
+
+    res.json({ok: true});
+  } catch (err: any) {
+    console.error("contactForm error:", err?.message || err);
+    res.status(500).json({ok: false, error: "Could not send your message right now. Please email privacy@foodyzz.com."});
+  }
+});
+
 // Sends a transactional email over SMTP. Credentials live in the server-only
 // apiConfigSecret/smtp doc ({ host, port, secure, user, pass, from, adminEmail }),
 // never in the client-readable config. Replaces the previous third-party (Resend)
