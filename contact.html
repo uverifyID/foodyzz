@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Contact Us — Foodyzz</title>
+  <meta name="description" content="Questions about Foodyzz e-bike rentals in NYC? Get in touch — we answer fast." />
+  <link rel="icon" type="image/png" sizes="64x64" href="assets/favicon-64.png" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&family=Space+Grotesk:wght@500;700&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+
+  <header class="site-header">
+    <div class="container nav">
+      <a class="nav-logo" href="/" aria-label="Foodyzz home"><img src="assets/foodyzz-wordmark.png" alt="Foodyzz" /></a>
+      <button class="nav-toggle" aria-label="Toggle menu" aria-expanded="false"><span></span><span></span><span></span></button>
+      <ul class="nav-links">
+        <li><a href="index.html#why">Why Foodyzz</a></li>
+        <li><a href="index.html#plans">Plans</a></li>
+        <li><a href="index.html#faq">FAQ</a></li>
+        <li><a href="contact.html">Contact</a></li>
+        <li><a class="btn btn-primary nav-cta" href="index.html#get-app">Get the App</a></li>
+      </ul>
+    </div>
+  </header>
+
+  <main class="container contact-grid">
+    <div class="contact-info">
+      <div class="kicker">Contact us</div>
+      <h1>Talk to a human.</h1>
+      <p>
+        Questions about plans, your order, partnerships, or bringing Foodyzz to your neighborhood —
+        send us a note and we'll get back to you quickly.
+      </p>
+      <div class="contact-line">
+        <div class="ic">📍</div>
+        <div class="t"><b>Foodyzz HQ</b><span>New York, NY</span></div>
+      </div>
+      <div class="contact-line">
+        <div class="ic">🔒</div>
+        <div class="t"><b>Privacy requests</b><span><a href="mailto:privacy@foodyzz.com">privacy@foodyzz.com</a></span></div>
+      </div>
+      <div class="contact-line">
+        <div class="ic">⚖️</div>
+        <div class="t"><b>Legal</b><span><a href="mailto:legal@foodyzz.com">legal@foodyzz.com</a></span></div>
+      </div>
+      <div class="contact-line">
+        <div class="ic">💬</div>
+        <div class="t"><b>Already a rider?</b><span>The fastest support is the HQ chat inside the app.</span></div>
+      </div>
+    </div>
+
+    <form class="form-card" id="contact-form" novalidate>
+      <div class="field">
+        <label for="cf-name">Your name</label>
+        <input id="cf-name" name="name" type="text" required maxlength="120" autocomplete="name" placeholder="Alex Rivera" />
+      </div>
+      <div class="field">
+        <label for="cf-email">Email</label>
+        <input id="cf-email" name="email" type="email" required maxlength="200" autocomplete="email" placeholder="you@example.com" />
+      </div>
+      <div class="field">
+        <label for="cf-phone">Phone (optional)</label>
+        <input id="cf-phone" name="phone" type="tel" maxlength="30" autocomplete="tel" placeholder="+1 (___) ___-____" />
+      </div>
+      <div class="field">
+        <label for="cf-topic">Topic</label>
+        <select id="cf-topic" name="topic">
+          <option value="general">General question</option>
+          <option value="plans">Plans &amp; pricing</option>
+          <option value="order">Help with an order</option>
+          <option value="coverage">Bring Foodyzz to my area</option>
+          <option value="partnership">Partnership / business</option>
+          <option value="press">Press</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="cf-message">Message</label>
+        <textarea id="cf-message" name="message" required maxlength="4000" placeholder="Tell us what you need…"></textarea>
+      </div>
+      <!-- Honeypot: real users never see or fill this -->
+      <div class="hp" aria-hidden="true">
+        <label for="cf-website">Website</label>
+        <input id="cf-website" name="website" type="text" tabindex="-1" autocomplete="off" />
+      </div>
+      <button class="btn btn-primary" type="submit" id="cf-submit" style="width:100%">Send message</button>
+      <div class="form-status" id="cf-status" role="status"></div>
+    </form>
+  </main>
+
+  <footer class="site-footer">
+    <div class="container">
+      <div class="footer-bottom">
+        <span>© <span id="year">2026</span> Foodyzz. All rights reserved.</span>
+        <span><a href="privacy.html">Privacy</a> · <a href="terms.html">Terms</a> · <a href="contact.html">Contact</a></span>
+        <span>Foodyzz HQ, New York, NY</span>
+      </div>
+    </div>
+  </footer>
+
+  <script src="js/main.js"></script>
+  <script src="js/contact.js"></script>
+</body>
+</html>
