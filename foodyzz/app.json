@@ -66,7 +66,10 @@
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/logo/icon/appicon.png",
         "backgroundColor": "#FFFFFF"
-      }
+      },
+      "permissions": [
+        "android.permission.RECORD_AUDIO"
+      ]
     },
     "ios": {
       "bundleIdentifier": "com.foodyzz",
@@ -78,6 +81,11 @@
       },
       "appleTeamId": "59BW5VWV38"
     },
-    "owner": "rajshrestha"
+    "owner": "rajshrestha",
+    "extra": {
+      "eas": {
+        "projectId": "1ec4bb03-de37-42be-a411-0901612e5c51"
+      }
+    }
   }
 }
