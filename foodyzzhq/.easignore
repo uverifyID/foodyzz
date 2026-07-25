@@ -1,0 +1,55 @@
+# .easignore — controls what EAS Build uploads.
+# When present, EAS uses THIS instead of .gitignore.
+# It intentionally does NOT ignore google-services.json / GoogleService-Info.plist,
+# so the Firebase Gradle plugin can find them on the build server
+# (they stay out of git via the repo .gitignore). Managed workflow: the
+# generated android/ and ios/ dirs are excluded (EAS runs prebuild).
+
+# ── Dependencies ─────────────────────────────────────────────
+node_modules/
+
+# ── Expo / generated native projects ─────────────────────────
+.expo/
+.expo-shared/
+android/
+ios/
+
+# Re-include bundled notification sound assets that live under android/IOS
+# dir names so they ship in EAS builds (mirrors .gitignore).
+!assets/sounds/android/
+!assets/sounds/android/**
+!assets/sounds/IOS/
+!assets/sounds/IOS/**
+
+# ── Build output ─────────────────────────────────────────────
+build/
+dist/
+out/
+web-build/
+*.tsbuildinfo
+
+# ── Secrets & credentials — DO NOT UPLOAD ────────────────────
+# NOTE: google-services.json and GoogleService-Info.plist are deliberately
+# NOT listed here — EAS needs them for the Firebase Gradle plugin.
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p8
+*.p12
+*.mobileprovision
+*.keystore
+*.jks
+*serviceAccount*.json
+*service-account*.json
+*firebase-adminsdk*.json
+
+# ── Logs ─────────────────────────────────────────────────────
+*.log
+
+# ── OS / editor cruft ────────────────────────────────────────
+.DS_Store
+.idea/
+.vscode/
+*.swp
