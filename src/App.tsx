@@ -1,7 +1,9 @@
 import React, { useState, useEffect, Suspense, lazy } from 'react';
 import { BarChart3, Users, LayoutDashboard, LogOut, Settings, MessageSquare, Menu, X, Bike, Contact } from 'lucide-react';
-import { onAuthStateChanged, signOut, signInWithEmailAndPassword, User } from 'firebase/auth';
+import { onAuthStateChanged, signOut, signInWithEmailAndPassword, getMultiFactorResolver, multiFactor, User, MultiFactorResolver, MultiFactorError } from 'firebase/auth';
 import { auth, db, subscribeToGlobalConfig } from './firebase';
+import MfaChallenge from './components/auth/MfaChallenge';
+import MfaEnroll from './components/auth/MfaEnroll';
 import { collection, onSnapshot, query, orderBy, limit, doc, updateDoc, addDoc, writeBatch } from 'firebase/firestore';
 import { DailyStats, ProviderPerformance, UserProfile, ProviderProfile, GlobalConfig, SupportMessage, RentalOrder, LogisticsConfig } from './types';
 
@@ -61,12 +63,21 @@ export default function App() {
   // Server-maintained headline counts (stats/platformCounts) so nav badges and
   // totals don't depend on streaming whole collections. Null until first read.
   const [platformCounts, setPlatformCounts] = useState<PlatformCounts | null>(null);
+  // Two-factor auth. `mfaResolver` is set mid-login when the account has TOTP
+  // enrolled (user is NOT signed in until it resolves). `hasSecondFactor` gates
+  // mandatory enrollment for the admin: null = unknown, false = must enroll.
+  const [mfaResolver, setMfaResolver] = useState<MultiFactorResolver | null>(null);
+  const [hasSecondFactor, setHasSecondFactor] = useState<boolean | null>(null);
 
   // Gate everything behind sign-in, then confirm the admin claim.
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, async (currentUser) => {
       setUser(currentUser);
       if (currentUser) {
+        setMfaResolver(null); // sign-in (incl. any 2FA challenge) completed
+        // enrolledFactors is available synchronously off the user record.
+        try { setHasSecondFactor(multiFactor(currentUser).enrolledFactors.length > 0); }
+        catch { setHasSecondFactor(false); }
         try {
           const tok = await currentUser.getIdTokenResult();
           setIsAdmin(!!tok.claims.admin);
@@ -75,6 +86,7 @@ export default function App() {
         }
       } else {
         setIsAdmin(null);
+        setHasSecondFactor(null);
         // Returning to the login screen — clear in-flight login state so the submit
         // button doesn't stay stuck on "Authenticating…" after sign-out.
         setLoggingIn(false);
@@ -190,8 +202,14 @@ export default function App() {
     setLoginError('');
     try {
       await signInWithEmailAndPassword(auth, loginEmail, loginPassword);
-    } catch {
-      setLoginError('Invalid credentials. Access denied.');
+    } catch (err: any) {
+      if (err?.code === 'auth/multi-factor-auth-required') {
+        // Password was correct; a second factor is required. Hand the resolver to
+        // the TOTP challenge screen — the user is not signed in until it verifies.
+        setMfaResolver(getMultiFactorResolver(auth, err as MultiFactorError));
+      } else {
+        setLoginError('Invalid credentials. Access denied.');
+      }
       setLoggingIn(false);
     }
   };
@@ -344,6 +362,14 @@ export default function App() {
     </div>
   );
 
+  // Mid-login 2FA challenge — the user is not signed in until the code verifies.
+  if (mfaResolver) return (
+    <MfaChallenge
+      resolver={mfaResolver}
+      onCancel={() => { setMfaResolver(null); setLoginPassword(''); }}
+    />
+  );
+
   if (!user) return (
     <div className="flex items-center justify-center min-h-screen bg-stone-100">
       <div className="w-full max-w-sm">
@@ -407,6 +433,15 @@ export default function App() {
         </div>
       </div>
     </div>
+  );
+
+  // Mandatory 2FA: the admin cannot reach the console without an enrolled second
+  // factor. First login sets it up; every login after is challenged (above).
+  if (hasSecondFactor === false) return (
+    <MfaEnroll
+      onEnrolled={() => setHasSecondFactor(true)}
+      onSignOut={handleLogout}
+    />
   );
 
   return (
