@@ -665,6 +665,11 @@ export default function LogisticsScreen() {
     // how many previous runs found nobody home.
     const returnStage: string | null = order.returnStage ?? null;
     const missedPickups = Number(order.missedPickups ?? 0);
+    // Staff are outside the customer's door: the trip either succeeded or nobody
+    // was home. Hoisted because both outcome buttons test it, and they have to be
+    // separate siblings of the gap-2 row rather than share a Fragment.
+    const atLocation = order.status === OrderStatus.DELIVERED
+      && !isPaymentDue && !walkIn && returnStage === 'at_location';
 
     return (
       <View
@@ -940,30 +945,35 @@ export default function LogisticsScreen() {
             </TouchableOpacity>
           )}
 
-          {/* On site: the trip either succeeded or it didn't. Both outcomes on one row. */}
-          {order.status === OrderStatus.DELIVERED && !isPaymentDue && !walkIn && returnStage === 'at_location' && (
-            <>
-              <TouchableOpacity
-                onPress={() => handleNotPresent(order)}
-                disabled={busy}
-                activeOpacity={busy ? 1 : 0.8}
-                style={{ opacity: busy ? 0.6 : 1 }}
-                className="flex-1 bg-rose-50 border-2 border-rose-200 py-3.5 rounded-2xl items-center flex-row justify-center gap-1.5"
-              >
-                <UserX size={14} color="#e11d48" />
-                <Text className="text-rose-600 font-black uppercase text-[9px] tracking-widest">Not Present</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                onPress={() => setReturnOrder(order)}
-                disabled={busy}
-                activeOpacity={busy ? 1 : 0.8}
-                style={{ opacity: busy ? 0.6 : 1 }}
-                className="flex-1 bg-[#86B54F] py-3.5 rounded-2xl items-center flex-row justify-center gap-1.5"
-              >
-                <RefreshCcw size={14} color="black" />
-                <Text className="text-black font-black uppercase text-[9px] tracking-widest">Bike Check In</Text>
-              </TouchableOpacity>
-            </>
+          {/* On site: the trip either succeeded or it didn't. Both outcomes on one row.
+              Written as two siblings sharing one condition rather than a <> wrapper:
+              the row above is `flex-row gap-2`, and NativeWind polyfills gap by
+              cloning each child with an injected margin style. A Fragment cannot
+              take a style, so wrapping these two in one would warn on every render
+              that puts them on screen — which is the moment staff arrive. */}
+          {atLocation && (
+            <TouchableOpacity
+              onPress={() => handleNotPresent(order)}
+              disabled={busy}
+              activeOpacity={busy ? 1 : 0.8}
+              style={{ opacity: busy ? 0.6 : 1 }}
+              className="flex-1 bg-rose-50 border-2 border-rose-200 py-3.5 rounded-2xl items-center flex-row justify-center gap-1.5"
+            >
+              <UserX size={14} color="#e11d48" />
+              <Text className="text-rose-600 font-black uppercase text-[9px] tracking-widest">Not Present</Text>
+            </TouchableOpacity>
+          )}
+          {atLocation && (
+            <TouchableOpacity
+              onPress={() => setReturnOrder(order)}
+              disabled={busy}
+              activeOpacity={busy ? 1 : 0.8}
+              style={{ opacity: busy ? 0.6 : 1 }}
+              className="flex-1 bg-[#86B54F] py-3.5 rounded-2xl items-center flex-row justify-center gap-1.5"
+            >
+              <RefreshCcw size={14} color="black" />
+              <Text className="text-black font-black uppercase text-[9px] tracking-widest">Bike Check In</Text>
+            </TouchableOpacity>
           )}
 
           {/* Delivered rent-to-buy: no return — charge the remaining installments up
