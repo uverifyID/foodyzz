@@ -15,10 +15,13 @@ import { JetBrainsMono_400Regular } from '@expo-google-fonts/jetbrains-mono';
 import * as SplashScreen from 'expo-splash-screen';
 import * as Notifications from 'expo-notifications';
 import Constants from 'expo-constants';
-import ReactNativeAsyncStorage from '@react-native-async-storage/async-storage';
 
 // Firebase initialization and Auth state
-import { auth, db, saveProviderFcmToken, onAuthStateChanged, signOutClean, signOutColdStart, getActiveProviderId, syncAdminClaim } from './services/firebase';
+import {
+  auth, db, saveProviderFcmToken, onAuthStateChanged, signOutClean, signOutColdStart,
+  getActiveProviderId, setActiveProviderId, releaseProviderDevice, listMyStores,
+  syncAdminClaim, runWithRetry,
+} from './services/firebase';
 import { playNotificationSound, stopCurrentSound, SOUND_NAMES } from './services/soundPlayer';
 import type { FirebaseAuthTypes } from '@react-native-firebase/auth';
 
@@ -55,9 +58,12 @@ export default function App() {
   const [onboarded, setOnboarded] = useState<boolean | null>(null);
   const [profileReady, setProfileReady] = useState(false);
   const [stripeKey, setStripeKey] = useState('');
-  // Zip of the active store; doubles as a re-mount key for the provider UI so a
-  // store switch forces every screen to re-read getActiveProviderId().
-  const [activeStoreZip, setActiveStoreZip] = useState<string | null>(null);
+  // Document id of the active store; doubles as a re-mount key for the provider
+  // UI so a store switch forces every screen to re-read getActiveProviderId().
+  // It is the id itself, not the zip suffix: a store's id names whoever CREATED
+  // it, and a member operating someone else's store cannot recompose it from
+  // their own phone.
+  const [activeStoreId, setActiveStoreId] = useState<string | null>(null);
 
   // Load fonts as defined in tailwind.config.js aliases
   const [fontsLoaded, fontError] = useFonts({
@@ -91,40 +97,63 @@ export default function App() {
     return unsub;
   }, []);
 
-  // Watch the active store's onboarded flag to gate the wizard. Keyed on the unique
-  // store id `${phone}_${zip}` (NOT phone alone) so switching zip on the same phone
-  // re-subscribes to the right doc. Reads live auth + fresh zip and is driven by the
-  // auth-state change below, so every login re-evaluates for the freshly-stored zip.
+  // Watch the active store's onboarded flag to gate the wizard. Keyed on the store
+  // document id so switching stores re-subscribes to the right doc. Driven by the
+  // auth-state change below, so every login re-evaluates for the freshly-stored id.
   const onboardListenerRef = useRef<(() => void) | null>(null);
   const onboardProviderIdRef = useRef<string | null>(null);
+  // Generation counter: this function awaits (storage, and sometimes a network
+  // membership lookup), and it is re-entered on every auth event. Without it two
+  // overlapping runs could each attach a snapshot listener and only the last would
+  // be tracked in the ref — leaking the earlier one for the life of the process.
+  const subscribeGenRef = useRef(0);
   const subscribeOnboarded = useCallback(async () => {
+    const gen = ++subscribeGenRef.current;
+    const superseded = () => gen !== subscribeGenRef.current;
+    const teardown = () => {
+      if (onboardListenerRef.current) { onboardListenerRef.current(); onboardListenerRef.current = null; }
+    };
+
     const currentUser = auth().currentUser;
     if (!currentUser) {
-      if (onboardListenerRef.current) { onboardListenerRef.current(); onboardListenerRef.current = null; }
+      teardown();
       onboardProviderIdRef.current = null;
+      setActiveStoreId(null);
       setOnboarded(null); setProfileReady(false);
       return;
     }
     const cleanPhone = currentUser.phoneNumber?.replace(/\D/g, '') || currentUser.email?.split('@')[0] || '';
-    const zip = await ReactNativeAsyncStorage.getItem('active_provider_zip');
-    const providerId = (cleanPhone && zip) ? `${cleanPhone}_${zip}` : null;
+    let providerId = await getActiveProviderId();
+
+    // Signed in but no store on the device — the reinstall case (the Firebase
+    // Keychain session survives an app delete while AsyncStorage is wiped). We
+    // used to sign out here, because the store could only be recomposed from a
+    // zip we no longer had. Memberships are now server-side, so ask: one store
+    // is adopted silently, and the user is spared a pointless re-verification.
+    if (!providerId && cleanPhone) {
+      const stores = await runWithRetry(() => listMyStores()).catch(() => null);
+      if (superseded()) return;
+      if (stores && stores.length > 0) {
+        // Deterministic pick; a member of several stores can change it from
+        // Account → Switch, which persists the choice.
+        providerId = [...stores].sort((a, b) => a.id.localeCompare(b.id))[0].id;
+        await setActiveProviderId(providerId);
+      }
+    }
+    if (superseded()) return;
 
     // Already watching this exact store — don't tear down (avoids a spinner flash on
     // token refresh, which also fires onAuthStateChanged).
     if (providerId === onboardProviderIdRef.current && onboardListenerRef.current) return;
 
-    if (onboardListenerRef.current) { onboardListenerRef.current(); onboardListenerRef.current = null; }
+    teardown();
     onboardProviderIdRef.current = providerId;
-    setActiveStoreZip(zip);
+    setActiveStoreId(providerId);
     if (__DEV__) console.log('[ONBOARD] subscribe -> providers/', providerId);
     if (!providerId) {
-      // Authed but no stored zip — the classic reinstall case: the Firebase
-      // Keychain session survives an app delete while AsyncStorage is wiped, so
-      // we know the phone but not which store. Without the zip we can't identify
-      // the provider doc, and falling through would falsely render onboarding.
-      // Sign out so the listener re-fires null → AuthScreen collects phone (with
-      // SMS re-verification) + zip again; an already-onboarded store then routes
-      // straight to dispatch, an un-onboarded one into the wizard.
+      // Authed, but this phone belongs to no store (and the lookup didn't fail
+      // transiently). Falling through would falsely render onboarding, so sign out
+      // and let AuthScreen collect a phone + invite code.
       // Cold-start sign-out: plain signOut without Firestore teardown. Calling
       // db.terminate() here would race the app-level apiConfig listener and crash
       // natively (FIRIllegalStateException) — see signOutColdStart.
@@ -135,7 +164,7 @@ export default function App() {
     // New store: reset until its snapshot resolves so a previous store's onboarded
     // flag can't keep rendering the dashboard for a not-yet-onboarded store.
     setOnboarded(null); setProfileReady(false);
-    onboardListenerRef.current = db.collection('providers').doc(providerId).onSnapshot((snap) => {
+    onboardListenerRef.current = db.collection('providers').doc(providerId!).onSnapshot((snap) => {
       const val = snap?.exists ? (snap.data()?.onboarded ?? false) : false;
       if (__DEV__) console.log('[ONBOARD] snapshot', providerId, 'onboarded=', val);
       setOnboarded(val);
@@ -173,12 +202,18 @@ export default function App() {
     return () => { unsubscribe(); if (onboardListenerRef.current) onboardListenerRef.current(); };
   }, [subscribeOnboarded]);
 
-  // Switch the active store (same owner / phone, different zip) without logging out.
-  // Persist the new zip, then re-subscribe onboarding for the target store; the
-  // activeStoreZip change re-keys ProviderNavigator so all screens re-scope.
-  const switchStore = useCallback(async (zip: string) => {
-    await ReactNativeAsyncStorage.setItem('active_provider_zip', zip);
-    setActiveStoreZip(zip);
+  // Switch the active store without logging out — between stores you own, or
+  // stores you were invited to. Persist the new id, then re-subscribe onboarding
+  // for the target store; the activeStoreId change re-keys ProviderNavigator so
+  // all screens re-scope.
+  const switchStore = useCallback(async (providerId: string) => {
+    // Hand this device's push token to the store being switched TO. Without the
+    // release the old store keeps alerting a device that is no longer watching it
+    // — which for a shared store means notifying someone else's staff.
+    const previous = await getActiveProviderId();
+    if (previous && previous !== providerId) await releaseProviderDevice(previous);
+    await setActiveProviderId(providerId);
+    setActiveStoreId(providerId);
     await subscribeOnboarded();
   }, [subscribeOnboarded]);
 
@@ -215,38 +250,39 @@ export default function App() {
     })();
   }, []);
 
-  // Handle push notification permissions and token saving
+  // Handle push notification permissions and token saving. Keyed on the ACTIVE
+  // STORE as well as the user: the token is registered against a store's device
+  // list, so switching stores must re-register against the new one.
   useEffect(() => {
-    const phone = user?.phoneNumber?.replace(/\D/g, '') || user?.email?.split('@')[0];
-    if (phone) {
-      const registerForPushNotificationsAsync = async () => {
-        try {
-          const { status: existingStatus } = await Notifications.getPermissionsAsync();
-          let finalStatus = existingStatus;
-          if (existingStatus !== 'granted') {
-            const { status } = await Notifications.requestPermissionsAsync();
-            finalStatus = status;
-          }
-          if (finalStatus === 'granted') {
-            // Physical devices / standalone builds don't auto-inject the projectId
-            // (unlike Expo Go), so getExpoPushTokenAsync() fails silently and no
-            // token is saved. Pass it explicitly from app config.
-            const projectId =
-              Constants.expoConfig?.extra?.eas?.projectId ??
-              (Constants as any).easConfig?.projectId;
-            const token = (await Notifications.getExpoPushTokenAsync(
-              projectId ? { projectId } : undefined
-            )).data;
-            const zip = await ReactNativeAsyncStorage.getItem('active_provider_zip');
-            await saveProviderFcmToken(phone, token, zip || undefined);
-          }
-        } catch (e: any) {
-          console.warn('Push notification setup skipped:', e?.message);
+    if (!user || !activeStoreId) return;
+    let cancelled = false;
+    const registerForPushNotificationsAsync = async () => {
+      try {
+        const { status: existingStatus } = await Notifications.getPermissionsAsync();
+        let finalStatus = existingStatus;
+        if (existingStatus !== 'granted') {
+          const { status } = await Notifications.requestPermissionsAsync();
+          finalStatus = status;
         }
-      };
-      registerForPushNotificationsAsync();
-    }
-  }, [user]);
+        if (finalStatus !== 'granted' || cancelled) return;
+        // Physical devices / standalone builds don't auto-inject the projectId
+        // (unlike Expo Go), so getExpoPushTokenAsync() fails silently and no
+        // token is saved. Pass it explicitly from app config.
+        const projectId =
+          Constants.expoConfig?.extra?.eas?.projectId ??
+          (Constants as any).easConfig?.projectId;
+        const token = (await Notifications.getExpoPushTokenAsync(
+          projectId ? { projectId } : undefined
+        )).data;
+        if (cancelled) return;
+        await saveProviderFcmToken(activeStoreId, token);
+      } catch (e: any) {
+        console.warn('Push notification setup skipped:', e?.message);
+      }
+    };
+    registerForPushNotificationsAsync();
+    return () => { cancelled = true; };
+  }, [user, activeStoreId]);
 
   useEffect(() => {
     // Listener for notification taps
@@ -302,10 +338,10 @@ export default function App() {
     return () => sub.remove();
   }, []);
 
-  // App-icon badge: the server bumps a per-provider unread count on each push so
-  // the icon reminds the provider of new orders/messages while the app is closed.
+  // App-icon badge: the server bumps a per-store unread count on each push so the
+  // icon reminds the provider of new orders/messages while the app is closed.
   // Clear it — both the OS badge and the active provider doc — whenever they
-  // open/foreground the app, scoped to the active store (${phone}_${zip}).
+  // open/foreground the app, scoped to the active store.
   useEffect(() => {
     if (!user) return;
     let cancelled = false;
@@ -317,7 +353,7 @@ export default function App() {
     clearBadge(); // cold launch / sign-in
     const sub = AppState.addEventListener('change', (s) => { if (s === 'active') clearBadge(); });
     return () => { cancelled = true; sub.remove(); };
-  }, [user]);
+  }, [user, activeStoreId]);
 
   // Hide splash screen when fonts are ready (loaded, errored, or timed out) and auth is initialized
   useEffect(() => {
@@ -356,7 +392,7 @@ export default function App() {
                 <ActivityIndicator size="large" color="#507425" />
               </View>
             ) : onboarded === true ? (
-              <ProviderNavigator key={activeStoreZip ?? 'default'} />
+              <ProviderNavigator key={activeStoreId ?? 'default'} />
             ) : (
               <ProviderOnboardingWizard user={user} onComplete={subscribeOnboarded} />
             )}

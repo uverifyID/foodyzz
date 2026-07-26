@@ -19,6 +19,10 @@ const {
 const OWNER_PHONE = "+14022039987";
 const OWNER_DIGITS = "14022039987";
 const OTHER_PHONE = "+14155550000";
+// A second person working the SAME store. Their phone appears nowhere in the
+// store's doc id — which is exactly the case the old ownsPhoneField-only rules
+// could not express.
+const MEMBER_PHONE = "+14155559999";
 const ZIP = "11743";
 const PROVIDER_ID = `${OWNER_DIGITS}_${ZIP}`;
 
@@ -59,10 +63,17 @@ function ctx(env, phone) {
     await db.doc(`providerOrders/order_1`).set({ customerPhone: OWNER_PHONE, status: "requested", providerId: PROVIDER_ID, createdAt: new Date().toISOString() });
     // Provider-payout ledger — admin-readable, server-only writes.
     await db.doc(`payouts/payout_1`).set({ providerId: PROVIDER_ID, amount: 10, status: "paid" });
+    // Store membership — written only by Cloud Functions, and the sole reason a
+    // second person can operate a store whose id carries someone else's phone.
+    await db.doc(`providers/${PROVIDER_ID}/members/${OWNER_PHONE}`).set({ phone: OWNER_PHONE, role: "owner", addedAt: new Date().toISOString() });
+    await db.doc(`providers/${PROVIDER_ID}/members/${MEMBER_PHONE}`).set({ phone: MEMBER_PHONE, role: "staff", addedAt: new Date().toISOString() });
+    // A live single-use join code. The code IS the credential, so no client may read it.
+    await db.doc(`invites/A7K2M9QP`).set({ phone: MEMBER_PHONE, providerId: PROVIDER_ID, role: "staff", used: false, expiresAt: new Date(Date.now() + 86400000).toISOString() });
   });
 
   const owner = ctx(env, OWNER_PHONE);
   const other = ctx(env, OTHER_PHONE);
+  const member = ctx(env, MEMBER_PHONE);
 
   console.log("providers:");
   await check("owner can update own provider doc",
@@ -73,6 +84,36 @@ function ctx(env, phone) {
     assertSucceeds(owner.doc(`providers/${OWNER_DIGITS}_10001`).set({ phoneNumber: OWNER_DIGITS, zipCode: "10001", onboarded: false })));
   await check("anyone authed can READ providers (browse)",
     assertSucceeds(other.doc(`providers/${PROVIDER_ID}`).get()));
+
+  console.log("store membership (one store, several people):");
+  await check("an INVITED MEMBER can update a store whose id carries someone else's phone",
+    assertSucceeds(member.doc(`providers/${PROVIDER_ID}`).update({ businessName: "Ours" })));
+  await check("a NON-member still cannot (membership is the whole check)",
+    assertFails(other.doc(`providers/${PROVIDER_ID}`).update({ businessName: "Theirs" })));
+  await check("a member CANNOT delete the store (owner/admin only)",
+    assertFails(member.doc(`providers/${PROVIDER_ID}`).delete()));
+  await check("a member can read the store's roster",
+    assertSucceeds(member.doc(`providers/${PROVIDER_ID}/members/${OWNER_PHONE}`).get()));
+  await check("a NON-member cannot read the roster",
+    assertFails(other.doc(`providers/${PROVIDER_ID}/members/${OWNER_PHONE}`).get()));
+  await check("NOBODY can write a member doc — self-grant would defeat invites entirely",
+    assertFails(other.doc(`providers/${PROVIDER_ID}/members/${OTHER_PHONE}`).set({ phone: OTHER_PHONE, role: "staff" })));
+  await check("not even a member can add another member",
+    assertFails(member.doc(`providers/${PROVIDER_ID}/members/${OTHER_PHONE}`).set({ phone: OTHER_PHONE, role: "staff" })));
+  await check("the store switcher's collection-group query returns only YOUR memberships",
+    assertSucceeds(member.collectionGroup("members").where("phone", "==", MEMBER_PHONE).get()));
+  await check("that query CANNOT be widened to read everyone's memberships",
+    assertFails(member.collectionGroup("members").get()));
+  await check("...nor pointed at somebody else's phone",
+    assertFails(member.collectionGroup("members").where("phone", "==", OWNER_PHONE).get()));
+
+  console.log("invites (the code is the credential):");
+  await check("no client can READ an invite (a readable code list is a key ring)",
+    assertFails(member.doc("invites/A7K2M9QP").get()));
+  await check("no client can WRITE an invite (self-issue into any store)",
+    assertFails(other.doc("invites/SELFMADE").set({ phone: OTHER_PHONE, providerId: PROVIDER_ID, used: false })));
+  await check("even an admin cannot read invites (functions-only)",
+    assertFails(adminCtx.doc("invites/A7K2M9QP").get()));
 
   console.log("orders:");
   await check("customer can create their own order",

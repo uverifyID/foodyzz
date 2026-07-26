@@ -83,7 +83,12 @@ export interface ProviderProfile {
   chargesPriorityFee?: boolean;
   priorityPrice?: number | null;
   stripeAccountId?: string; // Stripe Connect Account ID for payouts
-  fcmToken?: string; // Firebase Cloud Messaging token
+  // LEGACY single-device push token, still delivered to for devices on an older
+  // build. A store can have several members now, so this app writes fcmTokens.
+  fcmToken?: string;
+  // One push token per signed-in member device. The server sends to the union of
+  // this and the legacy fcmToken.
+  fcmTokens?: string[];
   slotCapacity?: number; // Max concurrent orders per time slot
   isBlocked?: boolean; // Administrative block flag
   // Sales-rep referral attribution. Set once via the command-center referral
@@ -92,6 +97,29 @@ export interface ProviderProfile {
   referralCodeUsed?: string;
   referralCapturedAt?: string;
   referralPromptDismissed?: boolean; // one-time modal already shown/answered
+}
+
+// ── Store membership ────────────────────────────────────────────────────────
+//
+// A store's doc id is `${phone}_${identifier}` and embeds its creator's phone,
+// which used to make the creator its only possible user. Access is now decided
+// by `providers/{providerId}/members/{E164phone}` existing instead, so several
+// people can run one store. Server-written only (see redeemHqInvite).
+export interface StoreMember {
+  phone: string; // E.164; also the doc id
+  role: 'owner' | 'staff';
+  name?: string;
+  addedAt: string;
+  invitedBy?: string;
+}
+
+// A store the signed-in phone belongs to, as shown in the store switcher.
+export interface StoreMembership {
+  providerId: string;
+  role: 'owner' | 'staff';
+  businessName?: string;
+  zipCode?: string;
+  onboarded?: boolean;
 }
 
 export interface RentalOrder {

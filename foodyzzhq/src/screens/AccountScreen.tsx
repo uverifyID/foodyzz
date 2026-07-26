@@ -5,7 +5,7 @@ import Constants from 'expo-constants';
 import { Building, Mail, MapPin, Clock, DollarSign, CreditCard, Edit2, X, AlertTriangle, ChevronRight, LogOut, Trash2, MessageSquare, Bell, Volume2, Truck, Layers, Star, CheckCircle, Power, Check, ArrowRight, ArrowLeft, Save } from 'lucide-react-native';
 import { previewSound, stopCurrentSound } from '../services/soundPlayer';
 import { COLORS, LAYOUT } from '../theme';
-import { db, auth as authNative, signOutClean, getActiveProviderId } from '../services/firebase'; // Import native auth
+import { db, auth as authNative, signOutClean, getActiveProviderId, listMyStores } from '../services/firebase'; // Import native auth
 import { useActiveProvider, useGlobalConfig } from '../hooks';
 import { useNavigation } from '@react-navigation/native';
 import ReactNativeAsyncStorage from '@react-native-async-storage/async-storage';
@@ -386,14 +386,14 @@ export default function AccountScreen() {
     previewTimerRef.current = setTimeout(() => setPreviewingSound(null), 2500);
   };
 
-  // Store switcher: list every store owned by this phone (same owner, different zip).
+  // Store switcher: every store this phone may operate — the ones it created AND
+  // the ones it was invited to. Driven by membership (providers/{id}/members/
+  // {phone}), not by "the store's phoneNumber field is mine", so a member sees the
+  // stores they joined rather than only stores they own.
   const openStoreSwitcher = async () => {
     setShowStoreSwitcher(true);
-    const cleanPhone = user?.phoneNumber?.replace(/\D/g, '') || user?.email?.split('@')[0];
-    if (!cleanPhone) return;
     try {
-      const snap = await db.collection('providers').where('phoneNumber', '==', cleanPhone).get();
-      setOwnedStores(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+      setOwnedStores(await listMyStores());
     } catch (e: any) {
       console.warn('Store list error:', e?.message);
     }
@@ -402,10 +402,9 @@ export default function AccountScreen() {
   const handlePickStore = async (store: any) => {
     setShowStoreSwitcher(false);
     if (!store?.id || store.id === profile?.id) return;
-    // active_provider_zip is the doc-key suffix (store identifier), NOT the service
-    // zip — derive it from the store's doc id `${phone}_${identifier}`.
-    const identifier = store.id.substring(store.id.indexOf('_') + 1);
-    await switchStore(identifier);
+    // The store's document id, verbatim — it is no longer recomputable from the
+    // signed-in phone once stores can be shared.
+    await switchStore(store.id);
   };
 
   if (loading) {
@@ -924,7 +923,7 @@ export default function AccountScreen() {
 
             <ScrollView showsVerticalScrollIndicator={false}>
               {ownedStores.length === 0 ? (
-                <Text className="text-slate-500 font-bold text-xs uppercase text-center py-8">No other stores on this number.</Text>
+                <Text className="text-slate-500 font-bold text-xs uppercase text-center py-8">No other stores for this number.</Text>
               ) : ownedStores.map((store) => {
                 const isActive = store.id === profile?.id;
                 return (
@@ -941,7 +940,9 @@ export default function AccountScreen() {
                         <Text className={`text-xs font-black uppercase ${isActive ? 'text-white' : 'text-slate-300'}`}>
                           {store.businessName || 'Unnamed Store'}
                         </Text>
-                        <Text className="text-[10px] font-mono text-slate-500 font-bold uppercase">Zip {store.zipCode}</Text>
+                        <Text className="text-[10px] font-mono text-slate-500 font-bold uppercase">
+                          Zip {store.zipCode}{store.role === 'staff' ? ' · Member' : ''}
+                        </Text>
                       </View>
                     </View>
                     {isActive && <CheckCircle size={18} color={COLORS.brand.green} />}

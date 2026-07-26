@@ -26,6 +26,20 @@ service cloud.firestore {
              && ('+' + digitsPhone) == request.auth.token.phone_number;
     }
 
+    // A store can be run by SEVERAL people. The doc id `${phone}_${identifier}`
+    // names only whoever created it, so membership — not the id — is the access
+    // check: providers/{id}/members/{E164phone} exists. Those docs are written
+    // exclusively by Cloud Functions (redeemHqInvite / onProviderCreatedAddOwner);
+    // a client-writable member doc would let anyone join any store.
+    //
+    // Costs one document read per evaluation, so it is always placed AFTER
+    // ownsPhoneField in an `||` — rules short-circuit, so the common case (an
+    // owner writing their own store) pays nothing.
+    function isMember(providerId) {
+      return request.auth != null
+             && exists(/databases/$(database)/documents/providers/$(providerId)/members/$(request.auth.token.phone_number));
+    }
+
     // Public, NON-sensitive config docs — `global` (commission, fees, publishableKey,
     // Google Maps client key, legal links) AND `logistics` (bike models, rates, fees,
     // delivery windows). Readable pre-auth so the login screen can show the T&C link and
@@ -52,12 +66,33 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
-    // Providers - any authed user may read (browse stores); only the owning
-    // phone (or an admin) may write. Protects bankAccount / Stripe fields.
+    // Single-use join codes, issued per person by a manager (scripts/invite-member.js)
+    // and redeemed by the redeemHqInvite function. Deny-all: the CODE is the
+    // credential, so a readable collection would be an enumerable key ring, and a
+    // writable one would be self-grant into any store.
+    match /invites/{code} {
+      allow read, write: if false;
+    }
+
+    // Providers - any authed user may read (browse stores); the owning phone, any
+    // MEMBER of the store, or an admin may write. Protects bankAccount / Stripe
+    // fields from everyone else.
     match /providers/{providerId} {
       allow read: if request.auth != null;
-      allow create, update: if ownsPhoneField(request.resource.data.phoneNumber) || isAdmin();
+      // CREATE stays owner-only: you make your own store, you don't conjure
+      // someone else's. (A member doc cannot exist yet at creation time anyway.)
+      allow create: if ownsPhoneField(request.resource.data.phoneNumber) || isAdmin();
+      allow update: if ownsPhoneField(request.resource.data.phoneNumber)
+                    || isMember(providerId) || isAdmin();
+      // DELETE stays owner/admin — joining a store must not let a member destroy it.
       allow delete: if ownsPhoneField(resource.data.phoneNumber) || isAdmin();
+
+      // Who may operate this store. Server-written only (see isMember above).
+      // Readable by the store's own members so the team roster can be shown.
+      match /members/{memberPhone} {
+        allow read: if isMember(providerId) || isAdmin();
+        allow write: if false;
+      }
 
       // Redacted public reviews (first name + stars + comment only), written by the
       // onOrderUpdatedUpdateStats function so any authed customer can browse them.
@@ -65,6 +100,16 @@ service cloud.firestore {
         allow read: if request.auth != null;
         allow write: if false;
       }
+    }
+
+    // Collection-group read over members, used by the app's store switcher to find
+    // every store the signed-in phone belongs to in ONE query. Deliberately
+    // self-only and phrased as an equality on the same field the query filters on:
+    // that is what makes the query provably safe to the rules engine, and it means
+    // this rule can never widen the per-store roster read above.
+    match /{path=**}/members/{memberPhone} {
+      allow read: if request.auth != null
+                  && resource.data.phone == request.auth.token.phone_number;
     }
 
     // Users (customers) - self-only profile writes; admin may write (block flag).

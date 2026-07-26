@@ -32,20 +32,96 @@ if (process.env.EXPO_PUBLIC_USE_EMULATOR === '1') {
   }
 }
 
+export const ACTIVE_PROVIDER_ID_KEY = 'active_provider_id';
+const LEGACY_ACTIVE_ZIP_KEY = 'active_provider_zip';
+
 /**
- * Resolve the unique active store document id `${phone}_${zip}`.
+ * Resolve the active store's document id.
  *
- * Multiple provider stores can share a phone number, so a phone-only lookup is
- * ambiguous. The active store's zip is persisted at login under
- * `active_provider_zip`; combined with the authenticated phone it yields the
- * exact provider document. Returns null only before a store has been selected.
+ * This used to be COMPUTED as `${signed-in phone}_${stored zip}`, which quietly
+ * made "which store" a function of "who you are" — so a store could only ever
+ * have one user. A store can now have several members (providers/{id}/members/
+ * {E164phone}), and its doc id still carries whoever CREATED it, so the id must
+ * be stored rather than derived. Returns null before a store has been selected.
+ *
+ * Kept as a bare AsyncStorage read: it is called on every screen mount and on
+ * every foreground, so it must not touch the network or the auth SDK.
  */
 export const getActiveProviderId = async (): Promise<string | null> => {
+  const stored = await ReactNativeAsyncStorage.getItem(ACTIVE_PROVIDER_ID_KEY);
+  if (stored) return stored;
+  return migrateLegacyActiveStore();
+};
+
+/**
+ * One-shot upgrade path for installs that predate ACTIVE_PROVIDER_ID_KEY.
+ *
+ * Those devices hold only the doc-key SUFFIX under `active_provider_zip`, which
+ * is meaningless without the phone that was signed in. Recompose the id the old
+ * way, persist it, and drop the legacy key. Without this every already-signed-in
+ * provider would look store-less on first launch after the update and be signed
+ * out by App's reinstall guard.
+ *
+ * Purely local — no network, no writes beyond AsyncStorage.
+ */
+const migrateLegacyActiveStore = async (): Promise<string | null> => {
+  const zip = await ReactNativeAsyncStorage.getItem(LEGACY_ACTIVE_ZIP_KEY);
+  if (!zip) return null;
   const user = auth().currentUser;
   const cleanPhone = user?.phoneNumber?.replace(/\D/g, '') || user?.email?.split('@')[0] || '';
-  const zip = await ReactNativeAsyncStorage.getItem('active_provider_zip');
-  if (!cleanPhone || !zip) return null;
-  return `${cleanPhone}_${zip}`;
+  if (!cleanPhone) return null; // auth not resolved yet; retry on the next call
+  const providerId = `${cleanPhone}_${zip}`;
+  await setActiveProviderId(providerId);
+  return providerId;
+};
+
+/**
+ * Persist the active store. Always removes the legacy zip key so a later call to
+ * migrateLegacyActiveStore can't resurrect a stale store after a switch.
+ */
+export const setActiveProviderId = async (providerId: string): Promise<void> => {
+  await ReactNativeAsyncStorage.setItem(ACTIVE_PROVIDER_ID_KEY, providerId);
+  await ReactNativeAsyncStorage.removeItem(LEGACY_ACTIVE_ZIP_KEY);
+};
+
+export const clearActiveProviderId = async (): Promise<void> => {
+  await ReactNativeAsyncStorage.multiRemove([ACTIVE_PROVIDER_ID_KEY, LEGACY_ACTIVE_ZIP_KEY]);
+};
+
+/**
+ * Every store the signed-in phone may operate, newest-membership last.
+ *
+ * One collection-group query against `members.phone`, matching the self-only
+ * rule in firestore.rules — NOT a scan of `providers`. The provider docs are
+ * then fetched individually (a handful at most; a person belongs to a few
+ * stores, not hundreds).
+ */
+export const listMyStores = async (): Promise<Array<{ id: string; role: string; [k: string]: any }>> => {
+  const phone = auth().currentUser?.phoneNumber;
+  if (!phone) return [];
+  const snap = await db.collectionGroup('members').where('phone', '==', phone).get();
+  let entries = snap.docs
+    .map((d) => ({ id: d.ref.parent.parent?.id || '', role: String(d.data()?.role || 'staff') }))
+    .filter((e) => e.id);
+
+  // Fallback for a store created before membership existed and not yet reached by
+  // scripts/backfill-members.js: find it the old way, by the owning phone field.
+  // Without this a legacy owner would look store-less and get signed out on every
+  // launch — an unbreakable loop, since signing back in resolves nothing either.
+  // Once backfilled (or on any store created since), this never runs.
+  if (entries.length === 0) {
+    const owned = await db.collection('providers')
+      .where('phoneNumber', '==', phone.replace(/\D/g, '')).get();
+    entries = owned.docs.map((d) => ({ id: d.id, role: 'owner' }));
+  }
+  if (entries.length === 0) return [];
+
+  const docs = await Promise.all(
+    entries.map((e) => db.collection('providers').doc(e.id).get().catch(() => null)),
+  );
+  return entries
+    .map((e, i) => (docs[i]?.exists ? { ...docs[i]!.data(), id: e.id, role: e.role } : null))
+    .filter(Boolean) as Array<{ id: string; role: string }>;
 };
 
 // Helper for Auth changes
@@ -110,6 +186,41 @@ export const syncAdminClaim = async (force = false): Promise<boolean> => {
 };
 
 /**
+ * Ask the server whether this phone may sign in, BEFORE requesting an SMS.
+ *
+ * Returns the resolved store when it is unambiguous, which is what lets
+ * AuthScreen persist the active store before confirm() fires the auth-state
+ * change. Never throws for a "no" answer — only for transport failures — so the
+ * caller can distinguish "refused" from "couldn't ask".
+ */
+export type HqPreflight = {
+  allowed: boolean;
+  mode: 'member' | 'invite' | 'owner' | 'new';
+  providerId?: string | null;
+  storeCount?: number;
+  reason?: string;
+};
+
+export const preflightHqSignIn = async (phone: string, code?: string): Promise<HqPreflight> => {
+  const res: any = await functions().httpsCallable('preflightHqSignIn')({
+    phone,
+    ...(code ? { code } : {}),
+  });
+  return (res?.data ?? { allowed: false, mode: 'new' }) as HqPreflight;
+};
+
+/**
+ * Redeem a single-use invite for the signed-in phone and return the store joined.
+ * Server-side idempotent, so a retry after a dropped response is safe.
+ */
+export const redeemHqInvite = async (code: string): Promise<string> => {
+  const res: any = await functions().httpsCallable('redeemHqInvite')({ code });
+  const providerId = res?.data?.providerId;
+  if (!providerId) throw new Error('Could not join that store. Please check the code.');
+  return String(providerId);
+};
+
+/**
  * Global Config Loader
  */
 export const subscribeToGlobalConfig = (callback: (config: any) => void) => {
@@ -123,40 +234,70 @@ export const subscribeToGlobalConfig = (callback: (config: any) => void) => {
 export const updateGlobalConfig = (newConfig: Partial<any>) =>
   firestore().collection('apiConfig').doc('global').update(newConfig);
 
-// Function to save provider's FCM token
-export const saveProviderFcmToken = async (phoneNumber: string, token: string, zipCode?: string) => {
-  try {
-    // Prefer the keyed doc for the active store, but only update it if it exists.
-    // Updating a non-existent providers/${phone}_${zip} doc fails the hardened
-    // rule (no existing phoneNumber for ownsPhoneField to check) and surfaces as
-    // permission-denied — so fall back to the by-phone lookup of an owned doc.
-    // Always write phoneNumber (digits) alongside the token via merge-set. The
-    // hardened providers rule checks ownsPhoneField(request.resource.data.phoneNumber)
-    // — i.e. the POST-write doc must carry the caller's own digits-phone. A bare
-    // update({ fcmToken }) relies on the existing doc already having a correct
-    // phoneNumber field; legacy/wizard-created docs that omit it would be denied.
-    // Including phoneNumber here satisfies the rule unconditionally and self-heals.
-    if (zipCode) {
-      const ref = firestore().collection('providers').doc(`${phoneNumber}_${zipCode}`);
-      const snap = await ref.get();
-      if (snap.exists) {
-        await ref.set({ fcmToken: token, phoneNumber }, { merge: true });
-        // Dev-only, and without the phone number (PII) in the log line.
-        if (__DEV__) console.log('Provider FCM token saved (keyed doc)');
-        return;
-      }
-    }
+// This device's Expo push token, remembered so sign-out can withdraw exactly it
+// from the store's token list without re-deriving it from expo-notifications.
+const PUSH_TOKEN_KEY = 'expo_push_token';
 
-    const snap = await firestore().collection('providers').where('phoneNumber', '==', phoneNumber).get();
-    if (!snap.empty) {
-      await snap.docs[0].ref.set({ fcmToken: token, phoneNumber }, { merge: true });
-      // Dev-only, and without the phone number (PII) in the log line.
-      if (__DEV__) console.log('Provider FCM token saved via phone lookup');
-    } else {
+/**
+ * Register this device to receive the active store's pushes.
+ *
+ * Writes to `fcmTokens` (arrayUnion) rather than the old scalar `fcmToken`,
+ * because a store can now have several members: a single field meant whichever
+ * device registered last silently became the only one receiving order alerts.
+ * The server sends to the union of both fields, so devices still on the old
+ * build keep working (see providerPushTokens in functions/src/index.ts).
+ *
+ * Only ever an UPDATE: a merge-set onto a missing doc is a CREATE, which the
+ * providers rule rejects (nothing to authorize against), so a missing store is
+ * skipped rather than surfacing permission-denied. Note it must NOT write
+ * `phoneNumber` — for a non-owner member that would overwrite the store's owner
+ * field with the member's own number.
+ */
+export const saveProviderFcmToken = async (providerId: string, token: string) => {
+  try {
+    if (!providerId || !token) return;
+    const ref = firestore().collection('providers').doc(providerId);
+    const snap = await ref.get();
+    if (!snap.exists) {
       if (__DEV__) console.log('No provider doc found; skipping FCM token save.');
+      return;
     }
+    await ref.update({ fcmTokens: firestore.FieldValue.arrayUnion(token) });
+    await ReactNativeAsyncStorage.setItem(PUSH_TOKEN_KEY, token);
+    if (__DEV__) console.log('Provider FCM token registered for', providerId);
   } catch (error) {
     console.error('Error saving provider FCM token:', error);
+  }
+};
+
+/**
+ * Withdraw this device's push token from a store.
+ *
+ * Without this a member who signs out — or switches store — keeps receiving that
+ * store's order alerts indefinitely, because the token stays in `fcmTokens` until
+ * Expo happens to report it dead (which never happens for a still-installed app).
+ *
+ * Best-effort and time-boxed: sign-out must never hang on a flaky network.
+ */
+export const releaseProviderDevice = async (providerId?: string | null): Promise<void> => {
+  try {
+    const id = providerId ?? (await ReactNativeAsyncStorage.getItem(ACTIVE_PROVIDER_ID_KEY));
+    const token = await ReactNativeAsyncStorage.getItem(PUSH_TOKEN_KEY);
+    if (!id || !token) return;
+    const ref = firestore().collection('providers').doc(id);
+    // Caught inside, so losing the race below can't leave an unhandled rejection.
+    const work = (async () => {
+      const snap = await ref.get();
+      if (!snap.exists) return;
+      const update: Record<string, any> = { fcmTokens: firestore.FieldValue.arrayRemove(token) };
+      // Clear the legacy scalar too, but only when it is THIS device's token — on
+      // a store shared with someone still on the old build it may well be theirs.
+      if (snap.data()?.fcmToken === token) update.fcmToken = firestore.FieldValue.delete();
+      await ref.update(update);
+    })().catch((e) => { if (__DEV__) console.warn('releaseProviderDevice write failed:', e?.message); });
+    await Promise.race([work, new Promise((resolve) => setTimeout(resolve, 4000))]);
+  } catch (error) {
+    if (__DEV__) console.warn('releaseProviderDevice skipped:', (error as any)?.message);
   }
 };
 
@@ -232,10 +373,18 @@ export const runWithRetry = async <T>(op: () => Promise<T>, tries = 4): Promise<
 // cure wedged gRPC streams from in-app sign-out/in cycling, which can't happen
 // on a cold start.
 export const signOutColdStart = async (): Promise<void> => {
+  // Drop the active store too. It is device-scoped, not account-scoped, so a
+  // leftover id would be inherited by whoever signs in next on this handset —
+  // and stores are now shared, so "next" is no longer necessarily the same person.
+  await clearActiveProviderId().catch(() => {});
   await auth().signOut();
 };
 
 export const signOutClean = async (): Promise<void> => {
+  // Withdraw this device from the store's push list FIRST — it needs the auth
+  // token that signOut() is about to discard. Best-effort and time-boxed inside.
+  await releaseProviderDevice();
+  await clearActiveProviderId();
   await auth().signOut();
   try {
     // Order matters: terminate() stops the client and closes streams;

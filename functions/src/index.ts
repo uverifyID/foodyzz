@@ -198,16 +198,44 @@ function isExpoToken(token: unknown): token is string {
   return typeof token === "string" && token.startsWith("ExponentPushToken[");
 }
 
-// Removes stale fcmToken fields from docs whose tokens Expo rejected. Dedupes
-// by path and never throws — token cleanup is best-effort.
-async function clearDeadTokens(refs: DocumentReference[]): Promise<void> {
-  const unique = new Map<string, DocumentReference>();
-  refs.forEach((r) => unique.set(r.path, r));
-  await Promise.all([...unique.values()].map(async (ref) => {
+// Every device to notify for a store. A store can now have several members (see
+// StoreMember), each signed in on their own phone, so a single token field would
+// silently deliver a new-order alert to whichever device registered last. The
+// apps write `fcmTokens` (arrayUnion); the legacy scalar `fcmToken` is still
+// included so a member who has not updated the app yet keeps getting pushes.
+// Deduped — during the transition one device writes BOTH fields.
+function providerPushTokens(data: any): string[] {
+  const all = [
+    ...(Array.isArray(data?.fcmTokens) ? data.fcmTokens : []),
+    data?.fcmToken,
+  ].filter(isExpoToken);
+  return [...new Set(all)];
+}
+
+// Removes tokens Expo rejected from the docs that hold them. Grouped by document
+// so a store with several dead devices costs one read + one write, not N of each.
+// The read is needed to know whether the legacy scalar `fcmToken` is one of the
+// dead tokens — blindly deleting it would unregister a LIVE device belonging to
+// another member of the same store. Never throws; cleanup is best-effort.
+async function clearDeadTokens(dead: Array<{ ref: DocumentReference; token: string }>): Promise<void> {
+  const byPath = new Map<string, { ref: DocumentReference; tokens: Set<string> }>();
+  dead.forEach(({ref, token}) => {
+    const entry = byPath.get(ref.path) ?? {ref, tokens: new Set<string>()};
+    entry.tokens.add(token);
+    byPath.set(ref.path, entry);
+  });
+
+  await Promise.all([...byPath.values()].map(async ({ref, tokens}) => {
     try {
-      await ref.update({fcmToken: FieldValue.delete()});
+      const snap = await ref.get();
+      if (!snap.exists) return;
+      const update: Record<string, unknown> = {
+        fcmTokens: FieldValue.arrayRemove(...tokens),
+      };
+      if (tokens.has(snap.data()?.fcmToken)) update.fcmToken = FieldValue.delete();
+      await ref.update(update);
     } catch (err) {
-      console.error(`Failed to clear dead token at ${ref.path}:`, err);
+      console.error(`Failed to clear dead token(s) at ${ref.path}:`, err);
     }
   }));
 }
@@ -272,7 +300,7 @@ async function sendExpoPush(messages: ExpoMessage[], outTickets?: Array<{ id: st
       const json: any = await res.json();
       // Tickets come back in the same order as the messages sent.
       const tickets: any[] = json?.data ?? [];
-      const deadRefs: DocumentReference[] = [];
+      const dead: Array<{ ref: DocumentReference; token: string }> = [];
       tickets.forEach((t, idx) => {
         if (t?.status === "ok") {
           sent++;
@@ -282,14 +310,16 @@ async function sendExpoPush(messages: ExpoMessage[], outTickets?: Array<{ id: st
           if (outTickets && t.id) outTickets.push({id: t.id, ref: chunk[idx].ref});
           return;
         }
+        // Record WHICH token died, not just the doc: a provider doc can hold one
+        // token per member device, and only the rejected one may be removed.
         if (t?.details?.error === "DeviceNotRegistered" && chunk[idx]?.ref) {
-          deadRefs.push(chunk[idx].ref!);
+          dead.push({ref: chunk[idx].ref!, token: chunk[idx].to});
         }
       });
       const failed = tickets.filter((t) => t?.status === "error");
       if (failed.length) console.error("Expo push ticket errors:", failed);
       if (json?.errors) console.error("Expo push request errors:", json.errors);
-      if (deadRefs.length) await clearDeadTokens(deadRefs);
+      if (dead.length) await clearDeadTokens(dead);
     } catch (err) {
       console.error("Expo push request failed:", err);
     }
@@ -372,17 +402,17 @@ async function notifyProvider(providerId: string, title: string, body: string, t
     const providerRef = db.collection("providers").doc(providerId);
     const providerSnap = await providerRef.get();
     const providerData = providerSnap.data();
-    const fcmToken = providerData?.fcmToken;
-    if (fcmToken) {
-      await sendExpoPush([{
-        to: fcmToken,
-        title,
-        body,
-        soundName: providerSoundForType(providerData, type),
-        badge: bumpBadge(providerRef, providerData),
-        data: {type, ...(orderId && {orderId}), ...(promoId && {promoId}), timestamp: Timestamp.now().toMillis().toString()},
-        ref: providerRef,
-      }]);
+    // One message per member device. The badge counter belongs to the STORE, so
+    // it is bumped once and the same value is sent to every device — bumping per
+    // device would multiply the count by the number of people on the store.
+    const tokens = providerPushTokens(providerData);
+    if (tokens.length) {
+      const badge = bumpBadge(providerRef, providerData);
+      const soundName = providerSoundForType(providerData, type);
+      const data = {type, ...(orderId && {orderId}), ...(promoId && {promoId}), timestamp: Timestamp.now().toMillis().toString()};
+      await sendExpoPush(tokens.map((to) => ({
+        to, title, body, soundName, badge, data, ref: providerRef,
+      })));
     }
   } catch (error) {
     console.error("Provider Notification Error:", error);
@@ -391,7 +421,7 @@ async function notifyProvider(providerId: string, title: string, body: string, t
 
 async function notifySupportUser(userPhone: string, userRole: "customer" | "provider", title: string, body: string, type: string, messageId: string) {
   try {
-    let fcmToken: string | undefined;
+    let tokens: string[] = [];
     let ref: DocumentReference | undefined;
     let refData: any;
     let soundName: string | null = "quicktone";
@@ -399,7 +429,9 @@ async function notifySupportUser(userPhone: string, userRole: "customer" | "prov
       ref = db.collection("users").doc(userPhone);
       const userSnap = await ref.get();
       refData = userSnap.data();
-      fcmToken = refData?.fcmToken;
+      // Customers are single-account; providerPushTokens still applies because it
+      // just unions the (absent) array with the scalar token.
+      tokens = providerPushTokens(refData);
       soundName = customerSoundName(refData);
     } else if (userRole === "provider") {
       // providers.phoneNumber is stored DIGITS-ONLY (e.g. "15551234567"), but a
@@ -414,22 +446,26 @@ async function notifySupportUser(userPhone: string, userRole: "customer" | "prov
       }
       if (!snap.empty) {
         refData = snap.docs[0].data();
-        fcmToken = refData?.fcmToken;
+        tokens = providerPushTokens(refData);
         soundName = providerSoundForType(refData, type);
         ref = snap.docs[0].ref;
       }
     }
 
-    if (fcmToken) {
-      await sendExpoPush([{
-        to: fcmToken,
+    if (tokens.length) {
+      // Badge is per-recipient-doc, so bump it once and fan the same value out to
+      // every device on that doc (a store can have several member devices).
+      const badge = ref ? bumpBadge(ref, refData) : undefined;
+      const data = {userPhone, type, messageId, timestamp: Timestamp.now().toMillis().toString()};
+      await sendExpoPush(tokens.map((to) => ({
+        to,
         title,
         body,
         soundName,
-        ...(ref ? {badge: bumpBadge(ref, refData)} : {}),
-        data: {userPhone, type, messageId, timestamp: Timestamp.now().toMillis().toString()},
+        ...(typeof badge === "number" ? {badge} : {}),
+        data,
         ref,
-      }]);
+      })));
     }
   } catch (error) {
     // Mask the phone in logs — last 4 digits are enough to correlate without storing PII.
@@ -1686,27 +1722,32 @@ export const onOrderCreatedNotify = onDocumentCreated("orders/{orderId}", async 
   candidates.forEach((doc) => {
     const p = doc.data();
     if (p.isBlocked === true || p.servicesActive === false) return; // mirror canReceiveBroadcasts
-    if (!p.fcmToken) return;
+    // Every member device of the store, not just the last one to register.
+    const tokens = providerPushTokens(p);
+    if (!tokens.length) return;
     // set(merge) not update(): update() throws "no entity to update" and aborts
     // the WHOLE batch if any target doc is missing at commit time (e.g. a provider
     // deleted between the query and the commit). merge+increment is the correct
     // idiom for a counter and can't fail that way.
+    // ONE increment per store regardless of how many devices it has — the badge
+    // counts unread orders, not deliveries.
     badgeBatch.set(doc.ref, {badgeCount: FieldValue.increment(1)}, {merge: true});
     badgeWrites++;
-    messages.push({
-      to: p.fcmToken,
+    tokens.forEach((to) => messages.push({
+      to,
       title: "New Order Available",
       body: `A new rental (${label}) is available in your area.`,
       soundName: providerSoundName(p),
       badge: (typeof p.badgeCount === "number" ? p.badgeCount : 0) + 1,
       data: {type: "BROADCAST_ORDER", orderId, timestamp: Timestamp.now().toMillis().toString()},
       ref: doc.ref,
-    });
+    }));
   });
   if (messages.length) {
     if (badgeWrites) badgeBatch.commit().catch((err) => console.error("broadcast badge batch failed:", err));
     const sent = await sendExpoPush(messages);
-    console.log(`onOrderCreatedNotify: broadcast ${orderId} → ${sent}/${messages.length} providers ${scopeLabel}`);
+    // Counts are DEVICES, not stores — one store can have several member devices.
+    console.log(`onOrderCreatedNotify: broadcast ${orderId} → ${sent}/${messages.length} devices across ${badgeWrites} providers ${scopeLabel}`);
   }
 });
 
@@ -3345,10 +3386,11 @@ export const bulkBroadcast = onCall({memory: "512MiB", timeoutSeconds: 300}, asy
     const messages: ExpoMessage[] = [];
     snap.forEach((d: any) => {
       scanned++;
-      const tok = d.data().fcmToken;
-      if (tok) {
+      // A provider store can hold several member devices; reach all of them.
+      const toks = providerPushTokens(d.data());
+      if (toks.length) {
         withToken++;
-        messages.push({to: tok, title, body, data: {...data, type: "BULK", target, timestamp: Date.now().toString()}, ref: d.ref});
+        toks.forEach((tok) => messages.push({to: tok, title, body, data: {...data, type: "BULK", target, timestamp: Date.now().toString()}, ref: d.ref}));
       }
     });
 
@@ -3789,4 +3831,235 @@ export const syncAdminClaim = onCall(async (request) => {
 
   // `changed` tells the client whether it must force-refresh its ID token.
   return {admin: shouldBeAdmin, changed};
+});
+
+
+// ── Store membership: one store, several people ─────────────────────────────
+//
+// A store is `providers/{phone}_{identifier}`, and until now the phone in that
+// doc id WAS the access check (firestore.rules ownsPhoneField). One store could
+// therefore only ever have one user — a second staff member signing in with
+// their own number silently landed on a different, empty store.
+//
+// Access is now `providers/{providerId}/members/{E164phone}` existing. Members
+// are written ONLY here (and by onProviderCreatedAddOwner): rules deny client
+// writes, because a self-writable member doc would let anyone join any store.
+//
+// Joining requires a single-use invite issued by a manager for ONE specific
+// phone (scripts/invite-member.js). The code is the credential, so `invites` is
+// deny-all to clients and codes are checked server-side only.
+
+// 32 unambiguous characters — no 0/O/1/I, which are misread when a code is
+// relayed by phone or handwritten. 32^8 ≈ 1.1e12 codes.
+const INVITE_ALPHABET = "23456789ABCDEFGHJKLMNPQRSTUVWXYZ";
+const INVITE_CODE_LENGTH = 8;
+const INVITE_CODE_RE = new RegExp(`^[${INVITE_ALPHABET}]{${INVITE_CODE_LENGTH}}$`);
+
+// Preflight is unauthenticated by necessity (it runs BEFORE the SMS), so it is
+// the one place a stranger can probe. Cap attempts per phone and per IP per hour:
+// enough for a person fat-fingering a code, far too few to walk the code space.
+const PREFLIGHT_MAX_PER_HOUR = 12;
+
+// providers.phoneNumber is digits-only ("14026061003"); auth's phone_number claim
+// and every member/invite key is E.164 ("+14026061003").
+function toE164(raw: unknown): string | null {
+  const digits = String(raw ?? "").replace(/\D/g, "");
+  // 8 is below any real international subscriber number; rejects junk early.
+  return digits.length >= 8 ? `+${digits}` : null;
+}
+
+// Every store this phone can operate. One collection-group query, backed by the
+// `members.phone` index — NOT a scan of `providers`.
+async function storeMembershipsFor(phone: string): Promise<Array<{ providerId: string; role: string }>> {
+  const snap = await db.collectionGroup("members").where("phone", "==", phone).get();
+  return snap.docs
+    // members lives at providers/{id}/members/{phone}; parent.parent is the store.
+    .map((d) => ({providerId: d.ref.parent.parent?.id ?? "", role: String(d.data()?.role || "staff")}))
+    .filter((m) => m.providerId);
+}
+
+// Transactional per-key hourly counter, same shape as the contact-form limiter.
+// Returns false once the key is over budget. Keys self-partition by hour, so no
+// cleanup pass is required.
+async function underHourlyLimit(collection: string, key: string, max: number): Promise<boolean> {
+  const hourKey = new Date().toISOString().slice(0, 13); // e.g. 2026-07-26T20
+  const safeKey = key.replace(/[^a-zA-Z0-9.:+_-]/g, "_").slice(0, 120);
+  const ref = db.collection(collection).doc(`${safeKey}_${hourKey}`);
+  return db.runTransaction(async (t) => {
+    const snap = await t.get(ref);
+    const count = (snap.data()?.count as number | undefined) ?? 0;
+    if (count >= max) return false;
+    t.set(ref, {count: count + 1, updatedAt: FieldValue.serverTimestamp()}, {merge: true});
+    return true;
+  });
+}
+
+/**
+ * Decide whether this phone may sign in to FoodyzzHQ — BEFORE an SMS is sent.
+ *
+ * Unauthenticated by design: the whole point is to avoid paying for (and letting
+ * a stranger trigger) a verification SMS for a number that cannot get in. It is
+ * therefore ADVISORY — a hand-rolled client can always call
+ * signInWithPhoneNumber directly. Real enforcement is redeemHqInvite plus the
+ * membership checks in firestore.rules; this only shapes the UX and the bill.
+ *
+ * Returns the resolved providerId when it is unambiguous, so the app can persist
+ * the active store BEFORE confirm() fires the auth-state change (App.tsx reads it
+ * synchronously on that event).
+ */
+export const preflightHqSignIn = onCall(async (request) => {
+  const phone = toE164(request.data?.phone);
+  if (!phone) throw new HttpsError("invalid-argument", "A valid phone number is required.");
+  const code = String(request.data?.code ?? "").trim().toUpperCase();
+
+  // Two independent buckets: the phone (stops hammering one victim's number) and
+  // the caller IP (stops walking many numbers from one host).
+  const ip = String(request.rawRequest?.ip || "unknown");
+  const [phoneOk, ipOk] = await Promise.all([
+    underHourlyLimit("hqSignInRateLimits", `p:${phone}`, PREFLIGHT_MAX_PER_HOUR),
+    underHourlyLimit("hqSignInRateLimits", `i:${ip}`, PREFLIGHT_MAX_PER_HOUR * 4),
+  ]);
+  if (!phoneOk || !ipOk) {
+    throw new HttpsError("resource-exhausted", "Too many attempts. Please try again later.");
+  }
+
+  // Already a member of at least one store — no code needed to come back.
+  const memberships = await storeMembershipsFor(phone);
+  if (memberships.length > 0) {
+    return {
+      allowed: true,
+      mode: "member",
+      providerId: memberships.length === 1 ? memberships[0].providerId : null,
+      storeCount: memberships.length,
+    };
+  }
+
+  if (code) {
+    if (!INVITE_CODE_RE.test(code)) {
+      return {allowed: false, mode: "invite", reason: "invalid_code"};
+    }
+    const snap = await db.collection("invites").doc(code).get();
+    const invite = snap.data();
+    const valid = snap.exists && invite &&
+      invite.phone === phone &&
+      invite.used !== true &&
+      !invite.revokedAt &&
+      Date.parse(String(invite.expiresAt)) > Date.now();
+    // Deliberately one undifferentiated reason: distinguishing "wrong code" from
+    // "right code, wrong phone" would confirm a code exists.
+    if (!valid) return {allowed: false, mode: "invite", reason: "invalid_code"};
+    return {allowed: true, mode: "invite", providerId: String(invite!.providerId), storeCount: 1};
+  }
+
+  // Legacy owner: a store exists for this phone but the member doc has not been
+  // backfilled (scripts/backfill-members.js). Let them in and let the trigger /
+  // backfill catch up, rather than locking an existing provider out mid-rollout.
+  const digits = phone.replace(/\D/g, "");
+  const owned = await db.collection("providers").where("phoneNumber", "==", digits).limit(2).get();
+  if (!owned.empty) {
+    return {
+      allowed: true,
+      mode: "owner",
+      providerId: owned.size === 1 ? owned.docs[0].id : null,
+      storeCount: owned.size,
+    };
+  }
+
+  // Brand-new signup. Provider onboarding is self-service today, so this stays
+  // open by default; set apiConfig/global → hq.requireInviteToSignIn = true to
+  // close it once every real store has been created.
+  const cfg: any = await getConfig().catch(() => ({}));
+  if (cfg?.hq?.requireInviteToSignIn === true) {
+    return {allowed: false, mode: "new", reason: "invite_required"};
+  }
+  return {allowed: true, mode: "new", providerId: null, storeCount: 0};
+});
+
+/**
+ * Redeem a single-use invite for the SIGNED-IN phone, joining them to a store.
+ *
+ * This is the enforcing half of the pair: preflight runs pre-auth and can be
+ * skipped, but nothing writes a member doc except this function, and the phone
+ * it writes comes from the verified `phone_number` claim — never from the
+ * request body.
+ *
+ * Idempotent: a client that retries after a network blip (having already
+ * redeemed) gets the same providerId back instead of "already used".
+ */
+export const redeemHqInvite = onCall(async (request) => {
+  const phone = request.auth?.token.phone_number;
+  if (!request.auth?.uid || !phone) throw new HttpsError("unauthenticated", "Sign in required.");
+
+  const code = String(request.data?.code ?? "").trim().toUpperCase();
+  if (!INVITE_CODE_RE.test(code)) throw new HttpsError("invalid-argument", "That invite code is not valid.");
+
+  const inviteRef = db.collection("invites").doc(code);
+  const providerId = await db.runTransaction(async (t) => {
+    const snap = await t.get(inviteRef);
+    if (!snap.exists) throw new HttpsError("not-found", "That invite code is not valid.");
+    const invite = snap.data()!;
+
+    // Bound to ONE phone at issue time, so a leaked code is useless to anyone else.
+    if (invite.phone !== phone) {
+      throw new HttpsError("permission-denied", "That invite was issued to a different phone number.");
+    }
+
+    const memberRef = db.collection("providers").doc(String(invite.providerId))
+      .collection("members").doc(phone);
+    // All reads before any write — Firestore transactions require it.
+    const [memberSnap, providerSnap] = await Promise.all([
+      t.get(memberRef),
+      t.get(db.collection("providers").doc(String(invite.providerId))),
+    ]);
+
+    if (invite.used === true || invite.revokedAt) {
+      // Already joined with this code — treat a retry as success.
+      if (memberSnap.exists) return String(invite.providerId);
+      throw new HttpsError("failed-precondition", "That invite code has already been used.");
+    }
+    if (!(Date.parse(String(invite.expiresAt)) > Date.now())) {
+      throw new HttpsError("failed-precondition", "That invite code has expired.");
+    }
+    if (!providerSnap.exists) {
+      throw new HttpsError("failed-precondition", "That store no longer exists.");
+    }
+
+    t.set(memberRef, {
+      phone,
+      role: invite.role === "owner" ? "owner" : "staff",
+      ...(invite.name ? {name: String(invite.name)} : {}),
+      addedAt: new Date().toISOString(),
+      ...(invite.createdBy ? {invitedBy: String(invite.createdBy)} : {}),
+    }, {merge: true});
+    t.update(inviteRef, {used: true, usedAt: new Date().toISOString()});
+    return String(invite.providerId);
+  });
+
+  console.log(`redeemHqInvite: …${phone.slice(-4)} joined ${providerId}`);
+  return {providerId};
+});
+
+// The store's creator is its first member. Runs on provider-doc creation so both
+// creation paths (the AuthScreen placeholder write and the onboarding wizard's
+// merge) are covered without either client knowing about members — they cannot
+// write one anyway, since firestore.rules makes members server-only.
+export const onProviderCreatedAddOwner = onDocumentCreated("providers/{providerId}", async (event) => {
+  const data = event.data?.data();
+  // Fall back to the doc-id prefix: a legacy/partial doc may omit phoneNumber,
+  // and an owner with no member doc cannot write their own store.
+  const digits = String(data?.phoneNumber || event.params.providerId.split("_")[0] || "").replace(/\D/g, "");
+  if (!digits) {
+    console.error(`onProviderCreatedAddOwner: no phone on ${event.params.providerId}`);
+    return;
+  }
+  const phone = `+${digits}`;
+  try {
+    await event.data!.ref.collection("members").doc(phone).set({
+      phone,
+      role: "owner",
+      addedAt: new Date().toISOString(),
+    }, {merge: true});
+  } catch (err) {
+    console.error(`onProviderCreatedAddOwner failed for ${event.params.providerId}:`, err);
+  }
 });

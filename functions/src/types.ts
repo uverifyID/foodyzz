@@ -54,10 +54,62 @@ export interface ProviderProfile {
   // Payout cadence: 'standard' = free 1st/15th batch; 'daily' = aggregate of each
   // day's settled funds, transferred daily for a per-transfer fee. Default standard.
   payoutCadence?: "standard" | "daily";
+  // LEGACY single-device push token. A store can now have several members, each
+  // on their own device, so the current apps write `fcmTokens` instead. Kept and
+  // still delivered to so devices running an older build keep receiving pushes;
+  // see providerPushTokens().
   fcmToken?: string;
+  // Every registered device for this store (one per signed-in member). Written
+  // with arrayUnion by the client; dead tokens are pruned with arrayRemove when
+  // Expo reports DeviceNotRegistered.
+  fcmTokens?: string[];
   isBlocked?: boolean;
   // Sales-rep referral attribution. Set once when the provider enters a school
   // manager's code in the command-center modal (one fleet = one manager).
+}
+
+// ── Store membership ────────────────────────────────────────────────────────
+//
+// A store is `providers/{phone}_{identifier}`, whose doc id embeds the phone of
+// whoever created it. That made the creator the only possible user of the store.
+// Membership decouples the two: access to a store is `providers/{id}/members/
+// {E164phone}` existing, not the doc id matching your phone.
+//
+// Written ONLY by the server (redeemHqInvite, and onProviderCreatedAddOwner for
+// the creator) — firestore.rules denies client writes, since a self-writable
+// member doc would let anyone join any store.
+export interface StoreMember {
+  // E.164, matching request.auth.token.phone_number AND this doc's id. Stored as
+  // a field as well so the client can find every store a phone belongs to with a
+  // single collection-group query.
+  phone: string;
+  // 'owner' created the store; 'staff' joined via an invite. Currently
+  // informational — both can operate the store — except that only an owner may
+  // delete it (firestore.rules).
+  role: "owner" | "staff";
+  name?: string;
+  addedAt: string;
+  // E.164 of whoever issued the invite, when known.
+  invitedBy?: string;
+}
+
+// A single-use join code issued by a manager for ONE specific phone, redeemed
+// once by redeemHqInvite. `invites/{CODE}` is deny-all to clients: the code IS
+// the credential, so a readable collection would be an enumerable key ring.
+export interface StoreInvite {
+  // E.164. The redeeming caller's phone_number claim must equal this exactly.
+  phone: string;
+  providerId: string;
+  role: "owner" | "staff";
+  name?: string;
+  used: boolean;
+  createdAt: string;
+  // ISO. Past this the code is dead even if unused.
+  expiresAt: string;
+  createdBy?: string;
+  usedAt?: string;
+  // Set instead of deleting, so a spent or withdrawn code stays auditable.
+  revokedAt?: string;
 }
 
 // Cloud Storage paths (NOT download URLs) of an uploaded document. Reads go through

@@ -8,9 +8,8 @@ import {
   Building, MapPin, Mail, DollarSign, Truck, CheckCircle, X,
   ArrowRight, ArrowLeft, Check, CreditCard, Bell, Tags, Zap, Clock, Percent, ShieldCheck,
 } from 'lucide-react-native';
-import { db, signOutClean } from '../services/firebase';
+import { db, signOutClean, getActiveProviderId } from '../services/firebase';
 import { extractZipFromAddress } from '../utils/address';
-import ReactNativeAsyncStorage from '@react-native-async-storage/async-storage';
 import type { FirebaseAuthTypes } from '@react-native-firebase/auth';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -419,8 +418,11 @@ export default function ProviderOnboardingWizard({
   const persistProvider = async (onboarded: boolean): Promise<boolean> => {
     try {
       const cleanPhone = user.phoneNumber?.replace(/\D/g, '') || user.email?.split('@')[0] || '';
-      const zip = await ReactNativeAsyncStorage.getItem('active_provider_zip');
-      if (!cleanPhone || !zip) throw new Error('Session missing phone or zip. Please sign in again.');
+      // The store being onboarded, as resolved at sign-in. Formerly recomposed
+      // from the signed-in phone plus a stored zip, which no longer holds: a store
+      // can be run by members whose phone is not in its doc id.
+      const docId = await getActiveProviderId();
+      if (!cleanPhone || !docId) throw new Error('Session missing phone or store. Please sign in again.');
 
       // Service-area zip is derived from the confirmed address (NOT the store
       // identifier in the doc key) — this is what broadcast order matching uses.
@@ -445,7 +447,6 @@ export default function ProviderOnboardingWizard({
       }
 
 
-      const docId = `${cleanPhone}_${zip}`;
       const writePromise = db.collection('providers').doc(docId).set({
         // Owner phone (digits-only). REQUIRED on every write: the Firestore rule
         // authorizes provider writes via ownsPhoneField(request.resource.data.phoneNumber).
@@ -513,7 +514,7 @@ export default function ProviderOnboardingWizard({
     const ok = await persistProvider(true);
     if (ok) {
       // Re-subscribe App's onboarded listener to the just-saved provider doc. The
-      // initial listener may have run before active_provider_zip was readable (and
+      // initial listener may have run before the active store id was readable (and
       // thus never subscribed), so it would otherwise miss this onboarded:true write.
       onComplete?.();
     } else {

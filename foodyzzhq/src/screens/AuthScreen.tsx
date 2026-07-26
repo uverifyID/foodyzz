@@ -1,15 +1,48 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, TextInput, TouchableOpacity, Alert, ActivityIndicator, Image, Linking, KeyboardAvoidingView, Platform, ScrollView } from 'react-native';
-import { db, subscribeToGlobalConfig, runWithRetry } from '../services/firebase';
+import {
+  db,
+  subscribeToGlobalConfig,
+  runWithRetry,
+  preflightHqSignIn,
+  redeemHqInvite,
+  setActiveProviderId,
+  clearActiveProviderId,
+  signOutClean,
+  type HqPreflight,
+} from '../services/firebase';
 import authNative from '@react-native-firebase/auth';
-import ReactNativeAsyncStorage from '@react-native-async-storage/async-storage';
 import { CheckSquare, Square } from 'lucide-react-native';
 
+/**
+ * FoodyzzHQ sign-in.
+ *
+ * Two fields, not one: the phone proves WHO you are, and — the first time you
+ * join a store somebody else created — an invite code proves you were meant to.
+ * A store used to be identified as `${your phone}_${a zip you typed}`, so it
+ * could only ever have one user; membership now lives in
+ * providers/{id}/members/{phone} and one store can be run by a whole team.
+ *
+ * The invite is checked BEFORE the SMS goes out (preflightHqSignIn), so an
+ * unknown number never costs a verification message. That gate is advisory —
+ * enforcement is redeemHqInvite plus firestore.rules — but it is what makes the
+ * screen able to tell you "you need an invite" instead of silently dropping you
+ * into an empty store, which is what happened before.
+ *
+ * Returning members need no code at all: preflight sees their membership.
+ */
 export default function AuthScreen({ onAuthenticated }: { onAuthenticated: (user: any) => void }) {
   const [phone, setPhone] = useState('');
+  const [inviteCode, setInviteCode] = useState('');
   const [zipCode, setZipCode] = useState('');
+  // The second field is the invite code by default; new owners toggle it to the
+  // store zip, which is the doc-key suffix for the store they are about to create.
+  const [newStoreMode, setNewStoreMode] = useState(false);
   const [verificationCode, setVerificationCode] = useState('');
   const [confirm, setConfirm] = useState<any>(null);
+  // What preflight decided for this attempt — carried through to verification so
+  // the post-OTP step knows whether to redeem an invite or create a store.
+  const [preflight, setPreflight] = useState<HqPreflight | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [tncAccepted, setTncAccepted] = useState(false);
@@ -26,21 +59,58 @@ export default function AuthScreen({ onAuthenticated }: { onAuthenticated: (user
     }
   };
 
+  const sanitizePhone = (raw: string) =>
+    raw.trim().startsWith('+') ? raw.trim() : `+1${raw.trim().replace(/\D/g, '')}`;
+
   const handleSendCode = async () => {
     try {
       setLoading(true);
       setError(null);
-      if (!phone || !zipCode) {
-        setError('Phone number and Zip Code are required.');
-        setLoading(false);
+      if (!phone) {
+        setError('Phone number is required.');
+        return;
+      }
+      if (newStoreMode && !zipCode.trim()) {
+        setError('Store Zip Code is required to set up a new store.');
         return;
       }
 
-      // Format to E.164 (Assuming US default if + is missing)
-      const sanitizedPhone = phone.trim().startsWith('+') ? phone.trim() : `+1${phone.trim().replace(/\D/g, '')}`;
+      const sanitizedPhone = sanitizePhone(phone);
+      const code = inviteCode.trim().toUpperCase();
+
+      // Ask BEFORE spending an SMS. A transport failure here must not lock anyone
+      // out of a working app, so it falls through to the legacy behaviour: send
+      // the code and let the post-OTP step (and the rules) decide.
+      let result: HqPreflight | null = null;
+      try {
+        result = await preflightHqSignIn(sanitizedPhone, newStoreMode ? undefined : code);
+      } catch (e: any) {
+        if (e?.code === 'functions/resource-exhausted') {
+          setError('Too many attempts. Please try again later.');
+          return;
+        }
+        console.warn('Preflight unavailable, continuing:', e?.message);
+      }
+
+      if (result && !result.allowed) {
+        setError(result.reason === 'invalid_code'
+          ? 'That invite code is not valid for this number. Ask your manager for a new one.'
+          : 'This number is not set up for FoodyzzHQ. Ask your manager for an invite code.');
+        return;
+      }
+
+      // Recognised but brand new, and we have no zip yet — switch the second field
+      // over and stop, rather than sending an SMS we would have to waste.
+      if (result?.mode === 'new' && !newStoreMode) {
+        setNewStoreMode(true);
+        setError('New here? Enter the zip code of the store you are setting up.');
+        return;
+      }
+
       const confirmation = await authNative().signInWithPhoneNumber(sanitizedPhone);
+      setPreflight(result);
       setConfirm(confirmation);
-      Alert.alert("Success", "Verification code sent.");
+      Alert.alert('Success', 'Verification code sent.');
     } catch (err: any) {
       console.error('Send code error:', err);
       if (err.code?.includes('invalid-phone-number') || err.message?.includes('invalid-phone-number')) {
@@ -58,31 +128,60 @@ export default function AuthScreen({ onAuthenticated }: { onAuthenticated: (user
       setLoading(true);
       setError(null);
 
-      // Persist the selected zip BEFORE verification completes. confirm.confirm()
-      // fires the auth-state change synchronously, and the onboarding listener reads
-      // active_provider_zip the moment that fires — so it must already be the new zip,
-      // otherwise it would subscribe to the previously-active store's doc.
-      await ReactNativeAsyncStorage.setItem('active_provider_zip', zipCode.trim());
+      // Digits of the E.164 number Firebase will actually report — NOT of what was
+      // typed, which may be missing the country code.
+      const rawDigits = sanitizePhone(phone).replace(/\D/g, '');
+
+      // Whatever store this device was last pointed at belongs to the PREVIOUS
+      // session. Stores are shared now, so inheriting it would drop this person
+      // into someone else's dashboard.
+      await clearActiveProviderId();
+
+      // The store to land on, resolved BEFORE verification wherever possible.
+      // confirm.confirm() fires the auth-state change synchronously and App reads
+      // the active store id the moment that fires, so it must already be correct —
+      // otherwise the onboarding listener subscribes to the wrong store.
+      // Null is legitimate for a multi-store member: App resolves it from their
+      // memberships instead.
+      const resolvedId = newStoreMode
+        ? `${rawDigits}_${zipCode.trim()}`
+        : preflight?.providerId ?? null;
+      if (resolvedId) await setActiveProviderId(resolvedId);
 
       await confirm.confirm(verificationCode);
       const user = authNative().currentUser;
-      const rawPhone = user.phoneNumber?.replace(/\D/g, '') || phone.replace(/\D/g, '');
 
-      const providerId = `${rawPhone}_${zipCode.trim()}`;
-
-      const providerRef = db.collection('providers').doc(providerId);
-
-      // Weak signal right after sign-in often drops the first request. Retry the
-      // store read/create a few times with backoff before surfacing an error.
-      const snap = await runWithRetry(() => providerRef.get());
-
-      if (user && !snap.exists) {
-        await runWithRetry(() => providerRef.set({
-          phoneNumber: rawPhone,
-          zipCode: zipCode.trim(),
-          onboarded: false,
-          createdAt: new Date().toISOString()
-        }));
+      // Joining someone else's store: this is the call that actually writes the
+      // membership. It is authenticated, so the phone comes from the verified
+      // token rather than anything typed on this screen.
+      if (preflight?.mode === 'invite') {
+        try {
+          const joinedId = await redeemHqInvite(inviteCode.trim().toUpperCase());
+          await setActiveProviderId(joinedId);
+        } catch (e: any) {
+          // Verified, but not a member — leaving them signed in would strand them
+          // on a store they cannot read. Undo the session and explain.
+          await clearActiveProviderId();
+          await signOutClean().catch(() => {});
+          setError(e?.message || 'Could not join that store. Please ask your manager for a new invite.');
+          return;
+        }
+      } else if (newStoreMode && user) {
+        // Brand-new store: create the placeholder doc so onboarding has something
+        // to write to. onProviderCreatedAddOwner then records the creator as its
+        // first member — clients cannot write member docs themselves.
+        const providerRef = db.collection('providers').doc(resolvedId!);
+        // Weak signal right after sign-in often drops the first request. Retry the
+        // store read/create a few times with backoff before surfacing an error.
+        const snap = await runWithRetry(() => providerRef.get());
+        if (!snap.exists) {
+          await runWithRetry(() => providerRef.set({
+            phoneNumber: user.phoneNumber?.replace(/\D/g, '') || rawDigits,
+            zipCode: zipCode.trim(),
+            onboarded: false,
+            createdAt: new Date().toISOString(),
+          }));
+        }
       }
 
       onAuthenticated(user);
@@ -96,6 +195,12 @@ export default function AuthScreen({ onAuthenticated }: { onAuthenticated: (user
     } finally {
       setLoading(false);
     }
+  };
+
+  const restart = () => {
+    setConfirm(null);
+    setPreflight(null);
+    setVerificationCode('');
   };
 
   return (
@@ -126,15 +231,40 @@ export default function AuthScreen({ onAuthenticated }: { onAuthenticated: (user
         onChangeText={setPhone}
         editable={!confirm}
       />
-      <TextInput
-        className="border-2 border-slate-800 p-4 mb-4 font-mono text-white bg-slate-900"
-        placeholder="Store Zip Code"
-        placeholderTextColor="#475569"
-        keyboardType="numeric"
-        value={zipCode}
-        onChangeText={setZipCode}
-        editable={!confirm}
-      />
+
+      {newStoreMode ? (
+        <TextInput
+          className="border-2 border-slate-800 p-4 mb-2 font-mono text-white bg-slate-900"
+          placeholder="Store Zip Code"
+          placeholderTextColor="#475569"
+          keyboardType="numeric"
+          value={zipCode}
+          onChangeText={setZipCode}
+          editable={!confirm}
+        />
+      ) : (
+        <TextInput
+          className="border-2 border-slate-800 p-4 mb-2 font-mono text-white bg-slate-900 tracking-[3px]"
+          placeholder="Invite Code (first time only)"
+          placeholderTextColor="#475569"
+          autoCapitalize="characters"
+          autoCorrect={false}
+          maxLength={8}
+          value={inviteCode}
+          onChangeText={(t) => setInviteCode(t.toUpperCase())}
+          editable={!confirm}
+        />
+      )}
+
+      {!confirm && (
+        <TouchableOpacity onPress={() => { setNewStoreMode((v) => !v); setError(null); }} className="mb-4 px-1">
+          <Text className="text-[10px] font-bold uppercase text-slate-500">
+            {newStoreMode
+              ? 'Joining an existing store? Use an invite code'
+              : 'Setting up a new store? Enter a zip code instead'}
+          </Text>
+        </TouchableOpacity>
+      )}
 
       {confirm && (
         <TextInput
@@ -174,8 +304,8 @@ export default function AuthScreen({ onAuthenticated }: { onAuthenticated: (user
       )}
 
       {confirm && (
-        <TouchableOpacity onPress={() => setConfirm(null)}>
-          <Text className="text-slate-500 text-center text-[10px] font-bold uppercase">Wrong number or zip? Start over</Text>
+        <TouchableOpacity onPress={restart}>
+          <Text className="text-slate-500 text-center text-[10px] font-bold uppercase">Wrong number or code? Start over</Text>
         </TouchableOpacity>
       )}
       </ScrollView>
