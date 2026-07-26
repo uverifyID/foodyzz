@@ -43,6 +43,12 @@ function ctx(env, phone) {
   // email-authed admin after the claim was set.
   const adminCtx = env.authenticatedContext("admin-uid", { admin: true }).firestore();
 
+  // A store member: hqStaff, NOT admin. This is the claim syncAdminClaim mints for
+  // anyone who belongs to a store, and the whole point of it is that it is weaker.
+  const hqStaffCtx = env.authenticatedContext(MEMBER_PHONE, {
+    phone_number: MEMBER_PHONE, hqStaff: true,
+  }).firestore();
+
   let failures = 0;
   const check = async (label, p) => {
     try {
@@ -65,6 +71,13 @@ function ctx(env, phone) {
     // second person can operate a store whose id carries someone else's phone.
     await db.doc(`providers/${PROVIDER_ID}/members/${OWNER_PHONE}`).set({ phone: OWNER_PHONE, role: "owner", addedAt: new Date().toISOString() });
     await db.doc(`providers/${PROVIDER_ID}/members/${MEMBER_PHONE}`).set({ phone: MEMBER_PHONE, role: "staff", addedAt: new Date().toISOString() });
+    // A customer with documents on file. Must EXIST: the hqStaff review carve-out
+    // is an update rule (it diffs against resource.data), so staff can stamp a
+    // review but cannot conjure a customer record that was never there.
+    await db.doc(`users/${OTHER_PHONE}`).set({
+      phoneNumber: OTHER_PHONE, name: "Cust", address: "1 Main St",
+      driverLicense: { frontPath: "dl.jpg" }, addressProof: { frontPath: "ap.jpg" },
+    });
     // A live single-use join code. The code IS the credential, so no client may read it.
     await db.doc(`invites/A7K2M9QP`).set({ phone: MEMBER_PHONE, providerId: PROVIDER_ID, role: "staff", used: false, expiresAt: new Date(Date.now() + 86400000).toISOString() });
   });
@@ -172,6 +185,25 @@ function ctx(env, phone) {
   //     bike is delivered FROM, so there is no per-zip lookup table to publish.
   //   · There is no payout ledger. Stripe settles what the customer is charged
   //     directly; the only payout state is `payoutStatus` on the order itself.
+
+  console.log("customer document review (hqStaff, deliberately narrow):");
+  await check("store staff can stamp a customer's ID review",
+    assertSucceeds(hqStaffCtx.doc(`users/${OTHER_PHONE}`).set(
+      { driverLicense: { reviewedAt: "now", reviewedBy: PROVIDER_ID }, addressProof: { reviewedAt: "now" } },
+      { merge: true })));
+  await check("...and reject it (the mirror write)",
+    assertSucceeds(hqStaffCtx.doc(`users/${OTHER_PHONE}`).set(
+      { driverLicense: { rejectedReason: "blurry", reviewedAt: null } }, { merge: true })));
+  await check("store staff CANNOT block a customer on the same write",
+    assertFails(hqStaffCtx.doc(`users/${OTHER_PHONE}`).set(
+      { driverLicense: { reviewedAt: "now" }, isBlocked: true }, { merge: true })));
+  await check("store staff CANNOT rewrite a customer's profile",
+    assertFails(hqStaffCtx.doc(`users/${OTHER_PHONE}`).set({ address: "somewhere else" }, { merge: true })));
+  await check("store staff CANNOT delete a customer",
+    assertFails(hqStaffCtx.doc(`users/${OTHER_PHONE}`).delete()));
+  await check("a plain member with no hqStaff claim CANNOT review documents",
+    assertFails(member.doc(`users/${OTHER_PHONE}`).set(
+      { driverLicense: { reviewedAt: "now" } }, { merge: true })));
 
   console.log("users (self-only writes):");
   await check("owner can write their OWN user doc",

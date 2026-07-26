@@ -20,6 +20,15 @@ service cloud.firestore {
       return request.auth != null && request.auth.token.admin == true;
     }
 
+    // Belongs to at least one store (providers/{id}/members/{phone}), granted by
+    // syncAdminClaim. Strictly weaker than isAdmin: it appears ONLY on the customer
+    // document-review write below, and on reading identity documents in
+    // storage.rules. Deliberately not `admin`, or inviting a colleague to a store
+    // would hand them apiConfig writes and bulkBroadcast over the whole platform.
+    function isHqStaff() {
+      return request.auth != null && request.auth.token.hqStaff == true;
+    }
+
     // Digits-only phone field, prefixed with '+', must equal the E.164 claim.
     function ownsPhoneField(digitsPhone) {
       return request.auth != null
@@ -113,10 +122,29 @@ service cloud.firestore {
     }
 
     // Users (customers) - self-only profile writes; admin may write (block flag).
+    //
+    // Split out of a single `write` so the document-review carve-out below can use
+    // diff(), which needs an existing resource.data and so is meaningless on create.
     match /users/{userId} {
       allow read: if request.auth != null;
-      allow write: if (request.auth != null && request.auth.token.phone_number == userId)
-                   || isAdmin();
+      allow create: if (request.auth != null && request.auth.token.phone_number == userId)
+                    || isAdmin();
+      allow delete: if (request.auth != null && request.auth.token.phone_number == userId)
+                    || isAdmin();
+
+      // Approving or rejecting a customer's ID is the delivery job, so store staff
+      // must be able to stamp the review — but ONLY that. hasOnly() pins them to
+      // the two document maps, so a store member cannot flip isBlocked, rewrite an
+      // address, or touch a Stripe customer id on the same write. Anything wider
+      // stays admin-only.
+      //
+      // Platform-wide rather than per-store: scoping to "a customer my store is
+      // serving" would mean querying orders, and rules can only get() a known path.
+      allow update: if (request.auth != null && request.auth.token.phone_number == userId)
+                    || isAdmin()
+                    || (isHqStaff()
+                        && request.resource.data.diff(resource.data).affectedKeys()
+                             .hasOnly(['driverLicense', 'addressProof']));
     }
 
     // Orders - carry the customer's charge & authorization amounts, so READ is
