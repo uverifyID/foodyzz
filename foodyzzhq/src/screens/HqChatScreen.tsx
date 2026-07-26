@@ -13,7 +13,7 @@ import {
 import { ArrowLeft, Send, MessageSquare, User as UserIcon, Building2, Package } from 'lucide-react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation, useRoute } from '@react-navigation/native';
-import { db, getActiveProviderId } from '../services/firebase';
+import { db } from '../services/firebase';
 import { COLORS } from '../theme';
 import { SupportMessage } from '../types';
 
@@ -59,7 +59,6 @@ export default function HqChatScreen() {
   const route = useRoute<any>();
   const [allMessages, setAllMessages] = useState<SupportMessage[]>([]);
   const [orderThreadDocs, setOrderThreadDocs] = useState<any[]>([]);
-  const [providerId, setProviderId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [openPhone, setOpenPhone] = useState<string | null>(null);
   const [replyText, setReplyText] = useState('');
@@ -86,29 +85,24 @@ export default function HqChatScreen() {
     return unsub;
   }, []);
 
-  // This store's id, resolved once from AsyncStorage (no listener).
-  useEffect(() => {
-    let cancelled = false;
-    getActiveProviderId().then((id) => { if (!cancelled) setProviderId(id); }).catch(() => {});
-    return () => { cancelled = true; };
-  }, []);
-
   // Order threads.
   //
-  // The obvious implementation — stream `messages` and bucket by orderId — is
-  // wrong on two counts. It reads the ENTIRE platform's order chat on every HQ
-  // device (hundreds of doc reads per session, for threads belonging to other
-  // stores), and `messages` carries no providerId, so it can't be scoped: every
-  // store would see every other store's customer conversations. Reading the
-  // provider-scoped mirror instead is both correctly tenanted and ~20 doc reads
-  // rather than ~500 + a per-order listener fan-out.
+  // Read from the providerOrders mirror, NOT from `messages`. Streaming `messages`
+  // and bucketing by orderId means reading the entire platform's order chat on
+  // every device — hundreds of doc reads per session — and then a per-order
+  // listener fan-out just to resolve each row's customer name and unread flag.
+  // Both message triggers denormalize the summary onto the order instead, so this
+  // is ~25 doc reads on one listener.
   //
-  // orderBy('lastMessageAt') also does the filtering for free: Firestore omits
-  // documents missing the field, so only orders that actually have chat appear.
+  // Deliberately NOT scoped to the active store, unlike Dispatch / Operations.
+  // Every FoodyzzHQ user is staff, and this is the one desk where a missed message
+  // is the failure mode: an admin who happened to be switched into another store
+  // would never see the thread. Global also keeps it single-field —
+  // orderBy('lastMessageAt') alone needs no composite index, and it doubles as the
+  // filter since Firestore omits documents missing the field, so only orders that
+  // actually have chat appear.
   useEffect(() => {
-    if (!providerId) return;
     const unsub = db.collection('providerOrders')
-      .where('providerId', '==', providerId)
       .orderBy('lastMessageAt', 'desc')
       .limit(MAX_ORDER_THREADS)
       .onSnapshot((snapshot) => {
@@ -118,7 +112,7 @@ export default function HqChatScreen() {
         console.error('Error fetching order threads:', error);
       });
     return unsub;
-  }, [providerId]);
+  }, []);
 
   // Bucket support messages into threads keyed by userPhone.
   const supportThreads = useMemo(() => {

@@ -11,7 +11,7 @@ import AccountScreen from '../screens/AccountScreen';
 import ChatScreen from '../screens/ChatScreen';
 import HqChatScreen from '../screens/HqChatScreen';
 import SupportScreen from '../screens/SupportScreen';
-import { db, getActiveProviderId } from '../services/firebase';
+import { db } from '../services/firebase';
 import { COLORS } from '../theme';
 
 const Tab = createBottomTabNavigator();
@@ -43,24 +43,15 @@ function useHqChatUnread(): boolean {
   }, []);
 
   useEffect(() => {
-    let cancelled = false;
-    let unsub: (() => void) | undefined;
-    (async () => {
-      const providerId = await getActiveProviderId();
-      if (cancelled || !providerId) return;
-      // Scoped to THIS store — an unscoped query would light the badge for another
-      // store's customer chat. Two equality filters, which Firestore serves by
-      // merging single-field indexes, so this needs no composite index (and adding
-      // one would cost an index write on every providerOrders mirror rebuild).
-      // The query matches only unread orders, so it is usually empty and reads 0.
-      unsub = db.collection('providerOrders')
-        .where('providerId', '==', providerId)
-        .where('providerUnreadMessage', '==', true)
-        .limit(20)
-        .onSnapshot((snap) => setOrderUnread((snap?.docs?.length || 0) > 0), () => setOrderUnread(false));
-      if (cancelled) { unsub(); unsub = undefined; }
-    })();
-    return () => { cancelled = true; unsub?.(); };
+    // Platform-wide, matching the Chat Center it badges — every FoodyzzHQ user is
+    // staff, and a per-store badge would stay dark for a thread the admin can see
+    // but happens not to be switched into. Single-field equality, so no composite
+    // index; it matches only unread orders, so it usually reads nothing.
+    const unsub = db.collection('providerOrders')
+      .where('providerUnreadMessage', '==', true)
+      .limit(20)
+      .onSnapshot((snap) => setOrderUnread((snap?.docs?.length || 0) > 0), () => setOrderUnread(false));
+    return unsub;
   }, []);
 
   return supportUnread || orderUnread;

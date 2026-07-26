@@ -179,20 +179,6 @@
       ]
     },
     {
-      "collectionGroup": "providerOrders",
-      "queryScope": "COLLECTION",
-      "fields": [
-        {
-          "fieldPath": "providerId",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "lastMessageAt",
-          "order": "DESCENDING"
-        }
-      ]
-    },
-    {
       "collectionGroup": "messages",
       "queryScope": "COLLECTION",
       "fields": [
