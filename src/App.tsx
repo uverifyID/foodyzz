@@ -1,5 +1,5 @@
 import React, { useState, useEffect, Suspense, lazy } from 'react';
-import { BarChart3, Users, LayoutDashboard, LogOut, Settings, MessageSquare, Menu, X, Bike, Contact } from 'lucide-react';
+import { BarChart3, Users, Users2, LayoutDashboard, LogOut, Settings, MessageSquare, Menu, X, Bike, Contact } from 'lucide-react';
 import { onAuthStateChanged, signOut, signInWithEmailAndPassword, getMultiFactorResolver, multiFactor, User, MultiFactorResolver, MultiFactorError } from 'firebase/auth';
 import { auth, db, subscribeToGlobalConfig } from './firebase';
 import MfaChallenge from './components/auth/MfaChallenge';
@@ -16,8 +16,9 @@ const GlobalConfigTab = lazy(() => import('./components/admin/GlobalConfigTab'))
 const ChatManagerTab = lazy(() => import('./components/admin/ChatManagerTab'));
 const BikesTab = lazy(() => import('./components/admin/BikesTab'));
 const LicensesTab = lazy(() => import('./components/admin/LicensesTab'));
+const StoreTeamTab = lazy(() => import('./components/admin/StoreTeamTab'));
 
-type TabKey = 'analytics' | 'users' | 'ops' | 'bikes' | 'licenses' | 'settings' | 'chat';
+type TabKey = 'analytics' | 'users' | 'ops' | 'bikes' | 'licenses' | 'teams' | 'settings' | 'chat';
 
 // Shape of stats/platformCounts, maintained server-side by the Cloud Functions
 // order/user/provider triggers. All fields optional — the doc is built up by
@@ -105,7 +106,7 @@ export default function App() {
   // needlessly detach/reattach it.
   const needOrders = activeTab === 'analytics' || activeTab === 'users' || activeTab === 'bikes';
   const needCustomers = activeTab === 'users' || activeTab === 'licenses';
-  const needProviders = activeTab === 'users';
+  const needProviders = activeTab === 'users' || activeTab === 'teams';
   const needPerf = activeTab === 'analytics';
 
   // ── Always-on, cheap subscriptions (bounded queries + single docs) ──────────
@@ -472,6 +473,7 @@ export default function App() {
               { key: 'ops'       as const, icon: <LayoutDashboard size={18}/>, label: 'Rentals' },
               { key: 'bikes'     as const, icon: <Bike size={18}/>, label: 'Bikes' },
               { key: 'licenses'  as const, icon: <Contact size={18}/>, label: 'Licenses', badge: pendingLicenseCount },
+              { key: 'teams'     as const, icon: <Users2 size={18}/>, label: 'Store Teams' },
               { key: 'chat'      as const, icon: <MessageSquare size={18}/>, label: 'Chat Manager', badge: chatUnreadCount },
               { key: 'settings'  as const, icon: <Settings size={18}/>, label: 'Settings' },
             ]).map(({ key, icon, label, badge }) => (
@@ -506,6 +508,7 @@ export default function App() {
         {activeTab === 'ops' && <OperationsTab logistics={logistics} />}
         {activeTab === 'bikes' && <BikesTab logistics={logistics} orders={orders} />}
         {activeTab === 'licenses' && <LicensesTab customers={customers} />}
+        {activeTab === 'teams' && <StoreTeamTab providers={providers} />}
         {activeTab === 'chat' && (
           <ChatManagerTab
             supportThreads={supportThreads}

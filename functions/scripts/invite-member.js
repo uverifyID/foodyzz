@@ -15,6 +15,11 @@
 // is checked server-side only. It is bound to a phone at issue time, so a leaked
 // code is useless to anybody else.
 //
+// ⚠️ DAY TO DAY, USE THE ADMIN CONSOLE INSTEAD — Admin Hub → Store Teams does all
+// of this with a store picker, a roster, and a copyable code, and needs no laptop
+// with production credentials on it. This script is the break-glass path: bulk
+// work, and the case where no admin can sign in to the console.
+//
 // Run against PRODUCTION (uses application-default creds / GOOGLE_APPLICATION_CREDENTIALS):
 //   GCLOUD_PROJECT=foodyzz-27b3e node scripts/invite-member.js --stores
 //   GCLOUD_PROJECT=foodyzz-27b3e node scripts/invite-member.js +14025551234 --store 14026061003_68022 --name "Sam"

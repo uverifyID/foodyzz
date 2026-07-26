@@ -1,4 +1,4 @@
-import {onCall, onRequest, HttpsError} from "firebase-functions/v2/https";
+import {onCall, onRequest, HttpsError, type CallableRequest} from "firebase-functions/v2/https";
 import {onDocumentCreated, onDocumentUpdated, onDocumentWritten} from "firebase-functions/v2/firestore";
 import {getFirestore, FieldValue, FieldPath, Timestamp, type DocumentReference, type QueryDocumentSnapshot} from "firebase-admin/firestore";
 import {getAuth} from "firebase-admin/auth";
@@ -13,6 +13,7 @@ import {
   RentToBuyPlan,
   BillingSchedule,
 } from "./types";
+import {randomInt} from "crypto";
 import Stripe from "stripe";
 import * as nodemailer from "nodemailer";
 import * as path from "path";
@@ -4104,4 +4105,234 @@ export const onProviderCreatedAddOwner = onDocumentCreated("providers/{providerI
   } catch (err) {
     console.error(`onProviderCreatedAddOwner failed for ${event.params.providerId}:`, err);
   }
+});
+
+
+// ── Store membership: admin console ─────────────────────────────────────────
+//
+// The console's counterpart to scripts/invite-member.js. Issuing an invite CANNOT
+// be a direct Firestore write from the browser: `invites` is deny-all to every
+// client (the code is the credential — a readable collection is an enumerable key
+// ring, a writable one is self-grant into any store), and `members` is
+// server-only for the same reason. So the admin surface has to be callables.
+//
+// Every one of these is gated on the `admin` custom claim, the same check
+// bulkBroadcast uses. The console is already behind email+password with mandatory
+// TOTP, so this is the second of two locks, not the only one.
+
+function assertAdmin(request: CallableRequest): void {
+  if (!request.auth || request.auth.token.admin !== true) {
+    throw new HttpsError("permission-denied", "Unauthorized.");
+  }
+}
+
+// crypto.randomInt, not Math.random: the code is a credential, and a predictable
+// PRNG would make the ~1.1e12 keyspace worth nothing.
+function generateInviteCode(): string {
+  let out = "";
+  for (let i = 0; i < INVITE_CODE_LENGTH; i++) {
+    out += INVITE_ALPHABET[randomInt(INVITE_ALPHABET.length)];
+  }
+  return out;
+}
+
+const INVITE_DEFAULT_TTL_DAYS = 14;
+const INVITE_MAX_TTL_DAYS = 365;
+
+/**
+ * Issue a single-use join code for one phone on one store.
+ *
+ * Returns the code in the response and NOWHERE else — it is never emailed or
+ * logged, and `invites` is unreadable to clients, so the admin must hand it over
+ * from the screen it appears on. Losing it means revoking and re-issuing, which
+ * is the correct trade for a credential.
+ */
+export const adminIssueStoreInvite = onCall(async (request) => {
+  assertAdmin(request);
+
+  const phone = toE164(request.data?.phone);
+  if (!phone) throw new HttpsError("invalid-argument", "A valid phone number is required.");
+  const providerId = String(request.data?.providerId ?? "").trim();
+  if (!providerId) throw new HttpsError("invalid-argument", "A store is required.");
+
+  const name = String(request.data?.name ?? "").trim().slice(0, 120);
+  const ttlDays = Math.min(
+    INVITE_MAX_TTL_DAYS,
+    Math.max(1, Number(request.data?.ttlDays) || INVITE_DEFAULT_TTL_DAYS),
+  );
+
+  const providerSnap = await db.collection("providers").doc(providerId).get();
+  if (!providerSnap.exists) throw new HttpsError("not-found", "That store does not exist.");
+
+  // Already in: a second code would just be a confusing no-op for the recipient.
+  const member = await db.collection("providers").doc(providerId)
+    .collection("members").doc(phone).get();
+  if (member.exists) {
+    throw new HttpsError("already-exists", "That number is already a member of this store.");
+  }
+
+  // Re-inviting replaces: withdraw any code still outstanding for this person on
+  // this store. Two live codes for one person is a support problem (which one did
+  // I read out?), and it would make "revoke this row" ambiguous in the console.
+  // Queried on phone alone — a single-field index every project has — and filtered
+  // in memory, since one phone has at most a handful of invites ever.
+  const outstanding = await db.collection("invites").where("phone", "==", phone).get();
+  await Promise.all(outstanding.docs
+    .filter((d) => d.data().providerId === providerId && !d.data().used && !d.data().revokedAt)
+    .map((d) => d.ref.set({revokedAt: new Date().toISOString()}, {merge: true})));
+
+  const now = new Date();
+  const expiresAt = new Date(now.getTime() + ttlDays * 86_400_000).toISOString();
+
+  // create() in a retry loop, never set(): silently overwriting a live invite
+  // would revoke somebody's pending access. A collision is vanishingly unlikely,
+  // so two attempts is plenty — and a hard failure is better than a silent clobber.
+  let code = "";
+  for (let attempt = 0; attempt < 3; attempt++) {
+    code = generateInviteCode();
+    try {
+      await db.collection("invites").doc(code).create({
+        phone,
+        providerId,
+        role: "staff",
+        ...(name ? {name} : {}),
+        used: false,
+        createdAt: now.toISOString(),
+        expiresAt,
+        createdBy: request.auth!.token.email || request.auth!.uid,
+      });
+      break;
+    } catch (err: any) {
+      if (err?.code !== 6 /* ALREADY_EXISTS */ || attempt === 2) throw err;
+      code = "";
+    }
+  }
+  if (!code) throw new HttpsError("internal", "Could not allocate an invite code.");
+
+  console.log(`adminIssueStoreInvite: …${phone.slice(-4)} → ${providerId} (${ttlDays}d)`);
+  return {code, phone, providerId, expiresAt, businessName: providerSnap.data()?.businessName || null};
+});
+
+/**
+ * Outstanding invites, newest first. Needed as a callable because `invites` is
+ * unreadable to clients — the console cannot subscribe to it directly.
+ *
+ * The CODE is deliberately withheld from this listing: a list endpoint that
+ * hands back live credentials would undo the point of the deny-all rule, and an
+ * admin who has lost a code should revoke and re-issue rather than look it up.
+ */
+export const adminListStoreInvites = onCall(async (request) => {
+  assertAdmin(request);
+
+  const providerId = String(request.data?.providerId ?? "").trim();
+  // Filtered: equality only, then sorted in memory. Combining where() with
+  // orderBy() here would need a composite index, and one store's invites are a
+  // handful — not worth an index that must be built before this can be called.
+  const snap = providerId ?
+    await db.collection("invites").where("providerId", "==", providerId).limit(200).get() :
+    await db.collection("invites").orderBy("createdAt", "desc").limit(200).get();
+
+  const now = Date.now();
+  const docs = providerId ?
+    [...snap.docs].sort((a, b) =>
+      String(b.data().createdAt).localeCompare(String(a.data().createdAt))) :
+    snap.docs;
+
+  return {
+    invites: docs.map((d) => {
+      const v = d.data();
+      const state = v.used ? "used" :
+        v.revokedAt ? "revoked" :
+          Date.parse(String(v.expiresAt)) <= now ? "expired" : "open";
+      return {
+        // Last 3 characters only — enough to match a code the admin is holding
+        // against this row, useless to anyone who is not. The full code is NEVER
+        // returned here; rows are acted on by (providerId, phone) instead.
+        codeHint: d.id.slice(-3),
+        phone: v.phone,
+        providerId: v.providerId,
+        name: v.name || null,
+        state,
+        createdAt: v.createdAt,
+        expiresAt: v.expiresAt,
+        usedAt: v.usedAt || null,
+      };
+    }),
+  };
+});
+
+// Withdraw an unredeemed code. Flagged rather than deleted, so an invite that was
+// issued and never taken up stays visible as a record of who was offered access.
+// Redeeming is already impossible once revokedAt is set (see redeemHqInvite).
+//
+// Takes EITHER the code (someone holding a slip of paper) or the
+// (providerId, phone) pair — which is what the console has, since the listing
+// deliberately never returns codes. Issuing withdraws prior open invites for the
+// same pair, so at most one is ever outstanding and the pair is unambiguous.
+export const adminRevokeStoreInvite = onCall(async (request) => {
+  assertAdmin(request);
+
+  const code = String(request.data?.code ?? "").trim().toUpperCase();
+  const providerId = String(request.data?.providerId ?? "").trim();
+  const phone = toE164(request.data?.phone);
+
+  let ref;
+  if (code) {
+    if (!INVITE_CODE_RE.test(code)) throw new HttpsError("invalid-argument", "That is not an invite code.");
+    ref = db.collection("invites").doc(code);
+  } else {
+    if (!providerId || !phone) {
+      throw new HttpsError("invalid-argument", "An invite code, or a store and phone number, is required.");
+    }
+    const matches = await db.collection("invites").where("phone", "==", phone).get();
+    const open = matches.docs.find((d) =>
+      d.data().providerId === providerId && !d.data().used && !d.data().revokedAt);
+    if (!open) throw new HttpsError("not-found", "No outstanding invite for that number on this store.");
+    ref = open.ref;
+  }
+
+  const snap = await ref.get();
+  if (!snap.exists) throw new HttpsError("not-found", "No such invite.");
+
+  await ref.set({revokedAt: new Date().toISOString()}, {merge: true});
+  // Revoking a SPENT code does not eject the person it let in — that is
+  // adminRemoveStoreMember's job, and conflating the two would leave an admin
+  // believing they had removed access when they had not.
+  return {revoked: true, alreadyUsed: snap.data()?.used === true};
+});
+
+/**
+ * Remove someone from a store.
+ *
+ * Refuses to remove the last owner: a store with no owner can still be written by
+ * its remaining members, but nobody can delete it or invite anyone else, and
+ * nothing in the app can repair that.
+ */
+export const adminRemoveStoreMember = onCall(async (request) => {
+  assertAdmin(request);
+
+  const providerId = String(request.data?.providerId ?? "").trim();
+  const phone = toE164(request.data?.phone);
+  if (!providerId || !phone) throw new HttpsError("invalid-argument", "A store and phone number are required.");
+
+  const membersRef = db.collection("providers").doc(providerId).collection("members");
+  const memberSnap = await membersRef.doc(phone).get();
+  if (!memberSnap.exists) throw new HttpsError("not-found", "That number is not a member of this store.");
+
+  if (memberSnap.data()?.role === "owner") {
+    const owners = await membersRef.where("role", "==", "owner").get();
+    if (owners.size <= 1) {
+      throw new HttpsError(
+        "failed-precondition",
+        "That is the store's only owner. Invite another owner before removing this one.",
+      );
+    }
+  }
+
+  await membersRef.doc(phone).delete();
+  console.log(`adminRemoveStoreMember: …${phone.slice(-4)} removed from ${providerId}`);
+  // Their device keeps its session; it loses write access on the next Firestore
+  // write and the store itself on the next sign-in. Say so, rather than letting
+  // the admin assume the removal is instant everywhere.
+  return {removed: true};
 });

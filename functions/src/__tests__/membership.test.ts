@@ -1,6 +1,6 @@
 import {
   callable, triggerCreated, fns, seedConfig, seedProvider, seedOrder,
-  db, getDoc, clearFirestore, spyExpo, phoneAuth,
+  db, getDoc, clearFirestore, spyExpo, phoneAuth, adminAuth,
 } from './helpers';
 
 // A store's doc id names whoever CREATED it. These tests are about the second
@@ -273,5 +273,137 @@ describe('multi-device push (one store, several members)', () => {
     // The legacy scalar belongs to the LIVE device here — clearing it (as the old
     // blunt cleanup did) would have silenced a working phone.
     expect(after.fcmToken).toBe('ExponentPushToken[LIVE]');
+  });
+});
+
+describe('admin console callables', () => {
+  beforeEach(async () => {
+    await seedProvider(STORE);
+    await db.doc(`providers/${STORE}/members/${OWNER}`)
+      .set({ phone: OWNER, role: 'owner', addedAt: new Date().toISOString() });
+  });
+
+  test('issues a code that redeemHqInvite then accepts', async () => {
+    const res: any = await callable(fns.adminIssueStoreInvite,
+      { phone: STAFF, providerId: STORE, name: 'Sam' }, adminAuth());
+
+    expect(res.code).toMatch(/^[23456789ABCDEFGHJKLMNPQRSTUVWXYZ]{8}$/);
+    expect(res.providerId).toBe(STORE);
+
+    // The whole point: what the console hands out actually works end to end.
+    const joined: any = await callable(fns.redeemHqInvite, { code: res.code }, phoneAuth(STAFF));
+    expect(joined.providerId).toBe(STORE);
+    expect(await getDoc(`providers/${STORE}/members/${STAFF}`)).toMatchObject({ role: 'staff', name: 'Sam' });
+  });
+
+  test('refuses every one of these to a non-admin', async () => {
+    for (const [fn, data] of [
+      [fns.adminIssueStoreInvite, { phone: STAFF, providerId: STORE }],
+      [fns.adminListStoreInvites, {}],
+      [fns.adminRevokeStoreInvite, { code: 'A7K2M9QP' }],
+      [fns.adminRemoveStoreMember, { providerId: STORE, phone: OWNER }],
+    ] as any[]) {
+      // A signed-in provider is the realistic attacker here, not an anonymous one.
+      await expect(callable(fn, data, phoneAuth(STAFF))).rejects.toThrow(/unauthorized/i);
+      await expect(callable(fn, data, undefined)).rejects.toThrow(/unauthorized/i);
+    }
+  });
+
+  test('will not invite someone who is already a member', async () => {
+    await expect(callable(fns.adminIssueStoreInvite, { phone: OWNER, providerId: STORE }, adminAuth()))
+      .rejects.toThrow(/already a member/i);
+  });
+
+  test('will not invite to a store that does not exist', async () => {
+    await expect(callable(fns.adminIssueStoreInvite, { phone: STAFF, providerId: 'nope_00000' }, adminAuth()))
+      .rejects.toThrow(/does not exist/i);
+  });
+
+  test('clamps the expiry instead of trusting the client', async () => {
+    const res: any = await callable(fns.adminIssueStoreInvite,
+      { phone: STAFF, providerId: STORE, ttlDays: 99999 }, adminAuth());
+    const days = (Date.parse(res.expiresAt) - Date.now()) / 86_400_000;
+    expect(days).toBeLessThanOrEqual(366);
+  });
+
+  test('lists invites WITHOUT handing back the codes', async () => {
+    const issued: any = await callable(fns.adminIssueStoreInvite,
+      { phone: STAFF, providerId: STORE }, adminAuth());
+    const res: any = await callable(fns.adminListStoreInvites, { providerId: STORE }, adminAuth());
+
+    expect(res.invites).toHaveLength(1);
+    expect(res.invites[0]).toMatchObject({ phone: STAFF, state: 'open', providerId: STORE });
+    // A list endpoint that returned live credentials would undo the deny-all rule.
+    expect(JSON.stringify(res.invites)).not.toContain(issued.code);
+    expect(res.invites[0].codeHint).toBe(issued.code.slice(-3));
+  });
+
+  test('derives invite state rather than storing it', async () => {
+    await seedInvite('A7K2M9QP', { phone: '+14025550001', expiresAt: inDays(-1) });
+    await seedInvite('B7K2M9QP', { phone: '+14025550002', used: true });
+    await seedInvite('C7K2M9QP', { phone: '+14025550003', revokedAt: new Date().toISOString() });
+    const res: any = await callable(fns.adminListStoreInvites, { providerId: STORE }, adminAuth());
+    const byPhone = Object.fromEntries(res.invites.map((i: any) => [i.phone, i.state]));
+    expect(byPhone).toEqual({
+      '+14025550001': 'expired', '+14025550002': 'used', '+14025550003': 'revoked',
+    });
+  });
+
+  test('re-inviting withdraws the previous code so only one is ever live', async () => {
+    const first: any = await callable(fns.adminIssueStoreInvite, { phone: STAFF, providerId: STORE }, adminAuth());
+    const second: any = await callable(fns.adminIssueStoreInvite, { phone: STAFF, providerId: STORE }, adminAuth());
+
+    expect(second.code).not.toBe(first.code);
+    await expect(callable(fns.redeemHqInvite, { code: first.code }, phoneAuth(STAFF)))
+      .rejects.toThrow(/already been used/i);
+    const joined: any = await callable(fns.redeemHqInvite, { code: second.code }, phoneAuth(STAFF));
+    expect(joined.providerId).toBe(STORE);
+  });
+
+  test('revokes by store+phone, which is all the console ever has', async () => {
+    const issued: any = await callable(fns.adminIssueStoreInvite, { phone: STAFF, providerId: STORE }, adminAuth());
+    await callable(fns.adminRevokeStoreInvite, { providerId: STORE, phone: STAFF }, adminAuth());
+    await expect(callable(fns.redeemHqInvite, { code: issued.code }, phoneAuth(STAFF)))
+      .rejects.toThrow(/already been used/i);
+  });
+
+  test('revoking kills an unredeemed code', async () => {
+    const issued: any = await callable(fns.adminIssueStoreInvite,
+      { phone: STAFF, providerId: STORE }, adminAuth());
+    await callable(fns.adminRevokeStoreInvite, { code: issued.code }, adminAuth());
+    await expect(callable(fns.redeemHqInvite, { code: issued.code }, phoneAuth(STAFF)))
+      .rejects.toThrow(/already been used/i);
+  });
+
+  test('revoking a SPENT code says so, because it does not eject the member', async () => {
+    const issued: any = await callable(fns.adminIssueStoreInvite,
+      { phone: STAFF, providerId: STORE }, adminAuth());
+    await callable(fns.redeemHqInvite, { code: issued.code }, phoneAuth(STAFF));
+    const res: any = await callable(fns.adminRevokeStoreInvite, { code: issued.code }, adminAuth());
+
+    expect(res.alreadyUsed).toBe(true);
+    // Still a member — an admin must not be able to believe they revoked access.
+    expect(await getDoc(`providers/${STORE}/members/${STAFF}`)).not.toBeNull();
+  });
+
+  test('removes a member', async () => {
+    await db.doc(`providers/${STORE}/members/${STAFF}`)
+      .set({ phone: STAFF, role: 'staff', addedAt: new Date().toISOString() });
+    await callable(fns.adminRemoveStoreMember, { providerId: STORE, phone: STAFF }, adminAuth());
+    expect(await getDoc(`providers/${STORE}/members/${STAFF}`)).toBeNull();
+  });
+
+  test('refuses to remove the last owner', async () => {
+    // A store with no owner is unrecoverable from inside the app: nobody can
+    // delete it or invite anyone else.
+    await expect(callable(fns.adminRemoveStoreMember, { providerId: STORE, phone: OWNER }, adminAuth()))
+      .rejects.toThrow(/only owner/i);
+  });
+
+  test('allows removing an owner once a second one exists', async () => {
+    await db.doc(`providers/${STORE}/members/${STAFF}`)
+      .set({ phone: STAFF, role: 'owner', addedAt: new Date().toISOString() });
+    await callable(fns.adminRemoveStoreMember, { providerId: STORE, phone: OWNER }, adminAuth());
+    expect(await getDoc(`providers/${STORE}/members/${OWNER}`)).toBeNull();
   });
 });
