@@ -72,11 +72,28 @@ export default function ChatScreen() {
     const [loading, setLoading] = useState(true);
     const [orderData, setOrderData] = useState<any>(null);
     const listRef = useRef<FlatList<ChatMessage>>(null);
+    // Whether the view is parked at the newest message. Auto-scroll is gated on this:
+    // scrolling to the end on EVERY content-size change drags the user back down the
+    // moment virtualization renders another row, so they can never read history.
+    // A ref, not state — it changes on every scroll frame and must not re-render.
+    const atBottomRef = useRef(true);
 
-    // Drop optimistic echoes once the real doc lands on the snapshot.
+    // Optimistic echoes that the snapshot has now confirmed are DROPPED FROM STATE,
+    // not merely filtered at render time: filtering alone would leave every message
+    // ever sent sitting in `pending` for the life of the screen.
+    useEffect(() => {
+        if (pending.length === 0) return;
+        const confirmed = new Set(remote.map((m) => m.id));
+        setPending((prev) => {
+            const next = prev.filter((p) => !confirmed.has(p.id));
+            return next.length === prev.length ? prev : next;
+        });
+    }, [remote]); // eslint-disable-line react-hooks/exhaustive-deps
+
     const messages = useMemo(() => {
-        const seen = new Set(remote.map((m) => m.id));
-        return [...remote, ...pending.filter((p) => !seen.has(p.id))];
+        if (pending.length === 0) return remote;
+        const confirmed = new Set(remote.map((m) => m.id));
+        return [...remote, ...pending.filter((p) => !confirmed.has(p.id))];
     }, [remote, pending]);
 
     useLayoutEffect(() => {
@@ -221,6 +238,8 @@ export default function ChatScreen() {
         const senderName = profile?.name || 'Customer';
 
         // Show it immediately, clear the box, then write.
+        // Your own message always pulls the view back down, wherever you were.
+        atBottomRef.current = true;
         setPending((prev) => [...prev, { id: msgId, text, timestamp, mine: true, senderName, pending: true }]);
         setInputText('');
 
@@ -283,7 +302,16 @@ export default function ChatScreen() {
                 className="flex-1"
                 contentContainerStyle={{ padding: 16, flexGrow: 1 }}
                 showsVerticalScrollIndicator={false}
-                onContentSizeChange={() => listRef.current?.scrollToEnd({ animated: true })}
+                onScroll={(e) => {
+                    const { layoutMeasurement, contentOffset, contentSize } = e.nativeEvent;
+                    atBottomRef.current = layoutMeasurement.height + contentOffset.y >= contentSize.height - 80;
+                }}
+                // Coarse on purpose: this only needs a rough "are we at the bottom",
+                // so 200ms keeps the scroll events off the bridge at 60fps.
+                scrollEventThrottle={200}
+                onContentSizeChange={() => {
+                    if (atBottomRef.current) listRef.current?.scrollToEnd({ animated: true });
+                }}
                 onLayout={() => listRef.current?.scrollToEnd({ animated: false })}
                 ListEmptyComponent={
                     <View className="mt-10 p-10 bg-white border-2 border-dashed border-slate-200 rounded-[32px] items-center">

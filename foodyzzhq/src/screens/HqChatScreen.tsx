@@ -2,7 +2,6 @@ import React, { useState, useEffect, useRef, useMemo } from 'react';
 import {
   View,
   Text,
-  ScrollView,
   FlatList,
   TouchableOpacity,
   TextInput,
@@ -14,7 +13,7 @@ import {
 import { ArrowLeft, Send, MessageSquare, User as UserIcon, Building2, Package } from 'lucide-react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation, useRoute } from '@react-navigation/native';
-import { db } from '../services/firebase';
+import { db, getActiveProviderId } from '../services/firebase';
 import { COLORS } from '../theme';
 import { SupportMessage } from '../types';
 
@@ -22,10 +21,9 @@ import { SupportMessage } from '../types';
 const isUnreadForAdmin = (m: SupportMessage) =>
   !m.isReadByAdmin && m.senderPhone !== 'admin' && m.senderPhone !== 'system';
 
-// How many order threads stay hydrated with live order context. Every id costs one
-// providerOrders listener, so this is deliberately bounded — older threads are still
-// reachable from the order card in Dispatch / Operations.
-const MAX_ORDER_THREADS = 30;
+// Most recent order threads shown in the inbox. Older ones stay reachable from the
+// order card in Dispatch / Operations.
+const MAX_ORDER_THREADS = 25;
 
 // One row in the merged inbox. `kind` is the whole point of this screen: an order
 // thread (started from the customer's order card) and a general thread (started
@@ -48,16 +46,20 @@ type Thread = {
 //   • general threads  → `supportMessages`, bucketed per userPhone. Replies are
 //     written back as senderPhone:'admin' so onAdminReplyToSupport pushes them to
 //     the user's device; they open in the customer's chat tab. Handled inline here.
-//   • order threads    → `messages`, bucketed per orderId. Tapping one opens the
-//     existing per-order chat screen (which already carries the order header and
-//     clears the unread flag), so there's exactly one order-chat UI in this app.
+//   • order threads    → read from the `providerOrders` mirror, NOT the `messages`
+//     collection. Both message triggers denormalize a thread summary
+//     (lastMessageAt / lastMessagePreview / lastMessageFromCustomer) onto the
+//     order, so the whole inbox is one indexed provider-scoped query — see the
+//     listener below for why that matters. Tapping one opens the existing
+//     per-order chat screen (which already carries the order header and clears the
+//     unread flag), so there's exactly one order-chat UI in this app.
 export default function HqChatScreen() {
   const insets = useSafeAreaInsets();
   const navigation = useNavigation<any>();
   const route = useRoute<any>();
   const [allMessages, setAllMessages] = useState<SupportMessage[]>([]);
-  const [orderMessages, setOrderMessages] = useState<any[]>([]);
-  const [orderCtx, setOrderCtx] = useState<Record<string, any>>({});
+  const [orderThreadDocs, setOrderThreadDocs] = useState<any[]>([]);
+  const [providerId, setProviderId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [openPhone, setOpenPhone] = useState<string | null>(null);
   const [replyText, setReplyText] = useState('');
@@ -84,47 +86,39 @@ export default function HqChatScreen() {
     return unsub;
   }, []);
 
-  // Order-scoped chat. Same bound + reverse as above; single-field ordering so no
-  // composite index is needed.
+  // This store's id, resolved once from AsyncStorage (no listener).
   useEffect(() => {
-    const unsub = db.collection('messages')
-      .orderBy('timestamp', 'desc')
-      .limit(500)
-      .onSnapshot((snapshot) => {
-        if (!snapshot) return;
-        setOrderMessages(snapshot.docs.map(d => ({ id: d.id, ...d.data() } as any)).reverse());
-      }, (error) => {
-        console.error('Error fetching order messages:', error);
-      });
-    return unsub;
+    let cancelled = false;
+    getActiveProviderId().then((id) => { if (!cancelled) setProviderId(id); }).catch(() => {});
+    return () => { cancelled = true; };
   }, []);
 
-  // Order threads, newest-active first, grouped once (not re-filtered per id).
-  const orderThreadMsgs = useMemo(() => {
-    const map = new Map<string, any[]>();
-    for (const m of orderMessages) {
-      if (!m.orderId) continue;
-      const bucket = map.get(m.orderId);
-      if (bucket) bucket.push(m); else map.set(m.orderId, [m]);
-    }
-    return [...map.entries()]
-      .sort((a, b) => String(b[1][b[1].length - 1]?.timestamp || '').localeCompare(String(a[1][a[1].length - 1]?.timestamp || '')))
-      .slice(0, MAX_ORDER_THREADS);
-  }, [orderMessages]);
-
-  // The chat docs carry only an orderId, so customer name + the unread flag come
-  // from the provider-safe order mirror. Keyed on the id list so the listeners are
-  // only torn down when the set of live threads actually changes.
-  const orderIdKey = orderThreadMsgs.map(([id]) => id).join('|');
+  // Order threads.
+  //
+  // The obvious implementation — stream `messages` and bucket by orderId — is
+  // wrong on two counts. It reads the ENTIRE platform's order chat on every HQ
+  // device (hundreds of doc reads per session, for threads belonging to other
+  // stores), and `messages` carries no providerId, so it can't be scoped: every
+  // store would see every other store's customer conversations. Reading the
+  // provider-scoped mirror instead is both correctly tenanted and ~20 doc reads
+  // rather than ~500 + a per-order listener fan-out.
+  //
+  // orderBy('lastMessageAt') also does the filtering for free: Firestore omits
+  // documents missing the field, so only orders that actually have chat appear.
   useEffect(() => {
-    const ids = orderIdKey ? orderIdKey.split('|') : [];
-    const unsubs = ids.map((id) =>
-      db.collection('providerOrders').doc(id).onSnapshot(
-        (snap) => { if (snap?.exists) setOrderCtx((prev) => ({ ...prev, [id]: snap.data() })); },
-        () => {/* a missing/denied mirror just leaves the row unlabelled */},
-      ));
-    return () => unsubs.forEach((u) => u());
-  }, [orderIdKey]);
+    if (!providerId) return;
+    const unsub = db.collection('providerOrders')
+      .where('providerId', '==', providerId)
+      .orderBy('lastMessageAt', 'desc')
+      .limit(MAX_ORDER_THREADS)
+      .onSnapshot((snapshot) => {
+        if (!snapshot) return;
+        setOrderThreadDocs(snapshot.docs.map(d => ({ id: d.id, ...d.data() } as any)));
+      }, (error) => {
+        console.error('Error fetching order threads:', error);
+      });
+    return unsub;
+  }, [providerId]);
 
   // Bucket support messages into threads keyed by userPhone.
   const supportThreads = useMemo(() => {
@@ -157,34 +151,26 @@ export default function HqChatScreen() {
       };
     });
 
-    for (const [orderId, msgs] of orderThreadMsgs) {
-      const last = msgs[msgs.length - 1];
-      const ctx = orderCtx[orderId];
+    for (const order of orderThreadDocs) {
       // `messages` has no per-message read flag; the order carries one
       // (providerUnreadMessage, set by onCustomerMessageSent and cleared when the
-      // order chat is opened). Count the unanswered customer messages at the tail
-      // so the badge shows how many are actually waiting.
-      let unread = 0;
-      if (ctx?.providerUnreadMessage) {
-        for (let i = msgs.length - 1; i >= 0 && msgs[i].senderRole === 'customer'; i--) unread++;
-        unread = Math.max(1, unread);
-      }
+      // order chat is opened), so the badge is a dot rather than a count.
       rows.push({
-        key: `order:${orderId}`,
+        key: `order:${order.id}`,
         kind: 'order',
-        orderId,
-        userPhone: ctx?.customerPhone || '',
-        userName: ctx?.customerName || 'Customer',
+        orderId: order.id,
+        userPhone: order.customerPhone || '',
+        userName: order.customerName || 'Customer',
         isProvider: false,
-        lastText: last?.text || '',
-        lastFromHq: last?.senderRole !== 'customer',
-        lastAt: last?.timestamp || '',
-        unread,
+        lastText: order.lastMessagePreview || '',
+        lastFromHq: order.lastMessageFromCustomer === false,
+        lastAt: order.lastMessageAt || '',
+        unread: order.providerUnreadMessage ? 1 : 0,
       });
     }
 
     return rows.sort((a, b) => b.lastAt.localeCompare(a.lastAt));
-  }, [supportThreads, orderThreadMsgs, orderCtx]);
+  }, [supportThreads, orderThreadDocs]);
 
   const openMessages = openPhone ? (supportThreads.find(([p]) => p === openPhone)?.[1] || []) : [];
 
@@ -305,64 +291,69 @@ export default function HqChatScreen() {
           </View>
         </View>
 
-        <ScrollView className="flex-1" showsVerticalScrollIndicator={false}>
-          {threads.length === 0 ? (
+        {/* Virtualized: the general inbox is platform-wide, so this list grows with
+            the number of people who have ever written in. A ScrollView + .map()
+            mounted every row at once. */}
+        <FlatList
+          data={threads}
+          keyExtractor={(t) => t.key}
+          className="flex-1"
+          showsVerticalScrollIndicator={false}
+          ListEmptyComponent={
             <View className="mt-16 mx-4 p-10 bg-slate-50 border-2 border-dashed border-slate-200 rounded-[32px] items-center">
               <MessageSquare size={32} color="#cbd5e1" />
               <Text className="text-slate-400 font-bold text-center text-xs mt-3 uppercase leading-relaxed">
                 No conversations yet.{"\n"}Customer and provider chats appear here.
               </Text>
             </View>
-          ) : (
-            threads.map((t) => {
-              const isOrder = t.kind === 'order';
-              return (
-                <TouchableOpacity
-                  key={t.key}
-                  onPress={() => openThread(t)}
-                  style={isOrder ? { borderLeftWidth: 5, borderLeftColor: '#f59e0b' } : undefined}
-                  className={`flex-row items-center gap-3 px-4 py-4 border-b-2 border-slate-100 ${isOrder ? 'bg-amber-50/60' : ''}`}
-                >
-                  <View className={`w-10 h-10 rounded-2xl items-center justify-center border-2 border-black ${
-                    isOrder ? 'bg-amber-100' : t.isProvider ? 'bg-emerald-100' : 'bg-indigo-100'
-                  }`}>
-                    {isOrder
-                      ? <Package size={18} color="#b45309" />
-                      : t.isProvider
-                        ? <Building2 size={18} color="#059669" />
-                        : <UserIcon size={18} color="#4f46e5" />}
-                  </View>
-                  <View className="flex-1">
-                    <View className="flex-row items-center gap-2">
-                      <Text numberOfLines={1} className="flex-1 text-sm font-black text-slate-900 uppercase tracking-tight">
-                        {t.userName}
-                      </Text>
-                      {isOrder ? (
-                        <View className="bg-amber-400 px-1.5 py-0.5 rounded border border-black">
-                          <Text className="text-[8px] font-mono font-black text-black uppercase">
-                            Order {t.orderId!.replace(/^order_/, '#')}
-                          </Text>
-                        </View>
-                      ) : (
-                        <Text className="text-[8px] font-mono font-black text-slate-300 uppercase">
-                          {t.isProvider ? 'Provider' : 'General'}
-                        </Text>
-                      )}
-                    </View>
-                    <Text numberOfLines={1} className="text-[11px] font-bold text-slate-400 mt-0.5">
-                      {t.lastFromHq ? 'You: ' : ''}{t.lastText}
+          }
+          renderItem={({ item: t }) => {
+            const isOrder = t.kind === 'order';
+            return (
+              <TouchableOpacity
+                onPress={() => openThread(t)}
+                style={isOrder ? { borderLeftWidth: 5, borderLeftColor: '#f59e0b' } : undefined}
+                className={`flex-row items-center gap-3 px-4 py-4 border-b-2 border-slate-100 ${isOrder ? 'bg-amber-50/60' : ''}`}
+              >
+                <View className={`w-10 h-10 rounded-2xl items-center justify-center border-2 border-black ${
+                  isOrder ? 'bg-amber-100' : t.isProvider ? 'bg-emerald-100' : 'bg-indigo-100'
+                }`}>
+                  {isOrder
+                    ? <Package size={18} color="#b45309" />
+                    : t.isProvider
+                      ? <Building2 size={18} color="#059669" />
+                      : <UserIcon size={18} color="#4f46e5" />}
+                </View>
+                <View className="flex-1">
+                  <View className="flex-row items-center gap-2">
+                    <Text numberOfLines={1} className="flex-1 text-sm font-black text-slate-900 uppercase tracking-tight">
+                      {t.userName}
                     </Text>
+                    {isOrder ? (
+                      <View className="bg-amber-400 px-1.5 py-0.5 rounded border border-black">
+                        <Text className="text-[8px] font-mono font-black text-black uppercase">
+                          Order {t.orderId!.replace(/^order_/, '#')}
+                        </Text>
+                      </View>
+                    ) : (
+                      <Text className="text-[8px] font-mono font-black text-slate-300 uppercase">
+                        {t.isProvider ? 'Provider' : 'General'}
+                      </Text>
+                    )}
                   </View>
-                  {t.unread > 0 && (
-                    <View className="bg-rose-500 rounded-full min-w-[20px] h-5 px-1.5 items-center justify-center border-2 border-black">
-                      <Text className="text-white text-[9px] font-black">{t.unread > 9 ? '9+' : t.unread}</Text>
-                    </View>
-                  )}
-                </TouchableOpacity>
-              );
-            })
-          )}
-        </ScrollView>
+                  <Text numberOfLines={1} className="text-[11px] font-bold text-slate-400 mt-0.5">
+                    {t.lastFromHq ? 'You: ' : ''}{t.lastText}
+                  </Text>
+                </View>
+                {t.unread > 0 && (
+                  <View className="bg-rose-500 rounded-full min-w-[20px] h-5 px-1.5 items-center justify-center border-2 border-black">
+                    <Text className="text-white text-[9px] font-black">{t.unread > 9 ? '9+' : t.unread}</Text>
+                  </View>
+                )}
+              </TouchableOpacity>
+            );
+          }}
+        />
       </View>
     );
   }

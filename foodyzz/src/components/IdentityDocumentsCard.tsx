@@ -51,8 +51,11 @@ export default function IdentityDocumentsCard({ profile, subtitle, onSaved }: Pr
 
   useEffect(() => {
     let cancelled = false;
-    // Don't even resolve download URLs while masked — nothing would render them.
-    if (masked) { setRemote({}); return; }
+    // Never resolve download URLs for a VERIFIED customer — not just while masked.
+    // Their stored images are sealed even mid-replacement (renderSlot shows only the
+    // freshly picked one), so fetching them is three Storage round-trips whose
+    // results can never be displayed.
+    if (verified) { setRemote({}); return; }
     const paths: Partial<Record<Slot, string>> = {};
     if (license?.frontPath) paths.licenseFront = license.frontPath;
     if (license?.backPath) paths.licenseBack = license.backPath;
@@ -69,7 +72,7 @@ export default function IdentityDocumentsCard({ profile, subtitle, onSaved }: Pr
       setRemote(Object.fromEntries(pairs.filter(([, v]) => v)) as Partial<Record<Slot, string>>);
     });
     return () => { cancelled = true; };
-  }, [license?.frontPath, license?.backPath, address?.frontPath, masked]);
+  }, [license?.frontPath, license?.backPath, address?.frontPath, verified]);
 
   const capture = async (slot: Slot, source: 'camera' | 'library') => {
     try {

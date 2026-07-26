@@ -1535,9 +1535,31 @@ export const onAdminReplyToSupport = onDocumentCreated("supportMessages/{message
   }
 });
 
+// Thread summary denormalized onto the order (and so onto the providerOrders
+// mirror) by both message triggers below. This is what lets the FoodyzzHQ Chat
+// Center build its order-thread inbox from ONE indexed, provider-scoped query on
+// providerOrders instead of streaming the whole `messages` collection and then
+// fanning out a per-order listener to label each row. The preview is truncated:
+// the mirror doc is re-read by every open provider listener on each order write,
+// so it must not carry an unbounded string.
+const PREVIEW_MAX = 80;
+const threadSummary = (message: any, fromCustomer: boolean) => {
+  const text = String(message.text || "");
+  return {
+    lastMessageAt: message.timestamp || new Date().toISOString(),
+    lastMessagePreview: text.length > PREVIEW_MAX ? `${text.slice(0, PREVIEW_MAX - 1)}…` : text,
+    lastMessageFromCustomer: fromCustomer,
+  };
+};
+
 export const onProviderMessageSent = onDocumentCreated("messages/{messageId}", async (event) => {
   const message = event.data?.data();
-  if (!message || message.senderRole !== "provider") return;
+  // Everything not sent by the customer is inbound TO them — including the
+  // document request CustomerIdCard posts, which deliberately carries no
+  // senderRole so it doesn't fire a second push (onOrderIdDocsRequested already
+  // sends one). It still has to mark the thread unread and stamp the summary,
+  // otherwise that thread is invisible in the Chat Center until someone replies.
+  if (!message?.orderId || message.senderRole === "customer") return;
   const orderSnap = await db.collection("orders").doc(message.orderId).get();
   const order = orderSnap.data();
   if (!order) return;
@@ -1549,7 +1571,11 @@ export const onProviderMessageSent = onDocumentCreated("messages/{messageId}", a
   await orderSnap.ref.update({
     customerUnreadMessage: true,
     lastProviderMessageAt: message.timestamp || new Date().toISOString(),
+    ...threadSummary(message, false),
   });
+
+  // Only a genuine provider/HQ reply pushes.
+  if (message.senderRole !== "provider") return;
 
   await notifyCustomer(order.customerPhone, message.orderId, `New Message for Order ${message.orderId.replace("order_", "#")}`, `Provider ${order.providerName} sent: "${message.text}"`, "NEW_PROVIDER_MESSAGE");
 });
@@ -1571,6 +1597,7 @@ export const onCustomerMessageSent = onDocumentCreated("messages/{messageId}", a
   await orderSnap.ref.update({
     providerUnreadMessage: true,
     lastCustomerMessageAt: message.timestamp || new Date().toISOString(),
+    ...threadSummary(message, true),
   });
 
   await notifyProvider(
@@ -3140,16 +3167,24 @@ export const onOrderIdDocsRequested = onDocumentUpdated("orders/{orderId}", asyn
 });
 
 // The other half of the ID loop: the customer has just uploaded (or replaced)
-// their documents, so tell FoodyzzHQ there's something to review. Fires on the
-// users/{phone} write where BOTH documents become present-and-unreviewed, which
-// covers a first upload and a re-submission (saveDocumentToProfile clears
-// reviewedAt on every save). The uploadedAt comparison is what keeps an unrelated
-// profile write (fcmToken refresh, address edit) from re-notifying.
-export const onCustomerDocsUploaded = onDocumentWritten("users/{phone}", async (event) => {
-  const before = event.data?.before?.data();
-  const after = event.data?.after?.data();
-  if (!after) return;
-
+// their documents, so tell FoodyzzHQ there's something to review. Runs where BOTH
+// documents become present-and-unreviewed, which covers a first upload and a
+// re-submission (saveDocumentToProfile clears reviewedAt on every save). The
+// uploadedAt comparison is what keeps an unrelated profile write from notifying.
+//
+// Deliberately NOT its own onDocumentWritten("users/{phone}") trigger.
+// users/{phone} is one of the hottest documents on the platform — the customer app
+// writes badgeCount on every foreground and supportLastReadAt on every chat open —
+// so a second trigger on that path would double the invocation count for the whole
+// user base to serve an event that fires a handful of times per customer, ever.
+// onUserWriteLifecycleEmails already receives every one of those writes; this
+// piggybacks on it. Guards are ordered cheapest-first and no I/O happens until they
+// all pass, so the common case costs nothing beyond the comparisons below.
+async function notifyDocsUploaded(
+  phone: string,
+  before: any,
+  after: any,
+): Promise<void> {
   const complete = (u: any) =>
     !!u?.driverLicense?.frontPath && !!u?.driverLicense?.backPath && !!u?.addressProof?.frontPath;
   if (!complete(after)) return;
@@ -3160,7 +3195,6 @@ export const onCustomerDocsUploaded = onDocumentWritten("users/{phone}", async (
   if (submittedAt === wasSubmittedAt) return;
   if (after.driverLicense?.reviewedAt && after.addressProof?.reviewedAt) return;
 
-  const phone = event.params.phone;
   const name = after.name || phone;
 
   // Route it to whoever is actually waiting: the stores holding this customer's
@@ -3201,9 +3235,9 @@ export const onCustomerDocsUploaded = onDocumentWritten("users/{phone}", async (
       );
     }
   } catch (err) {
-    console.error("onCustomerDocsUploaded failed:", err);
+    console.error("notifyDocsUploaded failed:", err);
   }
-});
+}
 
 // NOTE: customer notification on the → DELIVERED transition is handled by
 // onOrderDeliveryStatusNotify (the DELIVERED case), which sends a richer message
@@ -3614,6 +3648,11 @@ export const onUserWriteLifecycleEmails = onDocumentWritten("users/{phone}", asy
   }
 
   if (!after) return; // deleted
+
+  // Piggybacked on this trigger rather than adding a second one to this very hot
+  // document path — see notifyDocsUploaded. Awaited but self-contained: it swallows
+  // its own errors so it can never block the welcome email below.
+  await notifyDocsUploaded(event.params.phone, before, after);
 
   // Welcome to Foodyzz — fire only as onboarding COMPLETES (onboarded flips to
   // true, carrying the email). Gating on the transition — not merely "has email"

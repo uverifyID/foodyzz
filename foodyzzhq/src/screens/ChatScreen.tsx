@@ -28,6 +28,9 @@ export default function ChatScreen() {
   const [loading, setLoading] = useState(true);
   const [orderData, setOrderData] = useState<any>(null);
   const scrollViewRef = useRef<ScrollView>(null);
+  // Parked at the newest message? Gates auto-scroll so reading history isn't
+  // interrupted. A ref, not state — it must not re-render on every scroll frame.
+  const atBottomRef = useRef(true);
 
   // Provider role for the provider app version
   const SENDER_ROLE = AppRole.PROVIDER; 
@@ -64,9 +67,14 @@ export default function ChatScreen() {
         ...d.data()
       }));
       setMessages(msgs);
-      // Drop optimistic echoes once the real docs land.
+      // Drop optimistic echoes once the real docs land, so `pending` can't
+      // accumulate every message sent during the session. Returns the SAME array
+      // when nothing changed, so this never triggers a wasted re-render.
       const ids = new Set(msgs.map((m: any) => m.id));
-      setPending((prev) => prev.filter((p) => !ids.has(p.id)));
+      setPending((prev) => {
+        const next = prev.filter((p) => !ids.has(p.id));
+        return next.length === prev.length ? prev : next;
+      });
       setLoading(false);
     }, (error) => {
       console.error("Firestore Messaging Error:", error);
@@ -95,7 +103,9 @@ export default function ChatScreen() {
     };
 
     // Render it immediately — waiting on the listener echo is what made a just-sent
-    // message appear only after leaving and reopening the thread.
+    // message appear only after leaving and reopening the thread. Your own message
+    // always pulls the view back down, wherever you were.
+    atBottomRef.current = true;
     setPending((prev) => [...prev, { ...newMsg, pending: true }]);
     setInputText('');
 
@@ -152,13 +162,22 @@ export default function ChatScreen() {
 
       {/* Auto-scroll is driven by onContentSizeChange rather than a messages-length
           effect: the effect fired BEFORE the new bubble laid out, so the list stopped
-          short of the bottom and a just-sent message sat below the fold. */}
+          short of the bottom and a just-sent message sat below the fold. Gated on
+          being parked at the newest message so scrolling up to read history isn't
+          yanked back down. */}
       <ScrollView
         ref={scrollViewRef}
         className="flex-1 p-4"
         contentContainerStyle={{ paddingBottom: 24 }}
         showsVerticalScrollIndicator={false}
-        onContentSizeChange={() => scrollViewRef.current?.scrollToEnd({ animated: true })}
+        onScroll={(e) => {
+          const { layoutMeasurement, contentOffset, contentSize } = e.nativeEvent;
+          atBottomRef.current = layoutMeasurement.height + contentOffset.y >= contentSize.height - 80;
+        }}
+        scrollEventThrottle={200}
+        onContentSizeChange={() => {
+          if (atBottomRef.current) scrollViewRef.current?.scrollToEnd({ animated: true });
+        }}
       >
         {visibleMessages.length === 0 ? (
           <View className="mt-10 p-10 bg-slate-50 border-2 border-dashed border-slate-200 rounded-[32px] items-center">
