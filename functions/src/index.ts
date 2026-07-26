@@ -4205,11 +4205,30 @@ export const syncAdminClaim = onCall(async (request) => {
   const staff = await db.collection("staff").doc(phone).get();
   const shouldBeAdmin = staff.exists && staff.data()?.active !== false;
 
+  // `hqStaff` — belongs to at least one store. A SECOND, much weaker claim,
+  // existing solely because Storage rules cannot read Firestore: checking a
+  // customer's ID at delivery is the job, but "is a member of the store handling
+  // this order" is inexpressible in storage.rules, so it has to ride on the token.
+  //
+  // It is deliberately NOT `admin`. Handing store members the admin claim would
+  // make "invite a colleague" an indirect route to platform admin — apiConfig
+  // writes, bulkBroadcast to every customer, fleet writes, writing any provider
+  // doc — granted by any store owner to anyone they choose. hqStaff carries only
+  // what the delivery job needs: reading customer identity documents and writing
+  // handover photos (see storage.rules).
+  //
+  // Still platform-wide for documents rather than per-store, for the same
+  // Storage-rules reason. Narrowing that further needs signed URLs minted by a
+  // callable that can check the order.
+  const shouldBeHqStaff = (await storeMembershipsFor(phone)).length > 0;
+
   // Read the claims off the auth RECORD, not off request.auth.token — the
   // caller's token can be stale (claims don't invalidate an issued token), and
   // comparing against the record keeps this a no-op on a repeat sign-in.
   const existing = (await getAuth().getUser(uid)).customClaims || {};
-  const changed = (existing.admin === true) !== shouldBeAdmin;
+  const adminChanged = (existing.admin === true) !== shouldBeAdmin;
+  const hqStaffChanged = (existing.hqStaff === true) !== shouldBeHqStaff;
+  const changed = adminChanged || hqStaffChanged;
 
   if (changed) {
     // Merge rather than replace: setCustomUserClaims overwrites the whole
@@ -4217,12 +4236,14 @@ export const syncAdminClaim = onCall(async (request) => {
     const next: Record<string, unknown> = {...existing};
     if (shouldBeAdmin) next.admin = true;
     else delete next.admin;
+    if (shouldBeHqStaff) next.hqStaff = true;
+    else delete next.hqStaff;
     await getAuth().setCustomUserClaims(uid, next);
-    console.log(`syncAdminClaim: ${phone} admin -> ${shouldBeAdmin}`);
+    console.log(`syncAdminClaim: ${phone} admin -> ${shouldBeAdmin}, hqStaff -> ${shouldBeHqStaff}`);
   }
 
   // `changed` tells the client whether it must force-refresh its ID token.
-  return {admin: shouldBeAdmin, changed};
+  return {admin: shouldBeAdmin, hqStaff: shouldBeHqStaff, changed};
 });
 
 

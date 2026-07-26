@@ -1,6 +1,6 @@
 import {
   callable, triggerCreated, fns, seedConfig, seedProvider, seedOrder,
-  db, getDoc, clearFirestore, spyExpo, phoneAuth, adminAuth, test as fft,
+  db, getDoc, clearFirestore, spyExpo, phoneAuth, adminAuth, test as fft, admin,
 } from './helpers';
 
 // A store's doc id names whoever CREATED it. These tests are about the second
@@ -336,6 +336,89 @@ describe('multi-device push (one store, several members)', () => {
     // The legacy scalar belongs to the LIVE device here — clearing it (as the old
     // blunt cleanup did) would have silenced a working phone.
     expect(after.fcmToken).toBe('ExponentPushToken[LIVE]');
+  });
+});
+
+describe('syncAdminClaim — two claims, deliberately different weights', () => {
+  // hqStaff exists because storage.rules cannot read Firestore, so "member of the
+  // store handling this order" has to ride on the token. The point of these tests
+  // is that it is NEVER a back door to `admin`: a store owner can invite anyone,
+  // and if that granted admin they would be handing out apiConfig writes and
+  // bulkBroadcast to every customer on the platform.
+  const UID = 'uid-under-test';
+  const authAs = (phone: string) => ({ uid: UID, token: { phone_number: phone } } as any);
+
+  beforeEach(async () => {
+    try { await admin.auth().deleteUser(UID); } catch { /* first run */ }
+    await admin.auth().createUser({ uid: UID, phoneNumber: STAFF });
+  });
+
+  const claims = async () => (await admin.auth().getUser(UID)).customClaims || {};
+
+  test('a store member gets hqStaff and NOT admin', async () => {
+    await seedProvider(STORE);
+    await db.doc(`providers/${STORE}/members/${STAFF}`)
+      .set({ phone: STAFF, role: 'staff', addedAt: new Date().toISOString() });
+
+    const res: any = await callable(fns.syncAdminClaim, {}, authAs(STAFF));
+    expect(res).toMatchObject({ admin: false, hqStaff: true, changed: true });
+    expect(await claims()).toEqual({ hqStaff: true });
+  });
+
+  test('the staff allowlist still grants admin', async () => {
+    await db.doc(`staff/${STAFF}`).set({ active: true });
+    const res: any = await callable(fns.syncAdminClaim, {}, authAs(STAFF));
+    expect(res).toMatchObject({ admin: true, hqStaff: false });
+    expect(await claims()).toEqual({ admin: true });
+  });
+
+  test('someone who is both carries both', async () => {
+    await seedProvider(STORE);
+    await db.doc(`providers/${STORE}/members/${STAFF}`)
+      .set({ phone: STAFF, role: 'owner', addedAt: new Date().toISOString() });
+    await db.doc(`staff/${STAFF}`).set({ active: true });
+
+    await callable(fns.syncAdminClaim, {}, authAs(STAFF));
+    expect(await claims()).toEqual({ admin: true, hqStaff: true });
+  });
+
+  test('belonging to no store grants nothing at all', async () => {
+    const res: any = await callable(fns.syncAdminClaim, {}, authAs(STAFF));
+    expect(res).toMatchObject({ admin: false, hqStaff: false, changed: false });
+    expect(await claims()).toEqual({});
+  });
+
+  test('hqStaff is revoked when the last membership goes', async () => {
+    await seedProvider(STORE);
+    await db.doc(`providers/${STORE}/members/${STAFF}`)
+      .set({ phone: STAFF, role: 'staff', addedAt: new Date().toISOString() });
+    await callable(fns.syncAdminClaim, {}, authAs(STAFF));
+    expect(await claims()).toEqual({ hqStaff: true });
+
+    // Removed from the store (adminRemoveStoreMember, or the store was deleted).
+    await db.doc(`providers/${STORE}/members/${STAFF}`).delete();
+    const res: any = await callable(fns.syncAdminClaim, {}, authAs(STAFF));
+    expect(res).toMatchObject({ hqStaff: false, changed: true });
+    expect(await claims()).toEqual({});
+  });
+
+  test('an orphaned membership does not grant hqStaff', async () => {
+    // Store deleted, member doc left behind. Access must not outlive the store.
+    await db.doc(`providers/${STORE}/members/${STAFF}`)
+      .set({ phone: STAFF, role: 'owner', addedAt: new Date().toISOString() });
+    const res: any = await callable(fns.syncAdminClaim, {}, authAs(STAFF));
+    expect(res).toMatchObject({ hqStaff: false });
+  });
+
+  test('unrelated claims survive a sync', async () => {
+    // setCustomUserClaims replaces the whole object, so the merge has to hold.
+    await admin.auth().setCustomUserClaims(UID, { somethingElse: 'keep-me' });
+    await seedProvider(STORE);
+    await db.doc(`providers/${STORE}/members/${STAFF}`)
+      .set({ phone: STAFF, role: 'staff', addedAt: new Date().toISOString() });
+
+    await callable(fns.syncAdminClaim, {}, authAs(STAFF));
+    expect(await claims()).toEqual({ somethingElse: 'keep-me', hqStaff: true });
   });
 });
 
