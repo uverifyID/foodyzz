@@ -324,8 +324,14 @@ export default function CustomerIdCard({ order, onMessage }: Props) {
             >
               <RefreshCw size={13} color="#dc2626" />
               <Text className="ml-2 flex-1 text-[10px] font-bold text-red-700">
+                {/* Tapping is usually the whole fix: this screen calls
+                    syncAdminClaim(force), and document access follows store
+                    membership via the hqStaff claim, which a token minted before
+                    the person joined does not carry. Deliberately does NOT tell
+                    them to ask for the staff list — that grants platform admin,
+                    which is far more than viewing documents needs. */}
                 {deniedFailure
-                  ? 'This device isn’t authorised to view customer documents. Ask an admin to add your number to the staff list, then tap to retry.'
+                  ? 'This device isn’t authorised yet. Tap to retry — if it keeps failing, ask an admin to confirm you were added to this store.'
                   : 'Some documents could not be loaded. Tap to retry.'}
               </Text>
             </TouchableOpacity>
