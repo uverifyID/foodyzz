@@ -17,11 +17,18 @@ import { CheckSquare, Square } from 'lucide-react-native';
 /**
  * FoodyzzHQ sign-in.
  *
- * Two fields, not one: the phone proves WHO you are, and — the first time you
- * join a store somebody else created — an invite code proves you were meant to.
- * A store used to be identified as `${your phone}_${a zip you typed}`, so it
- * could only ever have one user; membership now lives in
- * providers/{id}/members/{phone} and one store can be run by a whole team.
+ * The phone proves WHO you are; an invite code, the first time you join a store
+ * somebody else created, proves you were meant to. A store used to be identified
+ * as `${your phone}_${a zip you typed}`, so it could only ever have one user;
+ * membership now lives in providers/{id}/members/{phone} and one store can be run
+ * by a whole team.
+ *
+ * The form asks for the least it can. Most sign-ins are returning members, who
+ * need only a number, so the invite field appears only when someone chooses
+ * "Join With Code". The zip is not an option at all — it is revealed by preflight
+ * when this number belongs to no store yet, which is the only case that needs
+ * one. Making that a toggle asked every user, every time, to classify themselves
+ * correctly in order to see the right box.
  *
  * The invite is checked BEFORE the SMS goes out (preflightHqSignIn), so an
  * unknown number never costs a verification message. That gate is advisory —
@@ -35,9 +42,15 @@ export default function AuthScreen({ onAuthenticated }: { onAuthenticated: (user
   const [phone, setPhone] = useState('');
   const [inviteCode, setInviteCode] = useState('');
   const [zipCode, setZipCode] = useState('');
-  // The second field is the invite code by default; new owners toggle it to the
-  // store zip, which is the doc-key suffix for the store they are about to create.
-  const [newStoreMode, setNewStoreMode] = useState(false);
+  // Which of the two things the person is here to do. Most sign-ins are returning
+  // members, who need nothing but a phone number, so the invite field is not shown
+  // until someone says they are joining — an input you cannot use is just noise on
+  // the screen you see every day.
+  const [entry, setEntry] = useState<'signin' | 'invite'>('signin');
+  // Set by preflight when this number belongs to no store yet: only then do we ask
+  // for a zip, and only to key the store it is about to create. Nobody has to know
+  // in advance that "new store" is the case that needs one.
+  const [needsZip, setNeedsZip] = useState(false);
   const [verificationCode, setVerificationCode] = useState('');
   const [confirm, setConfirm] = useState<any>(null);
   // What preflight decided for this attempt — carried through to verification so
@@ -70,8 +83,12 @@ export default function AuthScreen({ onAuthenticated }: { onAuthenticated: (user
         setError('Phone number is required.');
         return;
       }
-      if (newStoreMode && !zipCode.trim()) {
-        setError('Store Zip Code is required to set up a new store.');
+      if (entry === 'invite' && !inviteCode.trim()) {
+        setError('Enter the invite code you were given.');
+        return;
+      }
+      if (needsZip && !zipCode.trim()) {
+        setError('Enter the zip code of the store you are setting up.');
         return;
       }
 
@@ -83,7 +100,7 @@ export default function AuthScreen({ onAuthenticated }: { onAuthenticated: (user
       // the code and let the post-OTP step (and the rules) decide.
       let result: HqPreflight | null = null;
       try {
-        result = await preflightHqSignIn(sanitizedPhone, newStoreMode ? undefined : code);
+        result = await preflightHqSignIn(sanitizedPhone, entry === 'invite' ? code : undefined);
       } catch (e: any) {
         if (e?.code === 'functions/resource-exhausted') {
           setError('Too many attempts. Please try again later.');
@@ -99,11 +116,13 @@ export default function AuthScreen({ onAuthenticated }: { onAuthenticated: (user
         return;
       }
 
-      // Recognised but brand new, and we have no zip yet — switch the second field
-      // over and stop, rather than sending an SMS we would have to waste.
-      if (result?.mode === 'new' && !newStoreMode) {
-        setNewStoreMode(true);
-        setError('New here? Enter the zip code of the store you are setting up.');
+      // Belongs to no store yet, so this sign-in is going to create one — reveal
+      // the zip field and stop, rather than spending an SMS we would have to waste.
+      // This is why there is no "setting up a new store?" toggle to get wrong: the
+      // only person who needs a zip is told so, at the moment it matters.
+      if (result?.mode === 'new' && !needsZip) {
+        setNeedsZip(true);
+        setError('Looks like you are new. Enter the zip code of the store you are setting up.');
         return;
       }
 
@@ -143,7 +162,7 @@ export default function AuthScreen({ onAuthenticated }: { onAuthenticated: (user
       // otherwise the onboarding listener subscribes to the wrong store.
       // Null is legitimate for a multi-store member: App resolves it from their
       // memberships instead.
-      const resolvedId = newStoreMode
+      const resolvedId = needsZip
         ? `${rawDigits}_${zipCode.trim()}`
         : preflight?.providerId ?? null;
       if (resolvedId) await setActiveProviderId(resolvedId);
@@ -166,7 +185,7 @@ export default function AuthScreen({ onAuthenticated }: { onAuthenticated: (user
           setError(e?.message || 'Could not join that store. Please ask your manager for a new invite.');
           return;
         }
-      } else if (newStoreMode && user) {
+      } else if (needsZip && user) {
         // Brand-new store: create the placeholder doc so onboarding has something
         // to write to. onProviderCreatedAddOwner then records the creator as its
         // first member — clients cannot write member docs themselves.
@@ -201,6 +220,10 @@ export default function AuthScreen({ onAuthenticated }: { onAuthenticated: (user
     setConfirm(null);
     setPreflight(null);
     setVerificationCode('');
+    // Starting over usually means a different number, and needsZip was decided
+    // for the old one — leaving it set would demand a zip from someone who
+    // already has a store.
+    setNeedsZip(false);
   };
 
   return (
@@ -222,6 +245,33 @@ export default function AuthScreen({ onAuthenticated }: { onAuthenticated: (user
         <Text className="text-3xl font-black uppercase text-white tracking-tighter">HQ.<Text className="text-[#86B54F]">Partner</Text></Text>
       </View>
 
+      {/* Pick the situation first, so the form below only ever shows fields you
+          can actually fill in. Hidden once a code has been sent — changing your
+          mind at that point means starting over, which the link below already
+          does. */}
+      {!confirm && (
+        <View className="flex-row mb-4">
+          {([
+            { key: 'signin' as const, label: 'Sign In' },
+            { key: 'invite' as const, label: 'Join With Code' },
+          ]).map(({ key, label }, i) => (
+            <TouchableOpacity
+              key={key}
+              onPress={() => { setEntry(key); setError(null); }}
+              className={`flex-1 p-3 border-2 ${i === 0 ? 'mr-2' : ''} ${
+                entry === key ? 'bg-[#86B54F] border-black' : 'bg-slate-900 border-slate-800'
+              }`}
+            >
+              <Text className={`text-center font-black uppercase text-[10px] tracking-wider ${
+                entry === key ? 'text-black' : 'text-slate-400'
+              }`}>
+                {label}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+      )}
+
       <TextInput
         className="border-2 border-slate-800 p-4 mb-4 font-mono text-white bg-slate-900"
         placeholder="Phone Number"
@@ -232,20 +282,13 @@ export default function AuthScreen({ onAuthenticated }: { onAuthenticated: (user
         editable={!confirm}
       />
 
-      {newStoreMode ? (
+      {/* Only for someone joining a store. A returning member signs in with their
+          number alone, so this field would be permanently unusable furniture on
+          the screen they see most often. */}
+      {entry === 'invite' && (
         <TextInput
-          className="border-2 border-slate-800 p-4 mb-2 font-mono text-white bg-slate-900"
-          placeholder="Store Zip Code"
-          placeholderTextColor="#475569"
-          keyboardType="numeric"
-          value={zipCode}
-          onChangeText={setZipCode}
-          editable={!confirm}
-        />
-      ) : (
-        <TextInput
-          className="border-2 border-slate-800 p-4 mb-2 font-mono text-white bg-slate-900 tracking-[3px]"
-          placeholder="Invite Code (first time only)"
+          className="border-2 border-slate-800 p-4 mb-4 font-mono text-white bg-slate-900 tracking-[3px]"
+          placeholder="Invite Code"
           placeholderTextColor="#475569"
           autoCapitalize="characters"
           autoCorrect={false}
@@ -256,14 +299,19 @@ export default function AuthScreen({ onAuthenticated }: { onAuthenticated: (user
         />
       )}
 
-      {!confirm && (
-        <TouchableOpacity onPress={() => { setNewStoreMode((v) => !v); setError(null); }} className="mb-4 px-1">
-          <Text className="text-[10px] font-bold uppercase text-slate-500">
-            {newStoreMode
-              ? 'Joining an existing store? Use an invite code'
-              : 'Setting up a new store? Enter a zip code instead'}
-          </Text>
-        </TouchableOpacity>
+      {/* Revealed by preflight, never chosen: the only person who needs a zip is
+          one whose number belongs to no store yet, and they are told so at the
+          moment it applies rather than having to recognise themselves in a label. */}
+      {needsZip && (
+        <TextInput
+          className="border-2 border-[#86B54F] p-4 mb-4 font-mono text-white bg-slate-900"
+          placeholder="Store Zip Code"
+          placeholderTextColor="#475569"
+          keyboardType="numeric"
+          value={zipCode}
+          onChangeText={setZipCode}
+          editable={!confirm}
+        />
       )}
 
       {confirm && (
