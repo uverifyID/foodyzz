@@ -416,6 +416,9 @@ export interface LogisticsConfig {
   // Days after a bike's expected end date before it can be re-rented; drives the
   // "expected availability" date shown when a model is fully rented out.
   restockDays: number;
+  // Flat admin fee charged when staff make the trip to collect a bike and the
+  // customer isn't there. Billed on top of the renewed rental term.
+  pickupFee?: number;
 }
 
 // bikes/{id} — one document per physical bike.

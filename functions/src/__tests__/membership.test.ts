@@ -1,6 +1,6 @@
 import {
   callable, triggerCreated, fns, seedConfig, seedProvider, seedOrder,
-  db, getDoc, clearFirestore, spyExpo, phoneAuth, adminAuth,
+  db, getDoc, clearFirestore, spyExpo, phoneAuth, adminAuth, test as fft,
 } from './helpers';
 
 // A store's doc id names whoever CREATED it. These tests are about the second
@@ -9,6 +9,12 @@ const STORE = '14025551111_11743';
 const OWNER = '+14025551111';
 const STAFF = '+14025559999';
 const STRANGER = '+14025558888';
+
+// onDocumentDeleted harness: the trigger receives the doc as it last existed.
+async function triggerDeleted(fn: any, refPath: string, data: any, params: Record<string, string>) {
+  const wrapped: any = fft.wrap(fn);
+  return wrapped({ data: fft.firestore.makeDocumentSnapshot(data, refPath), params });
+}
 
 const inDays = (n: number) => new Date(Date.now() + n * 86_400_000).toISOString();
 
@@ -51,6 +57,44 @@ describe('onProviderCreatedAddOwner', () => {
       { providerId: STORE },
     );
     expect(await getDoc(`providers/${STORE}/members/${OWNER}`)).toMatchObject({ role: 'owner' });
+  });
+});
+
+describe('orphaned memberships (deleted store)', () => {
+  // Deleting a provider leaves its members behind — Firestore has no cascade, and
+  // rules make members server-only so the app cannot clean up after itself. An
+  // orphan resolves as the active store, whose document does not exist, which the
+  // app reads as "not onboarded" → the onboarding wizard, every launch, forever.
+  test('a membership pointing at a deleted store is ignored by preflight', async () => {
+    await db.doc(`providers/${STORE}/members/${STAFF}`)
+      .set({ phone: STAFF, role: 'owner', addedAt: new Date().toISOString() });
+    // No providers/{STORE} doc at all — exactly the state a purge leaves behind.
+    const res: any = await callable(fns.preflightHqSignIn, { phone: STAFF });
+    expect(res.mode).not.toBe('member');
+    expect(res).toMatchObject({ mode: 'new', providerId: null });
+  });
+
+  test('live stores still resolve when a dead one sits alongside', async () => {
+    await seedProvider(STORE);
+    await db.doc(`providers/${STORE}/members/${STAFF}`)
+      .set({ phone: STAFF, role: 'staff', addedAt: new Date().toISOString() });
+    await db.doc(`providers/99999999999_dead/members/${STAFF}`)
+      .set({ phone: STAFF, role: 'owner', addedAt: new Date().toISOString() });
+
+    const res: any = await callable(fns.preflightHqSignIn, { phone: STAFF });
+    // storeCount must not count the ghost, or the app shows a picker for one store.
+    expect(res).toMatchObject({ mode: 'member', providerId: STORE, storeCount: 1 });
+  });
+
+  test('deleting a store removes its members', async () => {
+    await seedProvider(STORE);
+    await db.doc(`providers/${STORE}/members/${STAFF}`)
+      .set({ phone: STAFF, role: 'staff', addedAt: new Date().toISOString() });
+
+    await triggerDeleted(fns.onProviderDeletedCleanupMembers, `providers/${STORE}`,
+      { phoneNumber: '14025551111' }, { providerId: STORE });
+
+    expect(await getDoc(`providers/${STORE}/members/${STAFF}`)).toBeNull();
   });
 });
 

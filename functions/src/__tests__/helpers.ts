@@ -64,6 +64,28 @@ export async function seedConfig(overrides: any = {}) {
   }
 }
 
+// apiConfig/logistics — the rate/fee tables every rental price is re-derived from.
+// Mirrors scripts/seed-logistics.js, trimmed to one model.
+export async function seedLogistics(overrides: any = {}) {
+  await db.doc('apiConfig/logistics').set({
+    bikeModels: [{
+      model: 1, name: 'Foodyzz Model 1', imageUrl: '',
+      rates: { rent: 19.99, buy: 799, rentToBuy: 89.99 },
+      minCommitment: { rent: 4, rentToBuy: 8 },
+    }],
+    durationUnits: { rent: 'weeks', rentToBuy: 'months' },
+    inventory: { 1: { new: 2, used: 0 } },
+    fees: [
+      { key: 'deposit', label: 'Deposit', amount: 100, required: true, cadence: 'once', isDeposit: true },
+      { key: 'insurance', label: 'Insurance', amount: 9.99, required: true, cadence: 'weekly' },
+    ],
+    delivery: { startTime: '17:00', endTime: '21:00', slotMinutes: 60 },
+    restockDays: 2,
+    pickupFee: 25,
+    ...overrides,
+  }, { merge: true });
+}
+
 export async function seedProvider(id: string, data: any = {}) {
   const [phone, zip] = id.split('_');
   await db.doc(`providers/${id}`).set({

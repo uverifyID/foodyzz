@@ -3,10 +3,10 @@ import { View, Text, ScrollView, FlatList, TouchableOpacity, ActivityIndicator, 
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
-import { Truck, Clock, MessageSquare, Bell, MapPin, CheckCircle, RefreshCcw, Package, Phone, Search, X, Bike, QrCode, CreditCard, CalendarClock, User } from 'lucide-react-native';
+import { Truck, Clock, MessageSquare, Bell, MapPin, CheckCircle, RefreshCcw, Package, Phone, Search, X, Bike, QrCode, CreditCard, CalendarClock, User, UserX, AlertTriangle } from 'lucide-react-native';
 import { COLORS } from '../theme';
 import { db } from '../services/firebase';
-import { useActiveProvider, useGlobalConfig, useProviderOrders } from '../hooks';
+import { useActiveProvider, useGlobalConfig, useLogisticsConfig, useProviderOrders } from '../hooks';
 import { OrderStatus, RentalOrder } from '../types';
 import { getScheduleLines, getOrderDates } from '../utils/schedule';
 import { getCurrentProviderCoords, warnLocationUnavailableOnce } from '../utils/location';
@@ -179,6 +179,9 @@ export default function LogisticsScreen() {
   // Orders are capped to the 100 most-recent active+recent-completed (served by
   // the orders(providerId,status,createdAt) composite index).
   const config = useGlobalConfig();
+  // Rates + the missed-pickup admin fee, so the "not present" confirmation can state
+  // exactly what the customer is about to be charged.
+  const logistics = useLogisticsConfig();
   const { profile: providerProfile, loading: providerLoading } = useActiveProvider();
   const { orders, loading: ordersLoading, applyOptimistic, clearOptimistic } = useProviderOrders(providerProfile?.id, {
     statuses: ['ready_for_delivery', 'en_route_delivery', 'at_delivery', 'delivered', 'completed'],
@@ -448,6 +451,82 @@ export default function LogisticsScreen() {
     );
   };
 
+  // ── Collection run (Rental Due lane) ───────────────────────────────────────
+  // Fetching a bike back is a trip that can fail, so it runs in stages: announce it
+  // (Ready for Pickup → "we're on our way, be home"), arrive (Mark at Location →
+  // "we're outside"), then either check the bike in or report nobody was home. The
+  // order stays DELIVERED the whole way — the rental is still running — so the stage
+  // lives on order.returnStage rather than in the status.
+  const runPickupStep = async (
+    order: any,
+    fn: 'startRentalPickup' | 'markRentalPickupArrived',
+    stage: 'ready_for_pickup' | 'at_location',
+  ) => {
+    if (processingOrderId === order.id) return;
+    setProcessingOrderId(order.id);
+    // Advance the card immediately so a slow indoor GPS fix never stalls the run.
+    applyOptimistic(order.id, { returnStage: stage });
+    const coords = await getCurrentProviderCoords();
+    try {
+      const call = functions.httpsCallable(fn);
+      await call({ orderId: order.id, lat: coords?.lat ?? null, lng: coords?.lng ?? null });
+      if (!coords) warnLocationUnavailableOnce();
+    } catch (error: any) {
+      clearOptimistic(order.id); // roll back — the customer was never told
+      Alert.alert('Could Not Notify Customer', error?.message || 'Please try again.');
+    } finally {
+      if (mountedRef.current) setProcessingOrderId(null);
+    }
+  };
+
+  // Nobody home. The customer keeps the bike, so the rental renews for another
+  // committed term at the price they already pay, and the trip is billed as a flat
+  // admin fee on top. Both go on their saved card via recordRentalPickupFailed.
+  const handleNotPresent = (order: any) => {
+    if (processingOrderId === order.id) return;
+    const periods = Math.max(1, Number(order.durationValue) || 1);
+    const unitWord = order.durationUnit === 'months' ? 'month' : 'week';
+    const adminFee = Number(logistics.pickupFee ?? 0);
+
+    Alert.alert(
+      'Nobody Home?',
+      `${order.customerName || 'The customer'} keeps the bike, so the rental renews for another ` +
+        `${periods} ${unitWord}${periods === 1 ? '' : 's'}.\n\n` +
+        `Their saved card is charged for that term${adminFee > 0 ? ` plus a $${adminFee.toFixed(2)} admin fee` : ''}, ` +
+        'and the due-back date moves out. Only do this if you actually made the trip.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Renew & Charge',
+          style: 'destructive',
+          onPress: async () => {
+            setProcessingOrderId(order.id);
+            // The run is over either way — drop the card back to its resting state.
+            applyOptimistic(order.id, { returnStage: null });
+            try {
+              const call = functions.httpsCallable('recordRentalPickupFailed');
+              const res: any = await call({ orderId: order.id });
+              const d = res?.data ?? {};
+              Alert.alert(
+                d.error ? 'Rental Extended — Payment Failed' : 'Rental Extended',
+                `Due back ${d.renewedTo ?? 'later'}.\n\n` +
+                  (d.error
+                    ? `The card was declined (${d.error}). The rental still continues — head office will chase the payment.`
+                    : `$${Number(d.charged ?? 0).toFixed(2)} charged (rental $${Number(d.rentalCharge ?? 0).toFixed(2)}` +
+                      `${Number(d.adminFee) > 0 ? ` + $${Number(d.adminFee).toFixed(2)} admin fee` : ''}).`),
+              );
+            } catch (error: any) {
+              clearOptimistic(order.id); // nothing was charged and nothing renewed
+              Alert.alert('Could Not Renew', error?.message || 'Please try again.');
+            } finally {
+              if (mountedRef.current) setProcessingOrderId(null);
+            }
+          },
+        },
+      ],
+    );
+  };
+
   const handleSendLocationUpdate = async (order: RentalOrder, status: string) => {
     // Re-entry guard mirrors handleUpdateStatus.
     if (processingOrderId === order.id) return;
@@ -525,7 +604,11 @@ export default function LogisticsScreen() {
     }
   };
 
-  const renderOrderCard = (order: any) => {
+  // `walkIn` cards come from a QR scan: the bike is physically here, so the pickup
+  // run is moot and the card offers Bike Check In directly. Everywhere else a return
+  // goes through the run (announce → arrive → check in / not present).
+  const renderOrderCard = (order: any, opts?: { walkIn?: boolean }) => {
+    const walkIn = opts?.walkIn === true;
     // Every rental is delivered to the customer — there is no pickup variant.
     const isPickupOrder = false;
     // A status transition for THIS order is in flight — disable its action buttons so
@@ -554,6 +637,11 @@ export default function LogisticsScreen() {
     // an early-payoff action.
     const isPaymentDue = categoryOf(order) === 'paymentDue';
     const rtb = isPaymentDue ? rtbSummary(order) : null;
+
+    // How far the current collection run has got (unset = no run in progress), and
+    // how many previous runs found nobody home.
+    const returnStage: string | null = order.returnStage ?? null;
+    const missedPickups = Number(order.missedPickups ?? 0);
 
     return (
       <View
@@ -697,6 +785,42 @@ export default function LogisticsScreen() {
           <BikeAssignment order={order} onAssigned={applyOptimistic} />
         </View>
 
+        {/* Collection-run state: where this trip has got to, and any earlier trip
+            that found nobody home (each of those renewed the rental and charged). */}
+        {order.status === OrderStatus.DELIVERED && !isPaymentDue && (walkIn || returnStage || missedPickups > 0) && (
+          <View className="mb-3 gap-1.5">
+            {walkIn && (
+              <View className="flex-row items-center gap-2 bg-slate-50 border border-slate-200 rounded-2xl px-3 py-2">
+                <QrCode size={12} color="#475569" />
+                <Text className="text-slate-600 font-black text-[9px] uppercase tracking-widest flex-1">
+                  Scanned · check in without a pickup run
+                </Text>
+              </View>
+            )}
+            {!walkIn && !!returnStage && (
+              <View className="flex-row items-center gap-2 bg-amber-50 border border-amber-200 rounded-2xl px-3 py-2">
+                {returnStage === 'at_location' ? <MapPin size={12} color="#b45309" /> : <Truck size={12} color="#b45309" />}
+                <Text className="text-amber-800 font-black text-[9px] uppercase tracking-widest flex-1">
+                  {returnStage === 'at_location'
+                    ? 'On site · customer notified'
+                    : 'Pickup announced · customer asked to be home'}
+                </Text>
+              </View>
+            )}
+            {missedPickups > 0 && (
+              <View className="flex-row items-center gap-2 bg-rose-50 border border-rose-200 rounded-2xl px-3 py-2">
+                <AlertTriangle size={12} color="#e11d48" />
+                <Text className="text-rose-600 font-black text-[9px] uppercase tracking-widest flex-1">
+                  {missedPickups} missed pickup{missedPickups === 1 ? '' : 's'} · rental renewed
+                  {Number(order.renewalChargedTotal ?? 0) > 0
+                    ? ` · $${Number(order.renewalChargedTotal).toFixed(2)} charged`
+                    : ''}
+                </Text>
+              </View>
+            )}
+          </View>
+        )}
+
         {/* Action Buttons */}
         <View className="flex-row gap-2">
           {/* ── Delivery pipeline ─────────────────────────────────────────
@@ -743,9 +867,12 @@ export default function LogisticsScreen() {
             </TouchableOpacity>
           )}
 
-          {order.status === OrderStatus.DELIVERED && !isPaymentDue && (
+          {/* Scanned at the counter: the bike is in front of staff, so skip straight
+              to the inspection. Dismiss the scan result first — the sheet replaces it
+              rather than stacking on top of it. */}
+          {order.status === OrderStatus.DELIVERED && !isPaymentDue && walkIn && (
             <TouchableOpacity
-              onPress={() => setReturnOrder(order)}
+              onPress={() => { setScannedOrder(null); setReturnOrder(order); }}
               disabled={busy}
               activeOpacity={busy ? 1 : 0.8}
               style={{ opacity: busy ? 0.6 : 1 }}
@@ -753,9 +880,67 @@ export default function LogisticsScreen() {
             >
               <RefreshCcw size={14} color="black" />
               <Text className="text-black font-black uppercase text-[10px] tracking-widest">
-                Check bike back in
+                Bike Check In
               </Text>
             </TouchableOpacity>
+          )}
+
+          {/* ── Collection run ────────────────────────────────────────────
+              Ready for Pickup → Mark at Location → (Not Present | Bike Check In).
+              The first two notify the customer; Not Present renews the rental and
+              charges for it, Check In opens the return inspection sheet. */}
+          {order.status === OrderStatus.DELIVERED && !isPaymentDue && !walkIn && !returnStage && (
+            <TouchableOpacity
+              onPress={() => runPickupStep(order, 'startRentalPickup', 'ready_for_pickup')}
+              disabled={busy}
+              activeOpacity={busy ? 1 : 0.8}
+              style={{ opacity: busy ? 0.6 : 1 }}
+              className="flex-1 bg-[#86B54F] py-3.5 rounded-2xl items-center flex-row justify-center gap-2"
+            >
+              <Truck size={14} color="black" />
+              <Text className="text-black font-black uppercase text-[10px] tracking-widest">
+                Ready for Pickup
+              </Text>
+            </TouchableOpacity>
+          )}
+
+          {order.status === OrderStatus.DELIVERED && !isPaymentDue && !walkIn && returnStage === 'ready_for_pickup' && (
+            <TouchableOpacity
+              onPress={() => runPickupStep(order, 'markRentalPickupArrived', 'at_location')}
+              disabled={busy}
+              activeOpacity={busy ? 1 : 0.8}
+              style={{ opacity: busy ? 0.6 : 1 }}
+              className="flex-1 bg-yellow-400 py-3.5 rounded-2xl items-center flex-row justify-center gap-2"
+            >
+              <MapPin size={14} color="black" />
+              <Text className="text-black font-black uppercase text-[10px] tracking-widest">Mark At Location</Text>
+            </TouchableOpacity>
+          )}
+
+          {/* On site: the trip either succeeded or it didn't. Both outcomes on one row. */}
+          {order.status === OrderStatus.DELIVERED && !isPaymentDue && !walkIn && returnStage === 'at_location' && (
+            <>
+              <TouchableOpacity
+                onPress={() => handleNotPresent(order)}
+                disabled={busy}
+                activeOpacity={busy ? 1 : 0.8}
+                style={{ opacity: busy ? 0.6 : 1 }}
+                className="flex-1 bg-rose-50 border-2 border-rose-200 py-3.5 rounded-2xl items-center flex-row justify-center gap-1.5"
+              >
+                <UserX size={14} color="#e11d48" />
+                <Text className="text-rose-600 font-black uppercase text-[9px] tracking-widest">Not Present</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                onPress={() => setReturnOrder(order)}
+                disabled={busy}
+                activeOpacity={busy ? 1 : 0.8}
+                style={{ opacity: busy ? 0.6 : 1 }}
+                className="flex-1 bg-[#86B54F] py-3.5 rounded-2xl items-center flex-row justify-center gap-1.5"
+              >
+                <RefreshCcw size={14} color="black" />
+                <Text className="text-black font-black uppercase text-[9px] tracking-widest">Bike Check In</Text>
+              </TouchableOpacity>
+            </>
           )}
 
           {/* Delivered rent-to-buy: no return — charge the remaining installments up
@@ -1100,7 +1285,7 @@ export default function LogisticsScreen() {
                     <X size={18} color="#111827" />
                   </TouchableOpacity>
                 </View>
-                {scannedOrder && renderOrderCard(scannedOrder)}
+                {scannedOrder && renderOrderCard(scannedOrder, { walkIn: true })}
                 <View style={{ height: 24 }} />
               </ScrollView>
             )}

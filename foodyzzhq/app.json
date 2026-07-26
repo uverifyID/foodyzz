@@ -22,6 +22,13 @@
       "./withNotificationSounds",
       "./withFmtConstevalFix",
       "./withFirebaseAuthSwiftOptFix",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Allow FoodyzzHQ to access your photos so you can attach bike condition photos to a handover or check-in.",
+          "cameraPermission": "Allow FoodyzzHQ to access your camera to scan bike QR codes and review customer driver license photos."
+        }
+      ],
       "expo-font",
       "expo-notifications",
       "@react-native-firebase/app",
@@ -64,6 +71,7 @@
       "supportsTablet": true,
       "infoPlist": {
         "NSCameraUsageDescription": "Allow FoodyzzHQ to access your camera to scan bike QR codes and review customer driver license photos.",
+        "NSPhotoLibraryUsageDescription": "Allow FoodyzzHQ to access your photos so you can attach bike condition photos to a handover or check-in.",
         "NSMicrophoneUsageDescription": "$(PRODUCT_NAME) does not record audio. Microphone access is included by an audio library used only to play notification sounds.",
         "NSLocationWhenInUseUsageDescription": "Allow FoodyzzHQ to use your location so customers can see your live position on the map while you deliver their bike.",
         "ITSAppUsesNonExemptEncryption": false,

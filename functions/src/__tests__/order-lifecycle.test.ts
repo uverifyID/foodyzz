@@ -1,6 +1,6 @@
 import {
   callable, fns, phoneAuth, seedConfig, seedProvider, seedUser, seedOrder,
-  getDoc, clearFirestore, spyExpo,
+  seedLogistics, getDoc, clearFirestore, spyExpo,
 } from './helpers';
 
 const PROVIDER_ID = '14025551111_11743';
@@ -104,6 +104,114 @@ describe('cancelOrder', () => {
       .rejects.toThrow(/terminal/i);
   });
 });
+// The collection run that precedes a bike check-in: announce the trip, arrive, then
+// either check the bike in or report nobody was home. The order stays DELIVERED
+// throughout (the rental is still running), so progress lives on `returnStage`.
+describe('collection run (Rental Due → bike check-in)', () => {
+  // Local YYYY-MM-DD math, matching the server's (never `new Date('Y-M-D')`, which
+  // parses as UTC midnight and rolls back a day in western zones).
+  const day = (offsetDays: number) => {
+    const d = new Date();
+    d.setDate(d.getDate() + offsetDays);
+    const p = (n: number) => String(n).padStart(2, '0');
+    return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+  };
+
+  // A plain rent that is out with a customer: 4 weeks, due back in 10 days.
+  const seedRunningRental = (id: string, extra: any = {}) => seedOrder(id, {
+    providerId: PROVIDER_ID, providerName: 'Test Co', status: 'delivered',
+    customerPhone: CUSTOMER_PHONE, rentalType: 'rent', bikeModel: 1,
+    durationValue: 4, durationUnit: 'weeks', expectedEndDate: day(10),
+    taxRate: 0, ...extra,
+  });
+
+  test('Ready for Pickup → stage set, customer told to be home', async () => {
+    const expo = spyExpo();
+    await seedLogistics();
+    await seedUser(CUSTOMER_PHONE, { fcmToken: 'ExponentPushToken[cust]' });
+    await seedRunningRental('p1');
+
+    await callable(fns.startRentalPickup, { orderId: 'p1' }, phoneAuth(PROVIDER_PHONE));
+
+    const o = await getDoc('orders/p1');
+    expect(o.returnStage).toBe('ready_for_pickup');
+    expect(o.status).toBe('delivered'); // the rental is still running
+    const msgs = expo.messages();
+    expo.restore();
+    const msg = msgs.find(m => m.data?.type === 'PICKUP_ON_THE_WAY');
+    expect(msg).toBeDefined();
+    expect(msg.body).toMatch(/be home/i);
+  });
+
+  test('Mark at Location → on-site stage, arrival push', async () => {
+    const expo = spyExpo();
+    await seedLogistics();
+    await seedUser(CUSTOMER_PHONE, { fcmToken: 'ExponentPushToken[cust]' });
+    await seedRunningRental('p2', { returnStage: 'ready_for_pickup' });
+
+    await callable(fns.markRentalPickupArrived, { orderId: 'p2' }, phoneAuth(PROVIDER_PHONE));
+
+    const o = await getDoc('orders/p2');
+    expect(o.returnStage).toBe('at_location');
+    const msgs = expo.messages();
+    expo.restore();
+    expect(msgs.some(m => m.data?.type === 'PICKUP_ARRIVED')).toBe(true);
+  });
+
+  test('not present → rental renews a full term, admin fee added, run cleared', async () => {
+    const expo = spyExpo();
+    await seedLogistics();
+    // No saved card, so the charge fails before Stripe is ever constructed — the
+    // renewal must still go through, since the customer still has the bike.
+    await seedUser(CUSTOMER_PHONE, { fcmToken: 'ExponentPushToken[cust]' });
+    await seedRunningRental('p3', { returnStage: 'at_location' });
+
+    const res: any = await callable(fns.recordRentalPickupFailed, { orderId: 'p3' }, phoneAuth(PROVIDER_PHONE));
+
+    // Renewed from the due-back date by the committed term (4 weeks = 28 days).
+    expect(res.renewedTo).toBe(day(38));
+    expect(res.adminFee).toBe(25);
+    expect(res.total ?? res.rentalCharge + res.adminFee).toBeGreaterThan(25);
+    expect(res.error).toMatch(/no saved card/i);
+    expect(res.charged).toBe(0);
+
+    const o = await getDoc('orders/p3');
+    expect(o.expectedEndDate).toBe(day(38));
+    expect(o.status).toBe('delivered');
+    expect(o.returnStage).toBeNull();       // the run is over; the next one starts fresh
+    expect(o.missedPickups).toBe(1);
+    expect(o.renewalChargedTotal).toBe(0);  // nothing was actually collected
+    expect(o.pickupAttempts).toHaveLength(1);
+    expect(o.pickupAttempts[0].adminFee).toBe(25);
+    expect(o.pickupAttempts[0].renewedTo).toBe(day(38));
+    expect(o.pickupAttempts[0].error).toMatch(/no saved card/i);
+
+    const msgs = expo.messages();
+    expo.restore();
+    expect(msgs.some(m => m.data?.type === 'PICKUP_MISSED')).toBe(true);
+  });
+
+  test('an overdue bike renews from today, not from the date already missed', async () => {
+    await seedLogistics();
+    await seedUser(CUSTOMER_PHONE);
+    await seedRunningRental('p4', { expectedEndDate: day(-30) });
+
+    const res: any = await callable(fns.recordRentalPickupFailed, { orderId: 'p4' }, phoneAuth(PROVIDER_PHONE));
+    expect(res.renewedTo).toBe(day(28));
+  });
+
+  test('rent-to-buy and not-yet-delivered orders have no collection run', async () => {
+    await seedLogistics();
+    await seedOrder('p5', { status: 'delivered', rentalType: 'rentToBuy', bikeModel: 1 });
+    await seedOrder('p6', { status: 'ready_for_delivery', rentalType: 'rent', bikeModel: 1 });
+
+    await expect(callable(fns.startRentalPickup, { orderId: 'p5' }, phoneAuth(PROVIDER_PHONE)))
+      .rejects.toThrow(/plain rental/i);
+    await expect(callable(fns.startRentalPickup, { orderId: 'p6' }, phoneAuth(PROVIDER_PHONE)))
+      .rejects.toThrow(/out with a customer/i);
+  });
+});
+
 // NOTE: the adjustOrderFinalPrice describe block was removed — that callable no
 // longer exists in index.ts (the load-based price-adjustment feature was dropped),
 // so these tests could not compile and blocked the whole suite from running. If a

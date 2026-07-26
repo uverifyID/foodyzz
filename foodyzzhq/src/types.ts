@@ -163,6 +163,30 @@ export interface RentalOrder {
   depositReleaseAt?: string;
   depositReleasedAt?: string;
   depositError?: string;
+  // ── Collection run ───────────────────────────────────────────────────────
+  // Fetching a bike back is a trip that can fail, so it runs in stages. The order
+  // stays DELIVERED throughout (the rental is still running and still billable), so
+  // the run's progress lives here rather than in `status`. Cleared when the run
+  // ends — the bike is checked in, or nobody was home and the rental renews.
+  returnStage?: 'ready_for_pickup' | 'at_location' | null;
+  returnStageAt?: string | null;
+  // One entry per trip that found nobody home, each recording the renewal it caused.
+  pickupAttempts?: {
+    at: string;
+    recordedBy?: string | null;
+    renewedFrom?: string | null;
+    renewedTo?: string | null;
+    periods?: number;
+    unit?: 'weeks' | 'months';
+    rentalCharge: number;
+    adminFee: number;
+    total: number;
+    paymentIntentId?: string | null;
+    error?: string | null;
+  }[];
+  missedPickups?: number;
+  renewalChargedTotal?: number;
+  renewalPaymentError?: string;
   // Condition recorded when the bike comes back, to compare against handover.
   conditionAtReturn?: BikeConditionReport;
   // Bike condition recorded at handover — notes + photos, visible to both sides.
@@ -412,6 +436,9 @@ export interface LogisticsConfig {
   // Days after a bike's expected end date before it can be re-rented; drives the
   // "expected availability" date shown when a model is fully rented out.
   restockDays: number;
+  // Flat admin fee charged when staff make the trip to collect a bike and the
+  // customer isn't there. Billed on top of the renewed rental term.
+  pickupFee?: number;
 }
 
 // bikes/{id} — one document per physical bike.

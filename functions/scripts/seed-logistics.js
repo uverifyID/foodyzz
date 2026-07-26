@@ -72,6 +72,11 @@ const DELIVERY = { startTime: '17:00', endTime: '21:00', slotMinutes: 60 };
 // an "expected availability" date when a model is fully rented out.
 const RESTOCK_DAYS = 2;
 
+// Flat admin fee charged when staff make the trip to collect a bike and the customer
+// isn't there. Billed on top of the renewed rental term (the bike stays out, so the
+// rental continues for another term at the price they already pay).
+const PICKUP_FEE = 25;
+
 // Bike numbers start here and increment; matches the appendix example (1001).
 const BIKE_NO_START = 1001;
 
@@ -84,6 +89,7 @@ const BIKE_NO_START = 1001;
       fees: FEES,
       delivery: DELIVERY,
       restockDays: RESTOCK_DAYS,
+      pickupFee: PICKUP_FEE,
       updatedAt: new Date().toISOString(),
     },
     { merge: true },

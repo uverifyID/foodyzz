@@ -70,6 +70,11 @@ export default function ChatScreen() {
     const [remote, setRemote] = useState<ChatMessage[]>([]);
     const [pending, setPending] = useState<ChatMessage[]>([]);
     const [loading, setLoading] = useState(true);
+    // Set when the thread listener dies. A Firestore listener that errors (a missing
+    // composite index, for one) stops delivering snapshots for good: inbound messages
+    // never arrive and the customer's own sends stay stuck dimmed. That used to be
+    // silent — console-only — so the thread just looked half-empty. Say so instead.
+    const [listenerFailed, setListenerFailed] = useState(false);
     const [orderData, setOrderData] = useState<any>(null);
     const listRef = useRef<FlatList<ChatMessage>>(null);
     // Whether the view is parked at the newest message. Auto-scroll is gated on this:
@@ -140,6 +145,7 @@ export default function ChatScreen() {
         setRemote([]);
         setPending([]);
         setLoading(true);
+        setListenerFailed(false);
     }, [orderId]);
 
     // ── Order-scoped thread: `messages` where orderId == ─────────────────────
@@ -178,9 +184,11 @@ export default function ChatScreen() {
                         senderName: data.senderName || 'FoodyzzHQ',
                     };
                 }).reverse());
+                setListenerFailed(false);
                 setLoading(false);
             }, (error) => {
                 console.error('Firestore Messaging Error:', error);
+                setListenerFailed(true);
                 setLoading(false);
             });
 
@@ -209,9 +217,11 @@ export default function ChatScreen() {
                         senderName: data.senderName || 'FoodyzzHQ',
                     };
                 }).reverse());
+                setListenerFailed(false);
                 setLoading(false);
             }, (error) => {
                 console.error('Error fetching support messages:', error);
+                setListenerFailed(true);
                 setLoading(false);
             });
 
@@ -349,6 +359,17 @@ export default function ChatScreen() {
                     </View>
                 )}
             />
+
+            {listenerFailed && (
+                <View className="mx-4 mb-2 px-3 py-2 bg-amber-50 border-2 border-amber-400 rounded-xl">
+                    <Text className="text-[9px] font-mono font-black text-amber-700 uppercase">
+                        Live updates interrupted
+                    </Text>
+                    <Text className="text-[10px] font-bold text-amber-700 mt-0.5 leading-relaxed">
+                        New replies may not appear. Reopen this chat to reconnect.
+                    </Text>
+                </View>
+            )}
 
             {/* Input Control Block */}
             <View

@@ -137,6 +137,28 @@ export interface BikeConditionReport {
   recordedBy?: string;
 }
 
+// Where a bike-collection run has got to. The order stays DELIVERED throughout:
+//   ready_for_pickup — announced to the customer ("we're on our way, please be home")
+//   at_location      — staff are outside; next tap is either check-in or "not present"
+export type ReturnStage = "ready_for_pickup" | "at_location";
+
+// A collection run that found nobody home. The bike stays out, so the rental renews
+// for another term and the customer pays for it plus the wasted trip (admin fee).
+export interface PickupAttempt {
+  at: string;                     // ISO, when staff reported nobody home
+  recordedBy?: string | null;     // providerId of the store that made the trip
+  // The renewal this attempt triggered.
+  renewedFrom?: string | null;    // previous expectedEndDate (YYYY-MM-DD)
+  renewedTo?: string | null;      // new expectedEndDate (YYYY-MM-DD)
+  periods?: number;               // terms added
+  unit?: "weeks" | "months";
+  rentalCharge: number;           // renewed rental incl. its tax + card fee
+  adminFee: number;               // apiConfig/logistics.pickupFee
+  total: number;                  // what the card was actually asked for
+  paymentIntentId?: string | null;
+  error?: string | null;          // set when the card declined — needs manual follow-up
+}
+
 // ── Foodyzz bike-rental domain ──────────────────────────────────────────────
 
 // How the customer takes the bike. Rent is billed per week, rent-to-buy per month,
@@ -307,6 +329,20 @@ export interface RentalOrder {
   billingSchedule?: BillingSchedule;
   rentToBuyOwned?: boolean; // true once every period is paid — the bike is theirs
   rentToBuyOwnedAt?: string;
+  // ── Return pickup run ────────────────────────────────────────────────────
+  // Collecting a bike is a scheduled visit, not an instant event: staff announce the
+  // run, arrive on site, and only then check the bike in. The order stays DELIVERED
+  // (the rental is still running and still billable) for the whole run, so its
+  // progress lives here rather than in `status`. Cleared when the run ends — either
+  // the bike is checked in, or the customer wasn't there and the rental renews.
+  returnStage?: ReturnStage | null;
+  returnStageAt?: string | null; // when the current stage was entered
+  // One entry per attempted collection that FAILED (customer not present). Each
+  // records the renewal that was charged as a result.
+  pickupAttempts?: PickupAttempt[];
+  missedPickups?: number; // pickupAttempts.length, denormalized for display
+  // Running total of everything charged by failed-pickup renewals (rental + admin fee).
+  renewalChargedTotal?: number;
   // Condition recorded when the bike comes back, to compare against handover.
   conditionAtReturn?: BikeConditionReport;
   // Bike condition recorded at handover — notes + photos, visible to both sides.

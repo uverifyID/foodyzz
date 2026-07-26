@@ -9,8 +9,11 @@
 //
 // Everything priced here is quoted from `apiConfig/logistics` via services/logistics
 // so the customer app, FoodyzzHQ and the Cloud Functions never drift.
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, Alert, ActivityIndicator, Image, TextInput } from 'react-native';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import {
+  View, Text, ScrollView, TouchableOpacity, Alert, ActivityIndicator, Image, TextInput,
+  KeyboardAvoidingView, Platform,
+} from 'react-native';
 import { Bike as BikeIcon, Calendar, Clock, MapPin, ShieldCheck, Check, CreditCard, Info } from 'lucide-react-native';
 import { useNavigation } from '@react-navigation/native';
 import { useStripe } from '@stripe/stripe-react-native';
@@ -54,6 +57,7 @@ const dayLabel = (day: string): string =>
 export default function OrderWizard() {
   const navigation = useNavigation<any>();
   const { initPaymentSheet, presentPaymentSheet, confirmPayment } = useStripe();
+  const scrollRef = useRef<ScrollView>(null);
   // False until the real Stripe publishable key has replaced the placeholder the
   // StripeProvider mounts with — gates the pay CTA so checkout can't open against it.
   const stripeReady = useStripeReady();
@@ -302,14 +306,6 @@ export default function OrderWizard() {
 
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
 
-      // Persist the card for reuse + the deposit hold. Best-effort: a failure here
-      // must not block the order that was already paid.
-      try {
-        await getFunctionsInstance().httpsCallable('recordOrderCard')({ orderId });
-      } catch (e) {
-        console.warn('recordOrderCard failed (non-fatal):', e);
-      }
-
       const total = pricing.total ?? quote.total;
       await db.collection('orders').doc(orderId).set({
         id: orderId,
@@ -369,6 +365,17 @@ export default function OrderWizard() {
         providerName: provider?.businessName || '',
         createdAt: new Date().toISOString(),
       });
+
+      // Copy the card just used onto the customer's profile, so it shows under Account
+      // > Payment Method and is reused for the deposit hold, rent-to-buy installments
+      // and the next order. Must run AFTER the order write — recordOrderCard reads
+      // orders/{orderId} to find the PaymentIntent, and returns saved:false if it is
+      // not there yet. Best-effort: a failure must not fail an order already paid for.
+      try {
+        await getFunctionsInstance().httpsCallable('recordOrderCard')({ orderId });
+      } catch (e) {
+        console.warn('recordOrderCard failed (non-fatal):', e);
+      }
 
       navigation.navigate('Main', { screen: 'My Rentals' });
     } catch (error: any) {
@@ -494,7 +501,22 @@ export default function OrderWizard() {
         </View>
       </View>
 
-      <ScrollView className="flex-1 px-5 pt-5" showsVerticalScrollIndicator={false}>
+      {/* The notes field on step 6 sits at the very bottom of the scroll content, so
+          without this the keyboard covered it. This view runs to the bottom of the
+          screen, so the padding it adds is exactly the keyboard height — no vertical
+          offset. Android resizes the window itself (adjustResize in the manifest),
+          so only iOS needs the padding behavior. */}
+      <KeyboardAvoidingView
+        className="flex-1"
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      >
+      <ScrollView
+        ref={scrollRef}
+        className="flex-1 px-5 pt-5"
+        showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="interactive"
+      >
         {/* 1 — Start date */}
         {step === 1 && (
           <View>
@@ -846,13 +868,17 @@ export default function OrderWizard() {
               onChangeText={setNotes}
               placeholder="Gate code, building, anything the rider should know"
               multiline
+              // The avoiding view shrinks the scroll area as the keyboard comes up;
+              // scrolling to the end then parks this field directly above it.
+              onFocus={() => setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 150)}
               className="border-2 border-black rounded-2xl bg-white px-4 py-3 mb-8 font-bold text-slate-700 min-h-[80px]"
             />
           </View>
         )}
       </ScrollView>
 
-      {/* Footer */}
+      {/* Footer — inside the avoiding view so the pay CTA rides above the keyboard
+          instead of being buried under it while the notes field has focus. */}
       <View className="px-5 py-4 bg-white border-t-2 border-black flex-row">
         {currentIdx > 0 && (
           <TouchableOpacity
@@ -884,6 +910,7 @@ export default function OrderWizard() {
           )}
         </TouchableOpacity>
       </View>
+      </KeyboardAvoidingView>
     </View>
   );
 }

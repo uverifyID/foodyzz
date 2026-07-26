@@ -1,5 +1,5 @@
 import {onCall, onRequest, HttpsError, type CallableRequest} from "firebase-functions/v2/https";
-import {onDocumentCreated, onDocumentUpdated, onDocumentWritten} from "firebase-functions/v2/firestore";
+import {onDocumentCreated, onDocumentDeleted, onDocumentUpdated, onDocumentWritten} from "firebase-functions/v2/firestore";
 import {getFirestore, FieldValue, FieldPath, Timestamp, type DocumentReference, type QueryDocumentSnapshot} from "firebase-admin/firestore";
 import {getAuth} from "firebase-admin/auth";
 import {onSchedule} from "firebase-functions/v2/scheduler";
@@ -12,6 +12,7 @@ import {
   OrderStatus,
   RentToBuyPlan,
   BillingSchedule,
+  PickupAttempt,
 } from "./types";
 import {randomInt} from "crypto";
 import Stripe from "stripe";
@@ -561,6 +562,9 @@ export interface LogisticsDoc {
   }>;
   fees: Array<{ key: string; label: string; amount: number; required: boolean; cadence: string; isDeposit?: boolean }>;
   restockDays?: number;
+  // Flat admin fee charged when staff make the trip to collect a bike and the
+  // customer isn't there. Billed on top of the renewed rental term.
+  pickupFee?: number;
 }
 
 async function getLogistics(): Promise<LogisticsDoc> {
@@ -2466,17 +2470,24 @@ export const markRentalDelivered = onCall(async (request) => {
       if (!customerId || !paymentMethodId) {
         throw new Error("no saved card on file for this customer");
       }
-      // Backfill the profile so a later charge/refund has the card directly.
-      if (paymentMethodId !== user.billingPaymentMethodId || customerId !== user.stripeCustomerId) {
-        await userRef.set(
-          {stripeCustomerId: customerId, billingPaymentMethodId: paymentMethodId},
-          {merge: true},
-        );
-      }
       // Card must be attached to the customer for an off-session charge.
       const pm = await stripe.paymentMethods.retrieve(paymentMethodId);
       if (!pm || (pm as any).customer !== customerId) {
         await stripe.paymentMethods.attach(paymentMethodId, {customer: customerId});
+      }
+      // Backfill the profile so a later charge/refund has the card directly,
+      // display fields included — the customer app only renders a saved card
+      // when billingCardLast4 is present. Covers a recordOrderCard that never
+      // landed at checkout (app killed, offline).
+      if (paymentMethodId !== user.billingPaymentMethodId || customerId !== user.stripeCustomerId) {
+        await userRef.set({
+          stripeCustomerId: customerId,
+          billingPaymentMethodId: paymentMethodId,
+          billingCardLast4: pm.card?.last4 ?? null,
+          billingCardBrand: pm.card?.brand ?? null,
+          billingCardExpMonth: pm.card?.exp_month ?? null,
+          billingCardExpYear: pm.card?.exp_year ?? null,
+        }, {merge: true});
       }
       const res = await chargeSecurityDeposit(stripe, String(orderId), customerId, paymentMethodId, depositAmount);
       if (!res.ok) throw new Error(res.error);
@@ -2569,6 +2580,340 @@ export const markRentalDelivered = onCall(async (request) => {
   };
 });
 
+// ── Collection run (Rental Due → bike check-in) ─────────────────────────────
+// Getting a bike back takes a trip, and the trip can fail. Staff announce the run
+// ("Ready for Pickup"), arrive ("Mark at Location"), then either check the bike in or
+// report that nobody was home. The order stays DELIVERED for the whole run — the
+// rental is still running and still billable — so the run's progress is tracked in
+// `returnStage`, and a failed trip renews the rental instead of ending it.
+
+// Plain-rent day math. Rental days are local YYYY-MM-DD strings; new Date('Y-M-D')
+// parses as UTC midnight and rolls back a day in western zones, so never use it.
+const parseRentalDay = (day: string): Date => {
+  const [y, m, d] = String(day).split("-").map(Number);
+  return new Date(y, (m || 1) - 1, d || 1);
+};
+const formatRentalDay = (d: Date): string => {
+  const p = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+};
+// One more committed term past `day`. Weeks are exact; months use setMonth so a
+// 31st lands correctly.
+const extendRentalDay = (day: string, periods: number, unit: "weeks" | "months"): string => {
+  const d = parseRentalDay(day);
+  if (unit === "months") d.setMonth(d.getMonth() + periods);
+  else d.setDate(d.getDate() + periods * 7);
+  return formatRentalDay(d);
+};
+
+// The card the customer's off-session charges run against: the one the deposit was
+// taken with at delivery, falling back to whatever their profile has saved.
+async function resolveOffSessionCard(
+  order: any,
+): Promise<{ ok: true; customerId: string; paymentMethodId: string } | { ok: false; error: string }> {
+  const user = (await db.collection("users").doc(String(order.customerPhone)).get()).data() || {};
+  const customerId = user.stripeCustomerId;
+  const paymentMethodId = order.depositPaymentMethodId || user.billingPaymentMethodId;
+  if (!customerId || !paymentMethodId) return {ok: false, error: "no saved card on file for this customer"};
+  return {ok: true, customerId, paymentMethodId};
+}
+
+/**
+ * What a missed collection costs the customer: another full committed term of the
+ * rental — priced exactly as it was at checkout (rate × term + the fee bundle once,
+ * plus that subtotal's sales tax and card processing) — plus the flat admin fee for
+ * the wasted trip. One-time fees are NOT re-charged; they were settled at delivery.
+ */
+function quoteRentalRenewal(order: any, logistics: LogisticsDoc, config: GlobalConfig): {
+  periods: number;
+  unit: "weeks" | "months";
+  rentalCharge: number;
+  adminFee: number;
+  total: number;
+} {
+  const round2 = (n: number) => Math.round(n * 100) / 100;
+  const acceptedFeeKeys: string[] = (Array.isArray(order.fees) ? order.fees : [])
+    .filter((f: any) => f?.accepted)
+    .map((f: any) => String(f.key));
+  const quote = computeRentalSubtotal(
+    logistics, "rent", Number(order.bikeModel), Number(order.durationValue) || 1, acceptedFeeKeys,
+  );
+  const renewalSubtotal = round2(quote.subtotal - quote.oneTimeFees);
+  const pricing = computePricing(renewalSubtotal, Number(order.taxRate) || 0, config);
+  const adminFee = Math.max(0, Number(logistics.pickupFee) || 0);
+  return {
+    periods: quote.periods,
+    unit: quote.unit,
+    rentalCharge: round2(pricing.total),
+    adminFee: round2(adminFee),
+    total: round2(pricing.total + adminFee),
+  };
+}
+
+// Guard shared by all three collection-run callables: the order must be a plain rent
+// that is out with a customer. A buy never comes back and a rent-to-buy is settled by
+// installments, so neither has a collection run.
+async function loadCollectableOrder(orderId: unknown): Promise<{ ref: DocumentReference; order: any }> {
+  if (!orderId) throw new HttpsError("invalid-argument", "Missing orderId.");
+  const ref = db.collection("orders").doc(String(orderId));
+  const snap = await ref.get();
+  if (!snap.exists) throw new HttpsError("not-found", "Order not found.");
+  const order = snap.data() as any;
+  if (order.status !== OrderStatus.DELIVERED) {
+    throw new HttpsError("failed-precondition", "This rental isn't out with a customer.");
+  }
+  if (order.rentalType === "buy" || order.rentalType === "rentToBuy") {
+    throw new HttpsError("failed-precondition", "Only a plain rental is collected back.");
+  }
+  return {ref, order};
+}
+
+/**
+ * "Ready for Pickup" — staff are setting off to collect the bike. Tells the customer
+ * to be home, and spells out what a missed collection will cost them, so the charge
+ * on the other side of this is never a surprise.
+ */
+export const startRentalPickup = onCall(async (request) => {
+  if (!request.auth) throw new HttpsError("unauthenticated", "Authentication required.");
+  const {orderId, lat, lng} = request.data;
+  const {ref, order} = await loadCollectableOrder(orderId);
+
+  const nowIso = new Date().toISOString();
+  const updates: Record<string, any> = {
+    returnStage: "ready_for_pickup",
+    returnStageAt: nowIso,
+    providerCurrentStatus: "en_route_pickup",
+    updatedAt: nowIso,
+  };
+  const hasCoords = typeof lat === "number" && typeof lng === "number" &&
+    Number.isFinite(lat) && Number.isFinite(lng);
+  if (hasCoords) updates.providerLocation = {lat, lng, timestamp: nowIso};
+  await ref.update(updates);
+
+  // Best-effort price preview for the warning. A config problem must not stop the
+  // trip being announced — the authoritative charge is computed at not-present time.
+  let warning = "";
+  try {
+    const [config, logistics] = await Promise.all([getConfig(), getLogistics()]);
+    const q = quoteRentalRenewal(order, logistics, config);
+    warning = `If we can't collect the bike, your rental continues for another ${q.periods} ` +
+      `${q.unit === "months" ? "month" : "week"}${q.periods === 1 ? "" : "s"} at $${q.rentalCharge.toFixed(2)}` +
+      `${q.adminFee > 0 ? `, plus a $${q.adminFee.toFixed(2)} admin fee for the missed collection` : ""}.`;
+  } catch (err) {
+    console.warn(`startRentalPickup: could not quote renewal for ${orderId}`, err);
+  }
+
+  const store = order.providerName || "FoodyzzHQ";
+  const name = String(order.customerName || "there").split(" ")[0];
+  await notifyCustomer(
+    order.customerPhone, String(orderId),
+    "We're on our way for your bike",
+    `${store} is on the way to collect your bike. Please be home to hand it over.`,
+    "PICKUP_ON_THE_WAY",
+  ).catch(() => {});
+  await emailCustomer(order, `We're on our way to collect your Foodyzz bike ${String(orderId).replace("order_", "#")}`, {
+    title: "We're on our way",
+    intro: `Hi ${name} — ${store} is on the way to pick up your bike. ` +
+      "Please make sure you're home so we can collect it and check it in with you.",
+    bodyHtml: warning ?
+      `<p style="margin:0;color:#475569;font-size:14px;line-height:1.6">${escapeHtml(warning)}</p>` :
+      undefined,
+  }).catch((e) => console.warn(`startRentalPickup: email failed for ${orderId}`, e));
+
+  return {success: true, returnStage: "ready_for_pickup"};
+});
+
+/**
+ * "Mark at Location" — staff are outside. Push only: arrival is time-critical and an
+ * email would land long after the doorbell.
+ */
+export const markRentalPickupArrived = onCall(async (request) => {
+  if (!request.auth) throw new HttpsError("unauthenticated", "Authentication required.");
+  const {orderId, lat, lng} = request.data;
+  const {ref, order} = await loadCollectableOrder(orderId);
+
+  const nowIso = new Date().toISOString();
+  const updates: Record<string, any> = {
+    returnStage: "at_location",
+    returnStageAt: nowIso,
+    providerCurrentStatus: "at_pickup",
+    updatedAt: nowIso,
+  };
+  const hasCoords = typeof lat === "number" && typeof lng === "number" &&
+    Number.isFinite(lat) && Number.isFinite(lng);
+  if (hasCoords) updates.providerLocation = {lat, lng, timestamp: nowIso};
+  await ref.update(updates);
+
+  const store = order.providerName || "FoodyzzHQ";
+  await notifyCustomer(
+    order.customerPhone, String(orderId),
+    `${store} is outside`,
+    "We're here to collect your bike. Please come out to meet us and check it in together.",
+    "PICKUP_ARRIVED",
+  ).catch(() => {});
+
+  return {success: true, returnStage: "at_location"};
+});
+
+// Charge one rental renewal + admin fee off-session. Idempotency-keyed on the attempt
+// number so a retried call can never bill the same missed trip twice.
+async function chargeRentalRenewal(
+  stripe: Stripe, orderId: string, customerId: string, paymentMethodId: string,
+  amount: number, attemptNo: number,
+): Promise<{ ok: true; pi: Stripe.PaymentIntent } | { ok: false; error: string }> {
+  try {
+    const pi = await stripe.paymentIntents.create({
+      amount: Math.round(amount * 100),
+      currency: "usd",
+      customer: customerId,
+      payment_method: paymentMethodId,
+      confirm: true,
+      off_session: true,
+      description: `Foodyzz rental renewal + missed-collection fee — order ${orderId.replace("order_", "#")}`,
+      metadata: {orderId, kind: "rental_renewal", attempt: String(attemptNo)},
+    }, {idempotencyKey: `${orderId}:renewal:${attemptNo}`});
+    return {ok: true, pi};
+  } catch (err: any) {
+    return {ok: false, error: String(err?.message ?? err)};
+  }
+}
+
+/**
+ * "Not present" — staff made the trip and nobody was home. The bike stays out, so the
+ * rental RENEWS for another committed term: the customer is charged that term at the
+ * price they already pay, plus the flat admin fee for the wasted visit.
+ *
+ * A declined card does not undo the renewal — the customer still has the bike, so the
+ * term is extended regardless and the failure is recorded on the attempt (and returned
+ * to the caller) for manual follow-up.
+ */
+export const recordRentalPickupFailed = onCall(async (request) => {
+  if (!request.auth) throw new HttpsError("unauthenticated", "Authentication required.");
+  const {orderId, note} = request.data;
+  const {ref, order} = await loadCollectableOrder(orderId);
+
+  const [config, logistics] = await Promise.all([getConfig(), getLogistics()]);
+  const quote = quoteRentalRenewal(order, logistics, config);
+
+  const now = new Date();
+  const nowIso = now.toISOString();
+  const attemptNo = (Array.isArray(order.pickupAttempts) ? order.pickupAttempts.length : 0) + 1;
+
+  // Renew from the due-back date, or from today when it has already passed — an
+  // overdue bike buys another full term starting now, not one backdated into the past.
+  const today = formatRentalDay(now);
+  const previousEnd: string | null = order.expectedEndDate ?? null;
+  const renewFrom = previousEnd && previousEnd > today ? previousEnd : today;
+  const unit: "weeks" | "months" = order.durationUnit === "months" ? "months" : "weeks";
+  const periods = Math.max(1, Number(order.durationValue) || quote.periods || 1);
+  const renewedTo = extendRentalDay(renewFrom, periods, unit);
+
+  // ── Charge the renewal + admin fee ────────────────────────────────────────
+  let paymentIntentId: string | null = null;
+  let chargeError: string | null = null;
+  if (quote.total > 0) {
+    const card = await resolveOffSessionCard(order);
+    if (!card.ok) {
+      chargeError = card.error;
+    } else {
+      const stripe = getStripe(config.stripe.secretKey);
+      const res = await chargeRentalRenewal(
+        stripe, String(orderId), card.customerId, card.paymentMethodId, quote.total, attemptNo,
+      );
+      if (res.ok) paymentIntentId = res.pi.id;
+      else chargeError = res.error;
+    }
+  }
+  if (chargeError) {
+    console.error(`recordRentalPickupFailed: renewal charge failed for ${orderId}`, chargeError);
+  }
+
+  const attempt: PickupAttempt = {
+    at: nowIso,
+    recordedBy: order.providerId ?? null,
+    renewedFrom: previousEnd,
+    renewedTo,
+    periods,
+    unit,
+    rentalCharge: quote.rentalCharge,
+    adminFee: quote.adminFee,
+    total: quote.total,
+    paymentIntentId,
+    error: chargeError,
+  };
+  if (typeof note === "string" && note.trim()) (attempt as any).note = note.trim().slice(0, 500);
+
+  await ref.update({
+    // The run is over — the next collection attempt starts a fresh one.
+    returnStage: null,
+    returnStageAt: null,
+    providerCurrentStatus: "idle",
+    expectedEndDate: renewedTo,
+    pickupAttempts: FieldValue.arrayUnion(attempt),
+    missedPickups: FieldValue.increment(1),
+    renewalChargedTotal: FieldValue.increment(chargeError ? 0 : quote.total),
+    ...(chargeError ? {renewalPaymentError: chargeError} : {renewalPaymentError: FieldValue.delete()}),
+    updatedAt: nowIso,
+  });
+
+  // Keep the bike's own due-back date in step, so availability quotes and the fleet
+  // view don't show it coming back on a date that has moved.
+  if (order.bikeId) {
+    await db.collection("bikes").doc(String(order.bikeId))
+      .update({expectedEndDate: renewedTo})
+      .catch((e) => console.warn(`recordRentalPickupFailed: bike ${order.bikeId} update failed`, e));
+  }
+
+  // ── Tell the customer ─────────────────────────────────────────────────────
+  const name = String(order.customerName || "there").split(" ")[0];
+  const unitWord = unit === "months" ? "month" : "week";
+  await notifyCustomer(
+    order.customerPhone, String(orderId),
+    "We missed you — rental extended",
+    `We couldn't collect your bike, so your rental continues to ${renewedTo}.` +
+      (chargeError ? " We'll be in touch about payment." : ` $${quote.total.toFixed(2)} charged.`),
+    "PICKUP_MISSED",
+  ).catch(() => {});
+  const money = (n: number) => `$${Number(n || 0).toFixed(2)}`;
+  await emailCustomer(order, `Your Foodyzz rental ${String(orderId).replace("order_", "#")} has been extended`, {
+    title: "We missed you",
+    intro: `Hi ${name} — we came to collect your bike but nobody was there to hand it over. ` +
+      `Because the bike is still with you, your rental continues for another ${periods} ` +
+      `${unitWord}${periods === 1 ? "" : "s"}, through ${renewedTo}.`,
+    bodyHtml: `
+      <table style="width:100%;border-collapse:collapse;border-top:1px solid #e2e8f0;border-bottom:1px solid #e2e8f0;margin:8px 0">
+        <tr>
+          <td style="padding:6px 0;color:#475569;font-size:14px">Rental — ${periods} ${unitWord}${periods === 1 ? "" : "s"}</td>
+          <td style="padding:6px 0;text-align:right;color:#0f172a;font-size:14px">${money(quote.rentalCharge)}</td>
+        </tr>
+        ${quote.adminFee > 0 ? `<tr>
+          <td style="padding:6px 0;color:#475569;font-size:14px">Missed collection admin fee</td>
+          <td style="padding:6px 0;text-align:right;color:#0f172a;font-size:14px">${money(quote.adminFee)}</td>
+        </tr>` : ""}
+        <tr>
+          <td style="padding:8px 0;color:#0f172a;font-size:15px;font-weight:bold;border-top:1px solid #e2e8f0">${chargeError ? "Amount due" : "Charged to your card"}</td>
+          <td style="padding:8px 0;text-align:right;color:#0f172a;font-size:15px;font-weight:bold;border-top:1px solid #e2e8f0">${money(quote.total)}</td>
+        </tr>
+      </table>
+      <p style="margin:12px 0 0;color:#475569;font-size:13px;line-height:1.6">${
+  chargeError ?
+    "We couldn't take payment from your saved card — our team will be in touch to settle it." :
+    "To finish your rental sooner, message us in the app and we'll book another collection."
+}</p>`,
+  }).catch((e) => console.warn(`recordRentalPickupFailed: email failed for ${orderId}`, e));
+
+  return {
+    success: true,
+    renewedTo,
+    periods,
+    unit,
+    rentalCharge: quote.rentalCharge,
+    adminFee: quote.adminFee,
+    charged: chargeError ? 0 : quote.total,
+    error: chargeError,
+  };
+});
+
 /**
  * Bike returned. Completes the rental, settles the deposit, and emails the customer.
  *
@@ -2595,6 +2940,10 @@ export const markRentalReturned = onCall(async (request) => {
     status: OrderStatus.COMPLETED,
     completedAt: now.toISOString(),
     updatedAt: now.toISOString(),
+    // The collection run ended here — clear it so a completed order never renders
+    // as still being on its way.
+    returnStage: null,
+    returnStageAt: null,
     conditionAtReturn: {
       notes: typeof returnNotes === "string" ? returnNotes.trim() : "",
       photoPaths: Array.isArray(returnPhotoPaths) ? returnPhotoPaths.slice(0, 12) : [],
@@ -3915,10 +4264,23 @@ function toE164(raw: unknown): string | null {
 // `members.phone` index — NOT a scan of `providers`.
 async function storeMembershipsFor(phone: string): Promise<Array<{ providerId: string; role: string }>> {
   const snap = await db.collectionGroup("members").where("phone", "==", phone).get();
-  return snap.docs
+  const candidates = snap.docs
     // members lives at providers/{id}/members/{phone}; parent.parent is the store.
     .map((d) => ({providerId: d.ref.parent.parent?.id ?? "", role: String(d.data()?.role || "staff")}))
     .filter((m) => m.providerId);
+  if (candidates.length === 0) return [];
+
+  // Drop memberships whose store is gone. Firestore does not cascade deletes, so
+  // deleting a provider leaves its members subcollection behind — and a membership
+  // pointing at a dead store is worse than none: the app resolves it as the active
+  // store, subscribes to a document that does not exist, reads that as
+  // "not onboarded", and drops the user into the onboarding wizard on every launch
+  // with no way out. onProviderDeletedCleanupMembers removes these at the source;
+  // this filter covers docs orphaned before it existed.
+  const stores = await db.getAll(
+    ...candidates.map((m) => db.collection("providers").doc(m.providerId)),
+  );
+  return candidates.filter((_, i) => stores[i].exists);
 }
 
 // Transactional per-key hourly counter, same shape as the contact-form limiter.
@@ -4344,4 +4706,28 @@ export const adminRemoveStoreMember = onCall(async (request) => {
   // write and the store itself on the next sign-in. Say so, rather than letting
   // the admin assume the removal is instant everywhere.
   return {removed: true};
+});
+
+// Delete a store's members when the store itself is deleted.
+//
+// Firestore does not cascade, and firestore.rules makes members server-only —
+// `allow write: if false` covers deletes too — so the account-deletion flow in
+// FoodyzzHQ physically cannot clean these up from the client. Left behind, an
+// orphaned member doc still matches the collection-group query that resolves
+// "which stores do I belong to", so the app adopts a store that no longer
+// exists, reads the missing document as "not onboarded", and strands the user in
+// the onboarding wizard on every launch.
+export const onProviderDeletedCleanupMembers = onDocumentDeleted("providers/{providerId}", async (event) => {
+  const membersRef = db.collection("providers").doc(event.params.providerId).collection("members");
+  try {
+    const snap = await membersRef.get();
+    if (snap.empty) return;
+    // A store's roster is a handful of people, so one batch always suffices.
+    const batch = db.batch();
+    snap.docs.forEach((d) => batch.delete(d.ref));
+    await batch.commit();
+    console.log(`onProviderDeletedCleanupMembers: removed ${snap.size} member(s) of ${event.params.providerId}`);
+  } catch (err) {
+    console.error(`onProviderDeletedCleanupMembers failed for ${event.params.providerId}:`, err);
+  }
 });

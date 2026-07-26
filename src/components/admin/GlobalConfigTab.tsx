@@ -244,6 +244,17 @@ export default function GlobalConfigTab({
                             </p>
                         </div>
                     </div>
+                    <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mt-4">
+                        <div>
+                            <label className={label}>Missed Pickup Admin Fee ($)</label>
+                            <input type="number" step="0.01" value={editLogistics.pickupFee ?? 0}
+                                onChange={(e) => handleLogisticsChange('pickupFee', parseFloat(e.target.value) || 0)} className={input} />
+                            <p className="text-[11px] text-stone-400 font-mono mt-1">
+                                Charged when staff travel out to collect a bike and nobody is home. The rental
+                                also renews for another term at its usual price, billed at the same time.
+                            </p>
+                        </div>
+                    </div>
                 </div>
             )}
 

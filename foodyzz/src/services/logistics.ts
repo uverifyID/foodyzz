@@ -41,6 +41,7 @@ export const DEFAULT_LOGISTICS: LogisticsConfig = {
   ],
   delivery: { startTime: '17:00', endTime: '21:00', slotMinutes: 60 },
   restockDays: 2,
+  pickupFee: 25,
 };
 
 export const subscribeToLogisticsConfig = (
