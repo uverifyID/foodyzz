@@ -66,7 +66,14 @@
         "NSCameraUsageDescription": "Allow FoodyzzHQ to access your camera to scan bike QR codes and review customer driver license photos.",
         "NSMicrophoneUsageDescription": "$(PRODUCT_NAME) does not record audio. Microphone access is included by an audio library used only to play notification sounds.",
         "NSLocationWhenInUseUsageDescription": "Allow FoodyzzHQ to use your location so customers can see your live position on the map while you deliver their bike.",
-        "ITSAppUsesNonExemptEncryption": false
+        "ITSAppUsesNonExemptEncryption": false,
+        "CFBundleURLTypes": [
+          {
+            "CFBundleURLSchemes": [
+              "com.googleusercontent.apps.392804438663-hbagug7p8dirjm3c35qagvlbnugkp1vg"
+            ]
+          }
+        ]
       },
       "bundleIdentifier": "com.foodyzzHQ",
       "googleServicesFile": "./GoogleService-Info.plist"

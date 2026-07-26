@@ -46,7 +46,7 @@ export default function AuthScreen({ onAuthenticated }: { onAuthenticated: (user
       if (err.code?.includes('invalid-phone-number') || err.message?.includes('invalid-phone-number')) {
         setError('Invalid phone number. Please check and try again.');
       } else {
-        setError('Weak or unstable connection detected. Please try again.');
+        setError(`Could not send code: ${err.code || err.message || 'unknown error'}`);
       }
     } finally {
       setLoading(false);
@@ -91,7 +91,7 @@ export default function AuthScreen({ onAuthenticated }: { onAuthenticated: (user
       if (err.code === 'auth/invalid-verification-code' || err.message?.includes('invalid-verification-code')) {
         setError('The code entered is incorrect.');
       } else {
-        setError('Weak or unstable connection detected. Please try again.');
+        setError(`Verification failed: ${err.code || err.message || 'unknown error'}`);
       }
     } finally {
       setLoading(false);

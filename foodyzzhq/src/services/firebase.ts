@@ -54,6 +54,52 @@ export const onAuthStateChanged = (callback: (user: any) => void) => {
 };
 
 /**
+ * Pull the staff `admin` custom claim onto this device's ID token.
+ *
+ * Staff access is claim-driven — Storage rules gate customer identity documents on
+ * `request.auth.token.admin`, and rules cannot read Firestore, so there is no other
+ * way to express it. The claim is granted server-side from the `staff/{phone}`
+ * allowlist by the syncAdminClaim function; this is the client half.
+ *
+ * A newly-set claim does NOT appear on the token already in memory — Firebase only
+ * embeds claims at issue time. Without the forced refresh the device keeps sending
+ * a claim-less token for up to an hour and every document read 403s.
+ *
+ * Runs once per uid: getIdToken(true) itself fires onAuthStateChanged, so an
+ * unguarded call from the auth listener would loop. Only a SUCCESSFUL sync latches,
+ * so a failure (offline at login) retries on the next auth event.
+ *
+ * Pass `force` to bypass that latch — needed when the account was added to the
+ * staff allowlist AFTER this session signed in, where the latched result is stale
+ * by definition and re-checking is the entire point of the call.
+ */
+let adminClaimSyncedFor: string | null = null;
+
+export const syncAdminClaim = async (force = false): Promise<boolean> => {
+  const user = auth().currentUser;
+  if (!user) { adminClaimSyncedFor = null; return false; }
+
+  if (!force && adminClaimSyncedFor === user.uid) {
+    const res = await user.getIdTokenResult();
+    return (res.claims as any)?.admin === true;
+  }
+
+  try {
+    const res: any = await functions().httpsCallable('syncAdminClaim')({});
+    adminClaimSyncedFor = user.uid;
+    // Always refresh on a forced retry: the claim may already be correct on the
+    // auth record (changed === false) while this device's token predates it, which
+    // is precisely the state a retry is trying to escape.
+    if (res?.data?.changed || force) await user.getIdToken(true);
+    if (__DEV__) console.log('[auth] admin claim =', res?.data?.admin);
+    return res?.data?.admin === true;
+  } catch (e: any) {
+    console.warn('[auth] admin claim sync failed:', e?.message || e);
+    return false;
+  }
+};
+
+/**
  * Global Config Loader
  */
 export const subscribeToGlobalConfig = (callback: (config: any) => void) => {

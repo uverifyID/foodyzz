@@ -77,7 +77,14 @@
       "infoPlist": {
         "NSCameraUsageDescription": "Allow $(PRODUCT_NAME) to access your camera to photograph your driver license for bike rental verification.",
         "NSMicrophoneUsageDescription": "$(PRODUCT_NAME) does not record audio. Microphone access is included by an audio library used only to play notification sounds.",
-        "ITSAppUsesNonExemptEncryption": false
+        "ITSAppUsesNonExemptEncryption": false,
+        "CFBundleURLTypes": [
+          {
+            "CFBundleURLSchemes": [
+              "com.googleusercontent.apps.392804438663-ju539i8hqp7dcepr0mhvbmuamm6ol1mf"
+            ]
+          }
+        ]
       },
       "appleTeamId": "59BW5VWV38"
     },

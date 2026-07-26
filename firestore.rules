@@ -44,6 +44,14 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
+    // Staff allowlist — `staff/{E164phone}` is the ONLY source of the admin claim
+    // (see the syncAdminClaim function). Deny-all to clients: a client-writable
+    // allowlist would be self-grant, and the admin claim reads every customer's
+    // identity documents. Populate via the Firebase Console or the admin SDK.
+    match /staff/{phone} {
+      allow read, write: if false;
+    }
+
     // Providers - any authed user may read (browse stores); only the owning
     // phone (or an admin) may write. Protects bankAccount / Stripe fields.
     match /providers/{providerId} {
