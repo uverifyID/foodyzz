@@ -254,19 +254,39 @@ const PUSH_TOKEN_KEY = 'expo_push_token';
  * field with the member's own number.
  */
 export const saveProviderFcmToken = async (providerId: string, token: string) => {
-  try {
-    if (!providerId || !token) return;
-    const ref = firestore().collection('providers').doc(providerId);
-    const snap = await ref.get();
-    if (!snap.exists) {
-      if (__DEV__) console.log('No provider doc found; skipping FCM token save.');
+  if (!providerId || !token) return;
+  const ref = firestore().collection('providers').doc(providerId);
+
+  // Retries specifically on permission-denied, which is EXPECTED once: on a first
+  // join the app enters the store before the membership that authorises this write
+  // exists. AuthScreen has to persist the store id before confirm() (otherwise the
+  // auth-state change finds no store and signs the user out), and the invite can
+  // only be redeemed after confirm() — so for a moment the caller genuinely is not
+  // yet a member and isMember() correctly says no. Without the retry the device
+  // registers no push token until its next launch, which for a dispatch app means
+  // silently missing orders for the rest of the session.
+  for (let attempt = 0; ; attempt++) {
+    try {
+      const snap = await ref.get();
+      if (!snap.exists) {
+        if (__DEV__) console.log('No provider doc found; skipping FCM token save.');
+        return;
+      }
+      await ref.update({ fcmTokens: firestore.FieldValue.arrayUnion(token) });
+      await ReactNativeAsyncStorage.setItem(PUSH_TOKEN_KEY, token);
+      if (__DEV__) console.log('Provider FCM token registered for', providerId);
       return;
+    } catch (error: any) {
+      const denied = String(error?.code || error?.message || '').includes('permission-denied');
+      // ~5.6s total, comfortably longer than a redeem round-trip. Anything still
+      // denied after that is a real permissions problem worth surfacing.
+      if (!denied || attempt >= 3) {
+        console.error('Error saving provider FCM token:', error);
+        return;
+      }
+      if (__DEV__) console.log('FCM token write denied; membership may still be landing, retrying…');
+      await new Promise((resolve) => setTimeout(resolve, 800 * 2 ** attempt));
     }
-    await ref.update({ fcmTokens: firestore.FieldValue.arrayUnion(token) });
-    await ReactNativeAsyncStorage.setItem(PUSH_TOKEN_KEY, token);
-    if (__DEV__) console.log('Provider FCM token registered for', providerId);
-  } catch (error) {
-    console.error('Error saving provider FCM token:', error);
   }
 };
 
