@@ -74,14 +74,14 @@ type FilterCtx = ReturnType<typeof buildFilterContext>;
 
 // Does an order belong under the given time filter? Pure date/status logic,
 // independent of the Dropoff/Pickup toggle (callers AND that in separately).
-//  - Forward windows (Today / Tomorrow / 10 Days) match when EITHER scheduled day
-//    — handoff (drop-off/pickup) or need-by (ready/deliver-by) — lands inside them.
-//  - Past windows key off the DEADLINE (need-by, fallback handoff): an order isn't
-//    late until its deliver-by day passes. Overdue = up to 10 days late;
-//    Past 10 Days = more than 10 days late.
-//  - Coming Up = the order's soonest day starts beyond the 10-day window.
+//  - Which DATE is bucketed depends on the lane, because each lane asks a different
+//    question. Rental Due asks "what has to come BACK in this window", so bucketing
+//    a still-future delivery day put a bike due in September under "10 Days".
+//  - Past windows key off the same lane date: an order isn't late until the day it
+//    was due passes. Overdue = up to 10 days late; Past 10 Days = more than 10.
+//  - Coming Up = that day starts beyond the 10-day window.
 //  - Completed = orders marked done (delivered) TODAY — both order types.
-function matchesTimeFilter(order: any, filter: string, ctx: FilterCtx): boolean {
+function matchesTimeFilter(order: any, filter: string, ctx: FilterCtx, lane?: OpsCategory | null): boolean {
   const { today, tomorrow, plus10, minus10 } = ctx;
 
   if (filter === 'Completed') {
@@ -103,18 +103,38 @@ function matchesTimeFilter(order: any, filter: string, ctx: FilterCtx): boolean 
   const start = resolveOrderDate(order.startDate, today, tomorrow);
   const end = resolveOrderDate(order.expectedEndDate ?? order.startDate, today, tomorrow);
   if (!start && !end) return false;
-  const anchor = start ?? end;     // soonest day — handoff first (future bucketing)
-  const deadline = end ?? start;   // latest day — need-by first (late bucketing)
-  const onDay = (t: Date) => start?.getTime() === t.getTime() || end?.getTime() === t.getTime();
-  const inRange = (d: Date | null, a: Date, b: Date) => !!d && d.getTime() >= a.getTime() && d.getTime() <= b.getTime();
+
+  // The day this lane is actually asking about:
+  //   delivery   → the handoff day. A bike that has not gone out is late once its
+  //                delivery day passes, NOT once the rental term ends.
+  //   rentalDue  → the due-back day. The delivery day is history for these; letting
+  //                it match is what filed a bike due in September under "10 Days".
+  //   paymentDue → the next installment, since that is the only date with an action
+  //                attached; falls back to the due-back day if no schedule is set.
+  // With no lane (an order in none, or a search result) keep the old either-day
+  // behaviour, so nothing that used to be findable silently disappears.
+  const dates: Array<Date | null> =
+    lane === 'delivery' ? [start] :
+      lane === 'rentalDue' ? [end] :
+        lane === 'paymentDue' ?
+          [resolveOrderDate(order.billingSchedule?.nextChargeAt, today, tomorrow) ?? end] :
+          [start, end];
+  const days = dates.filter(Boolean) as Date[];
+  if (days.length === 0) return false;
+
+  const soonest = days.reduce((a, b) => (a.getTime() <= b.getTime() ? a : b));
+  const latest = days.reduce((a, b) => (a.getTime() >= b.getTime() ? a : b));
+  const onDay = (t: Date) => days.some((d) => d.getTime() === t.getTime());
+  const inRange = (a: Date, b: Date) =>
+    days.some((d) => d.getTime() >= a.getTime() && d.getTime() <= b.getTime());
 
   switch (filter) {
     case 'Today':        return onDay(today);
     case 'Tomorrow':     return onDay(tomorrow);
-    case '10 Days':      return inRange(start, today, plus10) || inRange(end, today, plus10);
-    case 'Coming Up':    return !!anchor && anchor.getTime() > plus10.getTime();
-    case 'Overdue':      return !!deadline && deadline.getTime() < today.getTime() && deadline.getTime() >= minus10.getTime();
-    case 'Past 10 Days': return !!deadline && deadline.getTime() < minus10.getTime();
+    case '10 Days':      return inRange(today, plus10);
+    case 'Coming Up':    return soonest.getTime() > plus10.getTime();
+    case 'Overdue':      return latest.getTime() < today.getTime() && latest.getTime() >= minus10.getTime();
+    case 'Past 10 Days': return latest.getTime() < minus10.getTime();
     default:             return false;
   }
 }
@@ -220,10 +240,13 @@ export default function LogisticsScreen() {
 
     const ctx = buildFilterContext();
     const result = orders.filter(order => {
-      if (!matchesTimeFilter(order, timeFilter, ctx)) return false;
+      const cat = categoryOf(order);
+      // Lane first: the time window is measured against the date THAT LANE cares
+      // about, so the two cannot be evaluated independently.
+      if (!matchesTimeFilter(order, timeFilter, ctx, cat)) return false;
       // Completed is a daily done-summary — show everything regardless of the toggle.
       if (timeFilter === 'Completed') return true;
-      return categoryOf(order) === opsTab;
+      return cat === opsTab;
     });
 
     // Late buckets list the most recently-missed order first; other tabs keep feed order.
@@ -256,7 +279,7 @@ export default function LogisticsScreen() {
       if (order.status !== 'delivered') active++;
       const cat = categoryOf(order);
       for (const f of FILTERS) {
-        if (!matchesTimeFilter(order, f, ctx)) continue;
+        if (!matchesTimeFilter(order, f, ctx, cat)) continue;
         if (cat === opsTab || f === 'Completed') fc[f]++;                 // tab badge: lane-scoped, except Completed (all lanes)
         if (f === timeFilter) {
           if (cat === 'delivery') delivery++;
