@@ -192,9 +192,17 @@ export default function App() {
       const data = response.notification.request.content.data;
 
       if (navigationRef.isReady()) {
-        if (data.type === 'NEW_PROVIDER_MESSAGE' || data.type === 'ADMIN_SUPPORT_REPLY') {
-          // All customer↔FoodyzzHQ chat lives in the Chat tab now (single thread).
+        if (data.type === 'NEW_PROVIDER_MESSAGE' && data.orderId) {
+          // A reply on an ORDER thread must open THAT order's thread. It used to
+          // drop the customer into the general Chat tab, which has none of the
+          // context they were just replied to about.
+          navigationRef.navigate('OrderChat', { orderId: data.orderId });
+        } else if (data.type === 'ADMIN_SUPPORT_REPLY' || data.type === 'NEW_PROVIDER_MESSAGE') {
+          // Global FoodyzzHQ thread (same screen, no orderId).
           navigationRef.navigate('Main', { screen: 'Chat' });
+        } else if (data.type === 'ID_DOCS_REQUESTED') {
+          // "We need your ID" → drop them exactly where they upload it.
+          navigationRef.navigate('Main', { screen: 'Account' });
         } else if (data.type === 'ORDER_DELIVERED' && data.orderId) {
           // Open the delivered order's detail so the customer can rate + tip.
           navigationRef.navigate('Main', { screen: 'My Rentals', params: { focusOrderId: data.orderId } });

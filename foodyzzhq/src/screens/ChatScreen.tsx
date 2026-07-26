@@ -24,6 +24,7 @@ export default function ChatScreen() {
   const user = auth().currentUser;
   const [inputText, setInputText] = useState('');
   const [messages, setMessages] = useState<any[]>([]);
+  const [pending, setPending] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [orderData, setOrderData] = useState<any>(null);
   const scrollViewRef = useRef<ScrollView>(null);
@@ -63,6 +64,9 @@ export default function ChatScreen() {
         ...d.data()
       }));
       setMessages(msgs);
+      // Drop optimistic echoes once the real docs land.
+      const ids = new Set(msgs.map((m: any) => m.id));
+      setPending((prev) => prev.filter((p) => !ids.has(p.id)));
       setLoading(false);
     }, (error) => {
       console.error("Firestore Messaging Error:", error);
@@ -72,32 +76,40 @@ export default function ChatScreen() {
     return () => unsubscribe();
   }, [orderId]);
 
-  useEffect(() => {
-    if (scrollViewRef.current) {
-      scrollViewRef.current.scrollToEnd({ animated: true });
-    }
-  }, [messages]);
-
   const handleSendMessage = async () => {
-    if (!inputText.trim() || !user?.phoneNumber) return;
+    const text = inputText.trim();
+    if (!text || !user?.phoneNumber) return;
 
     const msgId = `msg_${Math.random().toString(36).substring(2, 11).toUpperCase()}`;
     const newMsg = {
       id: msgId,
       orderId,
       senderPhone: user.phoneNumber,
+      senderName: orderData?.providerName || 'FoodyzzHQ',
       senderRole: SENDER_ROLE,
-      text: inputText.trim(),
+      // Marks the thread as order-scoped for the FoodyzzHQ Chat Center, which
+      // merges these with the general `supportMessages` threads.
+      source: 'order',
+      text,
       timestamp: new Date().toISOString()
     };
 
+    // Render it immediately — waiting on the listener echo is what made a just-sent
+    // message appear only after leaving and reopening the thread.
+    setPending((prev) => [...prev, { ...newMsg, pending: true }]);
+    setInputText('');
+
     try {
       await db.collection('messages').doc(msgId).set(newMsg);
-      setInputText('');
     } catch (error) {
+      setPending((prev) => prev.filter((m) => m.id !== msgId));
+      setInputText(text);
       Alert.alert("Connection Error", "Message could not be sent.");
     }
   };
+
+  // What actually renders: confirmed messages plus any still-unacknowledged sends.
+  const visibleMessages = [...messages, ...pending];
 
   if (loading) {
     return (
@@ -138,13 +150,17 @@ export default function ChatScreen() {
         </View>
       </View>
 
+      {/* Auto-scroll is driven by onContentSizeChange rather than a messages-length
+          effect: the effect fired BEFORE the new bubble laid out, so the list stopped
+          short of the bottom and a just-sent message sat below the fold. */}
       <ScrollView
         ref={scrollViewRef}
         className="flex-1 p-4"
         contentContainerStyle={{ paddingBottom: 24 }}
         showsVerticalScrollIndicator={false}
+        onContentSizeChange={() => scrollViewRef.current?.scrollToEnd({ animated: true })}
       >
-        {messages.length === 0 ? (
+        {visibleMessages.length === 0 ? (
           <View className="mt-10 p-10 bg-slate-50 border-2 border-dashed border-slate-200 rounded-[32px] items-center">
             <MessageSquare size={32} color="#475569" />
             <Text className="text-slate-500 font-bold text-center text-xs mt-3 uppercase leading-relaxed">
@@ -152,11 +168,15 @@ export default function ChatScreen() {
             </Text>
           </View>
         ) : (
-          messages.map((m, i) => {
-            const isMe = m.senderRole === SENDER_ROLE;
+          visibleMessages.map((m, i) => {
+            // Anything not sent by the customer is ours — including the document
+            // request CustomerIdCard posts, which carries no senderRole.
+            const isMe = m.senderRole !== 'customer';
             return (
               <View key={m.id || i} className={`flex-row ${isMe ? 'justify-end' : 'justify-start'} mb-4`}>
-                <View className={`max-w-[85%] p-3 rounded-2xl border-2 border-black shadow-brutalist ${
+                <View
+                  style={m.pending ? { opacity: 0.6 } : undefined}
+                  className={`max-w-[85%] p-3 rounded-2xl border-2 border-black shadow-brutalist ${
                   isMe ? 'bg-indigo-600 rounded-tr-none' : 'bg-white rounded-tl-none'
                 }`}>
                   <Text className={`text-[11px] font-bold leading-relaxed ${isMe ? 'text-white' : 'text-black'}`}>

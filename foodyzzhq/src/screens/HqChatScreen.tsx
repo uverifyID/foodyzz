@@ -11,8 +11,9 @@ import {
   Platform,
   Alert,
 } from 'react-native';
-import { ArrowLeft, Send, MessageSquare, User as UserIcon, Building2 } from 'lucide-react-native';
+import { ArrowLeft, Send, MessageSquare, User as UserIcon, Building2, Package } from 'lucide-react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useNavigation, useRoute } from '@react-navigation/native';
 import { db } from '../services/firebase';
 import { COLORS } from '../theme';
 import { SupportMessage } from '../types';
@@ -21,15 +22,42 @@ import { SupportMessage } from '../types';
 const isUnreadForAdmin = (m: SupportMessage) =>
   !m.isReadByAdmin && m.senderPhone !== 'admin' && m.senderPhone !== 'system';
 
-// FoodyzzHQ one-to-many support manager. Reads the whole `supportMessages`
-// collection and buckets it into per-`userPhone` threads (customers + providers),
-// exactly like the webapp admin ChatManagerTab (src/components/admin/ChatManagerTab.tsx).
-// Replies are written back as `senderRole:'admin'` so the existing
-// onAdminReplyToSupport function pushes them to the user's device and they land
-// in the customer's FoodyzzHQ Chat tab. Mobile shows one thread at a time.
+// How many order threads stay hydrated with live order context. Every id costs one
+// providerOrders listener, so this is deliberately bounded — older threads are still
+// reachable from the order card in Dispatch / Operations.
+const MAX_ORDER_THREADS = 30;
+
+// One row in the merged inbox. `kind` is the whole point of this screen: an order
+// thread (started from the customer's order card) and a general thread (started
+// from the customer's chat tab) land in the same list and must be tellable apart.
+type Thread = {
+  key: string;
+  kind: 'order' | 'general';
+  orderId?: string;
+  userPhone: string;
+  userName: string;
+  isProvider: boolean;
+  lastText: string;
+  lastFromHq: boolean;
+  lastAt: string;
+  unread: number;
+};
+
+// FoodyzzHQ one-to-many chat manager — the single inbox for everything customers
+// and providers send:
+//   • general threads  → `supportMessages`, bucketed per userPhone. Replies are
+//     written back as senderPhone:'admin' so onAdminReplyToSupport pushes them to
+//     the user's device; they open in the customer's chat tab. Handled inline here.
+//   • order threads    → `messages`, bucketed per orderId. Tapping one opens the
+//     existing per-order chat screen (which already carries the order header and
+//     clears the unread flag), so there's exactly one order-chat UI in this app.
 export default function HqChatScreen() {
   const insets = useSafeAreaInsets();
+  const navigation = useNavigation<any>();
+  const route = useRoute<any>();
   const [allMessages, setAllMessages] = useState<SupportMessage[]>([]);
+  const [orderMessages, setOrderMessages] = useState<any[]>([]);
+  const [orderCtx, setOrderCtx] = useState<Record<string, any>>({});
   const [loading, setLoading] = useState(true);
   const [openPhone, setOpenPhone] = useState<string | null>(null);
   const [replyText, setReplyText] = useState('');
@@ -56,8 +84,50 @@ export default function HqChatScreen() {
     return unsub;
   }, []);
 
-  // Bucket into threads keyed by userPhone, newest-active first.
-  const threads = useMemo(() => {
+  // Order-scoped chat. Same bound + reverse as above; single-field ordering so no
+  // composite index is needed.
+  useEffect(() => {
+    const unsub = db.collection('messages')
+      .orderBy('timestamp', 'desc')
+      .limit(500)
+      .onSnapshot((snapshot) => {
+        if (!snapshot) return;
+        setOrderMessages(snapshot.docs.map(d => ({ id: d.id, ...d.data() } as any)).reverse());
+      }, (error) => {
+        console.error('Error fetching order messages:', error);
+      });
+    return unsub;
+  }, []);
+
+  // Order threads, newest-active first, grouped once (not re-filtered per id).
+  const orderThreadMsgs = useMemo(() => {
+    const map = new Map<string, any[]>();
+    for (const m of orderMessages) {
+      if (!m.orderId) continue;
+      const bucket = map.get(m.orderId);
+      if (bucket) bucket.push(m); else map.set(m.orderId, [m]);
+    }
+    return [...map.entries()]
+      .sort((a, b) => String(b[1][b[1].length - 1]?.timestamp || '').localeCompare(String(a[1][a[1].length - 1]?.timestamp || '')))
+      .slice(0, MAX_ORDER_THREADS);
+  }, [orderMessages]);
+
+  // The chat docs carry only an orderId, so customer name + the unread flag come
+  // from the provider-safe order mirror. Keyed on the id list so the listeners are
+  // only torn down when the set of live threads actually changes.
+  const orderIdKey = orderThreadMsgs.map(([id]) => id).join('|');
+  useEffect(() => {
+    const ids = orderIdKey ? orderIdKey.split('|') : [];
+    const unsubs = ids.map((id) =>
+      db.collection('providerOrders').doc(id).onSnapshot(
+        (snap) => { if (snap?.exists) setOrderCtx((prev) => ({ ...prev, [id]: snap.data() })); },
+        () => {/* a missing/denied mirror just leaves the row unlabelled */},
+      ));
+    return () => unsubs.forEach((u) => u());
+  }, [orderIdKey]);
+
+  // Bucket support messages into threads keyed by userPhone.
+  const supportThreads = useMemo(() => {
     const map: Record<string, SupportMessage[]> = {};
     for (const m of allMessages) {
       if (!m.userPhone) continue;
@@ -70,7 +140,53 @@ export default function HqChatScreen() {
     });
   }, [allMessages]);
 
-  const openMessages = openPhone ? (threads.find(([p]) => p === openPhone)?.[1] || []) : [];
+  // The merged inbox.
+  const threads: Thread[] = useMemo(() => {
+    const rows: Thread[] = supportThreads.map(([phone, msgs]) => {
+      const last = msgs[msgs.length - 1];
+      return {
+        key: `general:${phone}`,
+        kind: 'general' as const,
+        userPhone: phone,
+        userName: last?.userName || phone,
+        isProvider: last?.userRole === 'provider',
+        lastText: last?.text || '',
+        lastFromHq: last?.senderPhone === 'admin' || last?.senderPhone === 'system',
+        lastAt: last?.timestamp || '',
+        unread: msgs.filter(isUnreadForAdmin).length,
+      };
+    });
+
+    for (const [orderId, msgs] of orderThreadMsgs) {
+      const last = msgs[msgs.length - 1];
+      const ctx = orderCtx[orderId];
+      // `messages` has no per-message read flag; the order carries one
+      // (providerUnreadMessage, set by onCustomerMessageSent and cleared when the
+      // order chat is opened). Count the unanswered customer messages at the tail
+      // so the badge shows how many are actually waiting.
+      let unread = 0;
+      if (ctx?.providerUnreadMessage) {
+        for (let i = msgs.length - 1; i >= 0 && msgs[i].senderRole === 'customer'; i--) unread++;
+        unread = Math.max(1, unread);
+      }
+      rows.push({
+        key: `order:${orderId}`,
+        kind: 'order',
+        orderId,
+        userPhone: ctx?.customerPhone || '',
+        userName: ctx?.customerName || 'Customer',
+        isProvider: false,
+        lastText: last?.text || '',
+        lastFromHq: last?.senderRole !== 'customer',
+        lastAt: last?.timestamp || '',
+        unread,
+      });
+    }
+
+    return rows.sort((a, b) => b.lastAt.localeCompare(a.lastAt));
+  }, [supportThreads, orderThreadMsgs, orderCtx]);
+
+  const openMessages = openPhone ? (supportThreads.find(([p]) => p === openPhone)?.[1] || []) : [];
 
   useEffect(() => {
     if (openPhone && scrollViewRef.current) {
@@ -80,7 +196,7 @@ export default function HqChatScreen() {
 
   // Mark all incoming messages in a thread as read by admin.
   const markThreadRead = async (phone: string) => {
-    const unread = (threads.find(([p]) => p === phone)?.[1] || []).filter(isUnreadForAdmin);
+    const unread = (supportThreads.find(([p]) => p === phone)?.[1] || []).filter(isUnreadForAdmin);
     if (unread.length === 0) return;
     try {
       const batch = db.batch();
@@ -94,16 +210,39 @@ export default function HqChatScreen() {
     }
   };
 
-  const openThread = (phone: string) => {
+  const openGeneralThread = (phone: string) => {
     setOpenPhone(phone);
     setReplyText('');
     markThreadRead(phone);
   };
 
+  const openThread = (t: Thread) => {
+    if (t.kind === 'order' && t.orderId) {
+      // The per-order chat screen already owns the order header and the unread
+      // reset — reuse it rather than growing a second order-chat UI here.
+      navigation.navigate('Chat', { orderId: t.orderId });
+      return;
+    }
+    openGeneralThread(t.userPhone);
+  };
+
+  // Deep link from a push tap: open the thread the notification was about.
+  useEffect(() => {
+    const orderId = route.params?.openOrderId;
+    const phone = route.params?.openPhone;
+    if (orderId) {
+      navigation.setParams({ openOrderId: undefined });
+      navigation.navigate('Chat', { orderId });
+    } else if (phone) {
+      navigation.setParams({ openPhone: undefined });
+      openGeneralThread(phone);
+    }
+  }, [route.params?.openOrderId, route.params?.openPhone]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const handleSend = async () => {
     const text = replyText.trim();
     if (!text || !openPhone) return;
-    const thread = threads.find(([p]) => p === openPhone)?.[1] || [];
+    const thread = supportThreads.find(([p]) => p === openPhone)?.[1] || [];
     const first = thread[0];
     const newMsg: SupportMessage = {
       userPhone: openPhone,
@@ -135,7 +274,7 @@ export default function HqChatScreen() {
 
   // ── Thread list ──────────────────────────────────────────────────────────
   if (!openPhone) {
-    const totalUnread = allMessages.filter(isUnreadForAdmin).length;
+    const totalUnread = threads.reduce((n, t) => n + t.unread, 0);
     return (
       <View className="flex-1 bg-white">
         <View className="bg-slate-900 px-4 pb-4 border-b-4 border-black" style={{ paddingTop: insets.top + 16 }}>
@@ -152,6 +291,18 @@ export default function HqChatScreen() {
               </View>
             )}
           </View>
+          {/* The legend, because the whole point of merging the two inboxes is that
+              you can tell at a glance which one a message came from. */}
+          <View className="flex-row items-center gap-4 mt-2">
+            <View className="flex-row items-center gap-1.5">
+              <View className="w-2.5 h-2.5 rounded-full bg-amber-400 border border-black" />
+              <Text className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Order chat</Text>
+            </View>
+            <View className="flex-row items-center gap-1.5">
+              <View className="w-2.5 h-2.5 rounded-full bg-indigo-400 border border-black" />
+              <Text className="text-[8px] font-black text-slate-400 uppercase tracking-widest">General</Text>
+            </View>
+          </View>
         </View>
 
         <ScrollView className="flex-1" showsVerticalScrollIndicator={false}>
@@ -163,35 +314,48 @@ export default function HqChatScreen() {
               </Text>
             </View>
           ) : (
-            threads.map(([phone, msgs]) => {
-              const last = msgs[msgs.length - 1];
-              const unread = msgs.filter(isUnreadForAdmin).length;
-              const isProvider = last?.userRole === 'provider';
+            threads.map((t) => {
+              const isOrder = t.kind === 'order';
               return (
                 <TouchableOpacity
-                  key={phone}
-                  onPress={() => openThread(phone)}
-                  className="flex-row items-center gap-3 px-4 py-4 border-b-2 border-slate-100"
+                  key={t.key}
+                  onPress={() => openThread(t)}
+                  style={isOrder ? { borderLeftWidth: 5, borderLeftColor: '#f59e0b' } : undefined}
+                  className={`flex-row items-center gap-3 px-4 py-4 border-b-2 border-slate-100 ${isOrder ? 'bg-amber-50/60' : ''}`}
                 >
-                  <View className={`w-10 h-10 rounded-2xl items-center justify-center border-2 border-black ${isProvider ? 'bg-emerald-100' : 'bg-indigo-100'}`}>
-                    {isProvider ? <Building2 size={18} color="#059669" /> : <UserIcon size={18} color="#4f46e5" />}
+                  <View className={`w-10 h-10 rounded-2xl items-center justify-center border-2 border-black ${
+                    isOrder ? 'bg-amber-100' : t.isProvider ? 'bg-emerald-100' : 'bg-indigo-100'
+                  }`}>
+                    {isOrder
+                      ? <Package size={18} color="#b45309" />
+                      : t.isProvider
+                        ? <Building2 size={18} color="#059669" />
+                        : <UserIcon size={18} color="#4f46e5" />}
                   </View>
                   <View className="flex-1">
                     <View className="flex-row items-center gap-2">
                       <Text numberOfLines={1} className="flex-1 text-sm font-black text-slate-900 uppercase tracking-tight">
-                        {last?.userName || phone}
+                        {t.userName}
                       </Text>
-                      <Text className="text-[8px] font-mono font-black text-slate-300 uppercase">
-                        {isProvider ? 'Provider' : 'Customer'}
-                      </Text>
+                      {isOrder ? (
+                        <View className="bg-amber-400 px-1.5 py-0.5 rounded border border-black">
+                          <Text className="text-[8px] font-mono font-black text-black uppercase">
+                            Order {t.orderId!.replace(/^order_/, '#')}
+                          </Text>
+                        </View>
+                      ) : (
+                        <Text className="text-[8px] font-mono font-black text-slate-300 uppercase">
+                          {t.isProvider ? 'Provider' : 'General'}
+                        </Text>
+                      )}
                     </View>
                     <Text numberOfLines={1} className="text-[11px] font-bold text-slate-400 mt-0.5">
-                      {last?.senderPhone === 'admin' ? 'You: ' : ''}{last?.text}
+                      {t.lastFromHq ? 'You: ' : ''}{t.lastText}
                     </Text>
                   </View>
-                  {unread > 0 && (
+                  {t.unread > 0 && (
                     <View className="bg-rose-500 rounded-full min-w-[20px] h-5 px-1.5 items-center justify-center border-2 border-black">
-                      <Text className="text-white text-[9px] font-black">{unread > 9 ? '9+' : unread}</Text>
+                      <Text className="text-white text-[9px] font-black">{t.unread > 9 ? '9+' : t.unread}</Text>
                     </View>
                   )}
                 </TouchableOpacity>
@@ -203,8 +367,8 @@ export default function HqChatScreen() {
     );
   }
 
-  // ── Open thread ──────────────────────────────────────────────────────────
-  const openThreadArr = threads.find(([p]) => p === openPhone)?.[1] || [];
+  // ── Open general thread ──────────────────────────────────────────────────
+  const openThreadArr = supportThreads.find(([p]) => p === openPhone)?.[1] || [];
   const header = openThreadArr[0];
   const headerIsProvider = header?.userRole === 'provider';
 
@@ -222,7 +386,7 @@ export default function HqChatScreen() {
         </TouchableOpacity>
         <View className="flex-1">
           <Text className="text-[9px] font-mono font-black text-brand-green uppercase tracking-widest leading-none">
-            {headerIsProvider ? 'Provider' : 'Customer'} · {openPhone}
+            {headerIsProvider ? 'Provider' : 'Customer'} · General · {openPhone}
           </Text>
           <Text numberOfLines={1} className="text-sm font-black text-white uppercase tracking-tight leading-none mt-1">
             {header?.userName || openPhone}
@@ -235,7 +399,7 @@ export default function HqChatScreen() {
         thread previously .map-ed every message inside a ScrollView. Order is unchanged
         (openMessages is already ascending), styling per-bubble is identical, and
         newest-at-bottom auto-scroll is preserved via onContentSizeChange->scrollToEnd
-        (plus the existing length-change effect). NOTE: verify scroll/paint on device.
+        (plus the existing length-change effect).
       */}
       <FlatList
         ref={scrollViewRef}

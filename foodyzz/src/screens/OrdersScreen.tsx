@@ -11,8 +11,12 @@ import { useNavigation, useRoute } from '@react-navigation/native';
 import MapView from 'react-native-maps'; // Assuming react-native-maps is installed
 import { Marker } from 'react-native-maps';
 import { RentalOrder, OrderStatus } from '../types';
+import { useUserProfile } from '../context/UserProfileContext';
+import { hasDocumentOnFile } from '../services/customerDocuments';
 
-// Status definitions aligned with POC
+// Status definitions aligned with POC. Always five steps — step 2 just renames
+// itself to "ID Pending" (and turns orange) when the customer hasn't uploaded
+// their documents yet, because that's the thing actually blocking the order.
 const OrderSteps = [
     { key: 'requested', label: 'Requested' },
     { key: 'verifying', label: 'Verifying' },
@@ -20,6 +24,15 @@ const OrderSteps = [
     { key: 'delivered', label: 'Delivered' },
     { key: 'completed', label: 'Done' },
 ];
+
+// Step index of the verify stage — the only step the ID-pending rename applies to.
+const VERIFY_STEP = 1;
+const ID_PENDING_ORANGE = '#f97316';
+
+// Documents are "on file" once BOTH the licence (front + back) and the proof of
+// address have been uploaded. Verification is a separate, later stamp.
+const hasIdOnFile = (profile: any): boolean =>
+    hasDocumentOnFile(profile, 'driverLicense') && hasDocumentOnFile(profile, 'addressProof');
 
 // Step for an order. 'confirmed' means accepted by FoodyzzHQ, but the customer only
 // sees CONFIRMED once their ID is verified (docsVerifiedAt) — until then it sits on
@@ -66,6 +79,10 @@ const historyStatusLabel = (order: RentalOrder): string => {
 export default function OrdersScreen() {
     const navigation = useNavigation<any>();
     const route = useRoute<any>();
+    // Shared users/{phone} listener — read here to know whether the customer's ID
+    // documents are on file, which renames the "Verifying" step to "ID Pending".
+    const { profile } = useUserProfile();
+    const idOnFile = hasIdOnFile(profile);
     const [activeOrders, setActiveOrders] = useState<RentalOrder[]>([]);
     const [pastOrders, setPastOrders] = useState<RentalOrder[]>([]);
     const [loading, setLoading] = useState(true);
@@ -292,14 +309,21 @@ export default function OrdersScreen() {
                     {OrderSteps.map((step, i) => {
                         const isDone = i <= currentIdx;
                         const isCurrent = i === currentIdx;
+                        // The verify step reads "ID Pending" (orange) while the order is
+                        // sitting there waiting on documents the customer hasn't sent.
+                        const isIdPending = i === VERIFY_STEP && isCurrent && !idOnFile;
                         return (
                             <View key={step.key} className="items-center z-10 w-1/5">
-                                <View className={`w-8 h-8 rounded-full items-center justify-center border-2 ${isCurrent ? 'bg-indigo-600 border-black shadow-sm' : isDone ? 'bg-indigo-500 border-indigo-600' : 'bg-white border-slate-200'
-                                    }`}>
+                                <View
+                                    style={isIdPending ? { backgroundColor: ID_PENDING_ORANGE } : undefined}
+                                    className={`w-8 h-8 rounded-full items-center justify-center border-2 ${isIdPending ? 'border-black shadow-sm' : isCurrent ? 'bg-indigo-600 border-black shadow-sm' : isDone ? 'bg-indigo-500 border-indigo-600' : 'bg-white border-slate-200'
+                                        }`}>
                                     <Text className={`text-[10px] font-black ${isDone ? 'text-white' : 'text-slate-300'}`}>{i + 1}</Text>
                                 </View>
-                                <Text className={`text-[8px] font-black uppercase mt-2 tracking-tighter ${isDone ? 'text-indigo-600' : 'text-slate-400'}`}>
-                                    {step.label}
+                                <Text
+                                    style={isIdPending ? { color: ID_PENDING_ORANGE } : undefined}
+                                    className={`text-[8px] font-black uppercase mt-2 tracking-tighter ${isDone ? 'text-indigo-600' : 'text-slate-400'}`}>
+                                    {isIdPending ? 'ID Pending' : step.label}
                                 </Text>
                             </View>
                         );
@@ -390,6 +414,26 @@ export default function OrdersScreen() {
                             </View>
 
                             {renderStatusProgress(order)}
+
+                            {/* Sits between the stepper and the chat button, and ONLY while
+                                the order is parked on the ID-Pending step — it's the single
+                                action that unblocks it. Tapping goes straight to Account,
+                                where IdentityDocumentsCard lives. */}
+                            {order.status !== OrderStatus.CANCELLED
+                                && orderStepIndex(order) === VERIFY_STEP
+                                && !idOnFile && (
+                                <TouchableOpacity
+                                    onPress={() => navigation.navigate('Main', { screen: 'Account' })}
+                                    style={{ backgroundColor: '#fff7ed', borderColor: ID_PENDING_ORANGE }}
+                                    className="border-2 rounded-2xl px-4 py-3 flex-row items-center gap-2"
+                                >
+                                    <AlertTriangle size={14} color={ID_PENDING_ORANGE} />
+                                    <Text style={{ color: '#9a3412' }} className="flex-1 text-[10px] font-black uppercase leading-relaxed">
+                                        Upload your ID & proof of address — go to Account
+                                    </Text>
+                                    <ChevronRight size={14} color={ID_PENDING_ORANGE} />
+                                </TouchableOpacity>
+                            )}
 
                             {/* Per-order chat with FoodyzzHQ (order-to-order, `messages` collection).
                                 The button alerts in-place when HQ has replied — indigo "New Reply"

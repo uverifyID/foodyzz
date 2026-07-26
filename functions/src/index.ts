@@ -1,6 +1,7 @@
 import {onCall, onRequest, HttpsError} from "firebase-functions/v2/https";
 import {onDocumentCreated, onDocumentUpdated, onDocumentWritten} from "firebase-functions/v2/firestore";
 import {getFirestore, FieldValue, FieldPath, Timestamp, type DocumentReference, type QueryDocumentSnapshot} from "firebase-admin/firestore";
+import {getAuth} from "firebase-admin/auth";
 import {onSchedule} from "firebase-functions/v2/scheduler";
 import {initializeApp} from "firebase-admin/app";
 import {
@@ -1505,10 +1506,20 @@ export const cancelOrder = onCall(async (request) => {
 // If real slot capacity is needed later, implement it against the provider's schedule
 // + existing orders in the window, with an auth check.
 
+// Anything a real person sends into the general (non-order) support thread alerts
+// the FoodyzzHQ desk. Customers were previously silent here — only providers rang
+// through — so a customer message sat in the Chat Center until someone happened to
+// look. The type distinguishes the two so the app can label the thread it opens.
 export const onProviderSupportMessage = onDocumentCreated("supportMessages/{messageId}", async (event) => {
   const message = event.data?.data();
-  if (!message || message.userRole !== "provider" || message.senderPhone === "admin" || message.senderPhone === "system") return;
-  await notifyAdmin("New Provider Support Request!", `${message.userName} needs assistance: "${message.text}"`, "NEW_PROVIDER_SUPPORT_MESSAGE", {userPhone: message.userPhone});
+  if (!message || message.senderPhone === "admin" || message.senderPhone === "system") return;
+  const isProvider = message.userRole === "provider";
+  await notifyAdmin(
+    isProvider ? "New Provider Support Request!" : "New Customer Message",
+    `${message.userName} needs assistance: "${message.text}"`,
+    isProvider ? "NEW_PROVIDER_SUPPORT_MESSAGE" : "NEW_CUSTOMER_SUPPORT_MESSAGE",
+    {userPhone: message.userPhone},
+  );
 });
 
 export const onAdminReplyToSupport = onDocumentCreated("supportMessages/{messageId}", async (event) => {
@@ -3074,18 +3085,123 @@ export const onOrderIdDocsRequested = onDocumentUpdated("orders/{orderId}", asyn
 
   const orderId = event.params.orderId;
   const store = after.providerName || "FoodyzzHQ";
+  // Push — tapping it deep-links the customer app straight to Account, where the
+  // upload card lives (see the ID_DOCS_REQUESTED branch in the app's tap handler).
   try {
     await notifyCustomer(
       after.customerPhone,
       orderId,
       "Action needed: verify your ID",
       `${store} needs your driver license (front and back) and proof of address before your bike ` +
-      "can be delivered. Upload them in Account → Driver License.",
+      "can be delivered. Tap to open Account and upload them.",
       "ID_DOCS_REQUESTED",
     );
   } catch (err) {
     // Non-fatal: the request itself is already recorded on the order.
     console.warn(`onOrderIdDocsRequested: notify failed for ${orderId}`, err);
+  }
+
+  // ...and email, so the customer is reached on both channels. A push can be
+  // disabled, missed or land on a device they're not holding; the email is the
+  // durable copy of the request. Independently try/caught so a missing SMTP
+  // config or a bounced address never takes the push down with it.
+  try {
+    const userSnap = await db.collection("users").doc(String(after.customerPhone)).get();
+    const email = userSnap.data()?.email;
+    if (email) {
+      await sendEmail(
+        String(email),
+        "Action needed: upload your ID & proof of address",
+        emailLayout({
+          brand: "Foodyzz",
+          accent: "#6366f1",
+          title: "We need your ID before delivery",
+          intro:
+            `${store} is preparing order ${orderId.replace("order_", "#")}, and we need two documents ` +
+            "before the bike can go out.",
+          bodyHtml: `
+            <ul style="margin:0 0 16px;padding-left:20px;color:#475569;font-size:14px;line-height:1.8">
+              <li>Your <strong>driver license</strong> — front and back</li>
+              <li>A <strong>proof of address</strong> — utility bill, bank statement or lease</li>
+            </ul>
+            <p style="margin:0 0 16px;color:#475569;font-size:14px;line-height:1.6">
+              Open the Foodyzz app and go to <strong>Account → Identity documents</strong> to upload all three
+              photos. FoodyzzHQ verifies them, usually within a few minutes, and your order moves straight on
+              to delivery.
+            </p>`,
+        }),
+      );
+    } else {
+      console.warn(`onOrderIdDocsRequested: no email on file for ${after.customerPhone}`);
+    }
+  } catch (err) {
+    console.warn(`onOrderIdDocsRequested: email failed for ${orderId}`, err);
+  }
+});
+
+// The other half of the ID loop: the customer has just uploaded (or replaced)
+// their documents, so tell FoodyzzHQ there's something to review. Fires on the
+// users/{phone} write where BOTH documents become present-and-unreviewed, which
+// covers a first upload and a re-submission (saveDocumentToProfile clears
+// reviewedAt on every save). The uploadedAt comparison is what keeps an unrelated
+// profile write (fcmToken refresh, address edit) from re-notifying.
+export const onCustomerDocsUploaded = onDocumentWritten("users/{phone}", async (event) => {
+  const before = event.data?.before?.data();
+  const after = event.data?.after?.data();
+  if (!after) return;
+
+  const complete = (u: any) =>
+    !!u?.driverLicense?.frontPath && !!u?.driverLicense?.backPath && !!u?.addressProof?.frontPath;
+  if (!complete(after)) return;
+
+  // Only on a NEW submission awaiting review.
+  const submittedAt = `${after.driverLicense?.uploadedAt || ""}|${after.addressProof?.uploadedAt || ""}`;
+  const wasSubmittedAt = `${before?.driverLicense?.uploadedAt || ""}|${before?.addressProof?.uploadedAt || ""}`;
+  if (submittedAt === wasSubmittedAt) return;
+  if (after.driverLicense?.reviewedAt && after.addressProof?.reviewedAt) return;
+
+  const phone = event.params.phone;
+  const name = after.name || phone;
+
+  // Route it to whoever is actually waiting: the stores holding this customer's
+  // open orders that asked for documents and haven't verified them yet.
+  try {
+    const ordersSnap = await db.collection("orders")
+      .where("customerPhone", "==", phone)
+      .orderBy("createdAt", "desc")
+      .limit(10)
+      .get();
+
+    const notified = new Set<string>();
+    for (const doc of ordersSnap.docs) {
+      const order = doc.data() as RentalOrder & { idRequestedAt?: string; docsVerifiedAt?: string };
+      if (order.docsVerifiedAt) continue;
+      if (["completed", "cancelled", "delivered"].includes(String(order.status))) continue;
+      const providerId = order.providerId;
+      if (!providerId || providerId === "broadcast" || notified.has(providerId)) continue;
+      notified.add(providerId);
+      await notifyProvider(
+        providerId,
+        "ID documents uploaded",
+        `${name} uploaded their driver license and proof of address for order ` +
+        `${doc.id.replace("order_", "#")}. Review them to release the bike.`,
+        "ID_DOCS_UPLOADED",
+        doc.id,
+      );
+    }
+
+    // Nothing order-specific pending → still tell the admin desk, so a proactive
+    // upload doesn't sit unreviewed.
+    if (notified.size === 0) {
+      await notifyAdmin(
+        "ID documents uploaded",
+        `${name} uploaded their driver license and proof of address.`,
+        "ID_DOCS_UPLOADED",
+        {userPhone: phone},
+      );
+    }
+  } catch (err) {
+    console.error("onCustomerDocsUploaded failed:", err);
   }
 });
 
@@ -3585,3 +3701,53 @@ export const onProviderCreatedLifecycleEmails = onDocumentCreated("providers/{pr
   }
 });
 
+
+// ── Staff admin claim ──────────────────────────────────────────────────────
+//
+// `admin: true` on the auth token is what unlocks staff access across the whole
+// system: reading customer identity documents in Cloud Storage (storage.rules
+// isAdmin()), apiConfig writes, stats / providerPerformance, bulkBroadcast.
+// Until this function existed the claim was READ in three places and SET
+// nowhere, so no account ever had it — which is why FoodyzzHQ's document
+// thumbnails failed with storage/unauthorized and spun forever.
+//
+// The claim is granted from the server-only `staff/{E164phone}` allowlist. It
+// is deliberately NOT derived from "has a providers doc" or "onboarded ==
+// true": both are self-service (a provider creates its own doc), so keying
+// the claim off them would let anyone who verifies any phone number in the
+// FoodyzzHQ app read every customer's driver license. staff/* is deny-all to
+// clients in firestore.rules; only the Firebase Console or the admin SDK can
+// populate it.
+//
+// Called by the FoodyzzHQ client on every sign-in. Also REVOKES: an account
+// removed from the allowlist (or flipped active:false) drops the claim on its
+// next sign-in.
+export const syncAdminClaim = onCall(async (request) => {
+  const uid = request.auth?.uid;
+  const phone = request.auth?.token.phone_number;
+  if (!uid || !phone) {
+    throw new HttpsError("unauthenticated", "Sign in required.");
+  }
+
+  const staff = await db.collection("staff").doc(phone).get();
+  const shouldBeAdmin = staff.exists && staff.data()?.active !== false;
+
+  // Read the claims off the auth RECORD, not off request.auth.token — the
+  // caller's token can be stale (claims don't invalidate an issued token), and
+  // comparing against the record keeps this a no-op on a repeat sign-in.
+  const existing = (await getAuth().getUser(uid)).customClaims || {};
+  const changed = (existing.admin === true) !== shouldBeAdmin;
+
+  if (changed) {
+    // Merge rather than replace: setCustomUserClaims overwrites the whole
+    // object, so a bare {admin:true} would drop any other claim added later.
+    const next: Record<string, unknown> = {...existing};
+    if (shouldBeAdmin) next.admin = true;
+    else delete next.admin;
+    await getAuth().setCustomUserClaims(uid, next);
+    console.log(`syncAdminClaim: ${phone} admin -> ${shouldBeAdmin}`);
+  }
+
+  // `changed` tells the client whether it must force-refresh its ID token.
+  return {admin: shouldBeAdmin, changed};
+});

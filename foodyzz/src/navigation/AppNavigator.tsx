@@ -10,7 +10,6 @@ import HomeScreen from '../screens/HomeScreen';
 import OrdersScreen from '../screens/OrdersScreen';
 import ProfileScreen from '../screens/ProfileScreen';
 import OrderWizard from '../screens/OrderWizard';
-import SupportScreen from '../screens/SupportScreen';
 import ChatScreen from '../screens/ChatScreen';
 import { useUserProfile } from '../context/UserProfileContext';
 
@@ -60,7 +59,9 @@ function MainTabs() {
       <Tab.Screen name="My Rentals" component={OrdersScreen} options={{
         tabBarIcon: ({ color }) => <Calendar size={20} color={color} />
       }} />
-      <Tab.Screen name="Chat" component={SupportScreen} options={{
+      {/* Same ChatScreen as the order thread — no orderId param means the global
+          FoodyzzHQ conversation. One design, two entry points. */}
+      <Tab.Screen name="Chat" component={ChatScreen} options={{
         tabBarIcon: ({ color }) => (
           <View>
             <MessageCircle size={20} color={color} />
@@ -101,11 +102,11 @@ export default function AppNavigator() {
           ),
         })}
       />
-      {/* Global FoodyzzHQ chat lives in the Chat tab (SupportScreen); this stack route
-          is the Account entry point to the same conversation. */}
-      <Stack.Screen name="Support" component={SupportScreen} />
-      {/* Per-order 1:1 chat, opened from a rental card in My Rentals. Threads by
-          orderId (the `messages` collection) — order-to-order with FoodyzzHQ. */}
+      {/* Both of these are the SAME screen as the Chat tab. `Support` is the Account
+          entry point to the global FoodyzzHQ conversation; `OrderChat` carries an
+          `orderId` param and threads that order (the `messages` collection). The
+          customer sees one chat design either way — only FoodyzzHQ sees the split. */}
+      <Stack.Screen name="Support" component={ChatScreen} />
       <Stack.Screen name="OrderChat" component={ChatScreen} />
     </Stack.Navigator>
   );

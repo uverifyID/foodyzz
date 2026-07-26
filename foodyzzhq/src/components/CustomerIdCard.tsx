@@ -15,8 +15,8 @@ import {
   View, Text, TouchableOpacity, Image, ActivityIndicator, Alert, Linking, Modal, ScrollView,
 } from 'react-native';
 import storage from '@react-native-firebase/storage';
-import { CreditCard, CheckCircle, Clock, Send, Phone, MessageSquare, X } from 'lucide-react-native';
-import { db, auth } from '../services/firebase';
+import { CreditCard, CheckCircle, Clock, Send, Phone, MessageSquare, X, AlertTriangle, RefreshCw } from 'lucide-react-native';
+import { db, auth, syncAdminClaim } from '../services/firebase';
 
 interface Props {
   order: any;
@@ -35,9 +35,28 @@ const DOC_LABEL: Record<DocKind, string> = {
 const isComplete = (doc: any, kind: DocKind): boolean =>
   kind === 'driverLicense' ? !!doc?.frontPath && !!doc?.backPath : !!doc?.frontPath;
 
+// Per-image resolution state. Failure has to be distinguishable from "still
+// fetching": a plain `url ?? spinner` renders a permanent spinner on a denied read,
+// which reads as a slow network and hides the actual cause (see `hint` below).
+type ImageState =
+  | { status: 'loading' }
+  | { status: 'ok'; url: string }
+  | { status: 'error'; code?: string };
+
+// storage/unauthorized here means the staff `admin` claim is missing from this
+// device's token — the documents exist, we just can't read them. Anything else is
+// a genuinely missing object or a network fault.
+const errorHint = (code?: string): string =>
+  code === 'storage/unauthorized'
+    ? 'No access — staff permissions'
+    : code === 'storage/object-not-found'
+      ? 'File missing'
+      : 'Could not load';
+
 export default function CustomerIdCard({ order, onMessage }: Props) {
   const [profile, setProfile] = useState<any>(null);
-  const [urls, setUrls] = useState<Record<string, string>>({});
+  const [images, setImages] = useState<Record<string, ImageState>>({});
+  const [reloadKey, setReloadKey] = useState(0);
   const [requesting, setRequesting] = useState(false);
   const [verifying, setVerifying] = useState(false);
   const [zoom, setZoom] = useState<string | null>(null);
@@ -64,26 +83,49 @@ export default function CustomerIdCard({ order, onMessage }: Props) {
   // locked with no button to unlock it.
   const allVerified = allUploaded && !!order.docsVerifiedAt;
 
-  // Resolve every present image to a display URL.
+  // Resolve every present image to a display URL, keeping per-image status so a
+  // failure surfaces as a retryable error tile rather than an endless spinner.
   useEffect(() => {
     let cancelled = false;
     const paths: Record<string, string> = {};
     if (license?.frontPath) paths['license-front'] = license.frontPath;
     if (license?.backPath) paths['license-back'] = license.backPath;
     if (address?.frontPath) paths['address-front'] = address.frontPath;
-    if (Object.keys(paths).length === 0) { setUrls({}); return; }
+    if (Object.keys(paths).length === 0) { setImages({}); return; }
+
+    setImages(Object.fromEntries(
+      Object.keys(paths).map((key) => [key, { status: 'loading' } as ImageState]),
+    ));
 
     Promise.all(
       Object.entries(paths).map(async ([key, path]) => {
-        try { return [key, await storage().ref(path).getDownloadURL()] as const; }
-        catch { return [key, ''] as const; }
+        try {
+          return [key, { status: 'ok', url: await storage().ref(path).getDownloadURL() }] as const;
+        } catch (e: any) {
+          // Logged, not swallowed — the code is the whole diagnosis.
+          console.warn(`CustomerIdCard: ${path} failed [${e?.code}]`, e?.message);
+          return [key, { status: 'error', code: e?.code }] as const;
+        }
       }),
     ).then((pairs) => {
       if (cancelled) return;
-      setUrls(Object.fromEntries(pairs.filter(([, v]) => v)));
+      setImages(Object.fromEntries(pairs));
     });
     return () => { cancelled = true; };
-  }, [license?.frontPath, license?.backPath, address?.frontPath]);
+  }, [license?.frontPath, license?.backPath, address?.frontPath, reloadKey]);
+
+  const anyFailed = Object.values(images).some((s) => s.status === 'error');
+  const deniedFailure = Object.values(images).some(
+    (s) => s.status === 'error' && s.code === 'storage/unauthorized',
+  );
+
+  // Re-run the fetch. On a permission failure, re-sync the staff claim first: the
+  // usual cause is a token issued before the account was added to the allowlist,
+  // and re-syncing refreshes it so the retry actually has a chance to succeed.
+  const retryImages = async () => {
+    if (deniedFailure) await syncAdminClaim(true).catch(() => {});
+    setReloadKey((k) => k + 1);
+  };
 
   // Flags the order so the customer app prompts, and posts a chat record. The push
   // itself is sent by the onOrderIdDocsRequested Cloud Function, which triggers off
@@ -100,6 +142,7 @@ export default function CustomerIdCard({ order, onMessage }: Props) {
         orderId: order.id,
         senderPhone: auth().currentUser?.phoneNumber || order.providerId,
         senderName: order.providerName || 'FoodyzzHQ',
+        source: 'order',
         recipientPhone: order.customerPhone,
         text:
           'Before we deliver your bike we need a photo of your driver license (front and back) ' +
@@ -145,22 +188,44 @@ export default function CustomerIdCard({ order, onMessage }: Props) {
           {DOC_LABEL[kind]}
         </Text>
         <View className="flex-row">
-          {keys.map((key) => (
-            <TouchableOpacity
-              key={key}
-              className="flex-1 mr-2"
-              onPress={() => urls[key] && setZoom(urls[key])}
-              activeOpacity={0.8}
-            >
-              <View className="border border-slate-200 rounded-xl overflow-hidden bg-slate-100 h-24 items-center justify-center">
-                {urls[key] ? (
-                  <Image source={{ uri: urls[key] }} className="w-full h-full" resizeMode="cover" />
-                ) : (
-                  <ActivityIndicator size="small" color="#94a3b8" />
-                )}
-              </View>
-            </TouchableOpacity>
-          ))}
+          {keys.map((key) => {
+            const state = images[key] ?? { status: 'loading' as const };
+            return (
+              <TouchableOpacity
+                key={key}
+                className="flex-1 mr-2"
+                onPress={() => {
+                  if (state.status === 'ok') setZoom(state.url);
+                  else if (state.status === 'error') retryImages();
+                }}
+                activeOpacity={0.8}
+              >
+                <View
+                  className={`border rounded-xl overflow-hidden h-24 items-center justify-center px-1 ${
+                    state.status === 'error'
+                      ? 'border-red-200 bg-red-50'
+                      : 'border-slate-200 bg-slate-100'
+                  }`}
+                >
+                  {state.status === 'ok' ? (
+                    <Image source={{ uri: state.url }} className="w-full h-full" resizeMode="cover" />
+                  ) : state.status === 'error' ? (
+                    <>
+                      <AlertTriangle size={16} color="#dc2626" />
+                      <Text className="text-[8px] font-black text-red-600 uppercase tracking-wide text-center mt-1">
+                        {errorHint(state.code)}
+                      </Text>
+                      <Text className="text-[8px] font-bold text-red-400 uppercase tracking-wide mt-0.5">
+                        Tap to retry
+                      </Text>
+                    </>
+                  ) : (
+                    <ActivityIndicator size="small" color="#94a3b8" />
+                  )}
+                </View>
+              </TouchableOpacity>
+            );
+          })}
         </View>
       </View>
     );
@@ -193,12 +258,27 @@ export default function CustomerIdCard({ order, onMessage }: Props) {
           {renderDoc('driverLicense', ['license-front', 'license-back'])}
           {renderDoc('addressProof', ['address-front'])}
 
+          {/* Never let staff approve documents they could not actually see. */}
+          {anyFailed && (
+            <TouchableOpacity
+              onPress={retryImages}
+              className="bg-red-50 border border-red-200 rounded-xl px-3 py-2 mb-2 flex-row items-center"
+            >
+              <RefreshCw size={13} color="#dc2626" />
+              <Text className="ml-2 flex-1 text-[10px] font-bold text-red-700">
+                {deniedFailure
+                  ? 'This device isn’t authorised to view customer documents. Ask an admin to add your number to the staff list, then tap to retry.'
+                  : 'Some documents could not be loaded. Tap to retry.'}
+              </Text>
+            </TouchableOpacity>
+          )}
+
           {!allVerified && (
             <TouchableOpacity
               onPress={verifyDocuments}
-              disabled={verifying}
+              disabled={verifying || anyFailed}
               className="bg-[#86B54F] py-3 rounded-xl items-center border-2 border-black mt-1"
-              style={{ opacity: verifying ? 0.6 : 1 }}
+              style={{ opacity: verifying || anyFailed ? 0.6 : 1 }}
             >
               {verifying ? (
                 <ActivityIndicator size="small" color="black" />

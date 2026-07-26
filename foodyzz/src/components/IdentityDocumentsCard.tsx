@@ -6,7 +6,7 @@
 // Used in Account → Profile, and right after FoodyzzHQ accepts an order.
 import React, { useEffect, useState } from 'react';
 import { View, Text, TouchableOpacity, Image, ActivityIndicator, Alert } from 'react-native';
-import { CreditCard, FileText, CheckCircle, Clock } from 'lucide-react-native';
+import { CreditCard, FileText, CheckCircle, Clock, ShieldCheck, Lock } from 'lucide-react-native';
 import {
   pickDocumentImage,
   uploadDocumentImage,
@@ -35,14 +35,24 @@ export default function IdentityDocumentsCard({ profile, subtitle, onSaved }: Pr
   const [local, setLocal] = useState<Partial<Record<Slot, string>>>({});
   const [remote, setRemote] = useState<Partial<Record<Slot, string>>>({});
   const [busy, setBusy] = useState(false);
+  // Verified documents are masked by default. This flips the card back into
+  // capture mode so a customer can replace them (new licence, moved address).
+  const [replacing, setReplacing] = useState(false);
 
   // Both documents present AND reviewed is the fully-verified state.
   const bothOnFile = !!license?.frontPath && !!license?.backPath && !!address?.frontPath;
   const verified = bothOnFile && !!license?.reviewedAt && !!address?.reviewedAt;
   const rejected = license?.rejectedReason || address?.rejectedReason;
+  // Once FoodyzzHQ has verified them there's no reason to keep a customer's licence
+  // and address proof rendered in their account — the card shows a sealed placeholder
+  // and the verified badge instead. Uploading a replacement unmasks the tiles for
+  // the new images only.
+  const masked = verified && !replacing;
 
   useEffect(() => {
     let cancelled = false;
+    // Don't even resolve download URLs while masked — nothing would render them.
+    if (masked) { setRemote({}); return; }
     const paths: Partial<Record<Slot, string>> = {};
     if (license?.frontPath) paths.licenseFront = license.frontPath;
     if (license?.backPath) paths.licenseBack = license.backPath;
@@ -59,7 +69,7 @@ export default function IdentityDocumentsCard({ profile, subtitle, onSaved }: Pr
       setRemote(Object.fromEntries(pairs.filter(([, v]) => v)) as Partial<Record<Slot, string>>);
     });
     return () => { cancelled = true; };
-  }, [license?.frontPath, license?.backPath, address?.frontPath]);
+  }, [license?.frontPath, license?.backPath, address?.frontPath, masked]);
 
   const capture = async (slot: Slot, source: 'camera' | 'library') => {
     try {
@@ -104,6 +114,7 @@ export default function IdentityDocumentsCard({ profile, subtitle, onSaved }: Pr
       await saveDocumentToProfile('addressProof', addressFront);
 
       setLocal({});
+      setReplacing(false);
       onSaved?.();
       Alert.alert('Documents submitted', 'FoodyzzHQ will verify your ID and proof of address before delivery.');
     } catch (e: any) {
@@ -114,33 +125,48 @@ export default function IdentityDocumentsCard({ profile, subtitle, onSaved }: Pr
   };
 
   const renderSlot = (slot: Slot, label: string) => {
-    const uri = local[slot] || remote[slot];
+    // While replacing, a stored image stays sealed — only the freshly picked one shows.
+    const uri = local[slot] || (verified ? undefined : remote[slot]);
+    const sealed = masked || (replacing && !local[slot]);
     return (
       <View key={slot} className="flex-1 mx-1">
         <Text className="text-[9px] font-black text-slate-400 uppercase tracking-wide mb-1">{label}</Text>
-        <View className="border-2 border-black rounded-xl overflow-hidden bg-slate-100 h-20 items-center justify-center">
+        <View
+          className={`border-2 rounded-xl overflow-hidden h-20 items-center justify-center ${
+            sealed ? 'border-emerald-300 bg-emerald-50' : 'border-black bg-slate-100'
+          }`}
+        >
           {uri ? (
             <Image source={{ uri }} className="w-full h-full" resizeMode="cover" />
+          ) : sealed ? (
+            <>
+              <Lock size={16} color="#059669" />
+              <Text className="text-[8px] font-black uppercase text-emerald-600 tracking-widest mt-1">On file</Text>
+            </>
           ) : slot === 'address' ? (
             <FileText size={22} color="#94a3b8" />
           ) : (
             <CreditCard size={22} color="#94a3b8" />
           )}
         </View>
-        <View className="flex-row mt-1.5">
-          <TouchableOpacity
-            onPress={() => capture(slot, 'camera')}
-            className="flex-1 mr-0.5 py-1.5 border-2 border-black rounded-lg bg-white items-center"
-          >
-            <Text className="text-[8px] font-black uppercase text-slate-700">Camera</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            onPress={() => capture(slot, 'library')}
-            className="flex-1 ml-0.5 py-1.5 border-2 border-black rounded-lg bg-white items-center"
-          >
-            <Text className="text-[8px] font-black uppercase text-slate-700">Upload</Text>
-          </TouchableOpacity>
-        </View>
+        {/* Capture controls disappear while masked — "Upload new documents" brings
+            them back rather than leaving them sitting under verified documents. */}
+        {!masked && (
+          <View className="flex-row mt-1.5">
+            <TouchableOpacity
+              onPress={() => capture(slot, 'camera')}
+              className="flex-1 mr-0.5 py-1.5 border-2 border-black rounded-lg bg-white items-center"
+            >
+              <Text className="text-[8px] font-black uppercase text-slate-700">Camera</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              onPress={() => capture(slot, 'library')}
+              className="flex-1 ml-0.5 py-1.5 border-2 border-black rounded-lg bg-white items-center"
+            >
+              <Text className="text-[8px] font-black uppercase text-slate-700">Upload</Text>
+            </TouchableOpacity>
+          </View>
+        )}
       </View>
     );
   };
@@ -166,8 +192,10 @@ export default function IdentityDocumentsCard({ profile, subtitle, onSaved }: Pr
       </View>
 
       <Text className="text-[11px] font-bold text-slate-400 mb-3">
-        {subtitle ||
-          'Driver license (both sides) and a proof of address — a utility bill, bank statement or lease. Submit all three together to skip the ID check at delivery.'}
+        {masked
+          ? 'Your driver license and proof of address are verified and kept sealed. Upload new ones any time — a replacement goes back to FoodyzzHQ for review.'
+          : subtitle ||
+            'Driver license (both sides) and a proof of address — a utility bill, bank statement or lease. Submit all three together to skip the ID check at delivery.'}
       </Text>
 
       {rejected ? (
@@ -182,23 +210,45 @@ export default function IdentityDocumentsCard({ profile, subtitle, onSaved }: Pr
         {SLOTS.map((s) => renderSlot(s.key, s.label))}
       </View>
 
-      {/* Only actionable once all three are present, so a partial set never reaches
-          the reviewer. */}
-      {(dirty || !bothOnFile) && (
+      {/* Verified + masked: the only action is to start a replacement. */}
+      {masked && (
         <TouchableOpacity
-          disabled={busy || !allReady}
+          onPress={() => setReplacing(true)}
+          className="mt-4 py-3 rounded-xl border-2 border-black items-center bg-white flex-row justify-center"
+        >
+          <ShieldCheck size={14} color="#059669" />
+          <Text className="ml-2 font-black uppercase text-[11px] text-slate-700">Upload new documents</Text>
+        </TouchableOpacity>
+      )}
+
+      {/* Only actionable once all three are present, so a partial set never reaches
+          the reviewer. While replacing verified documents, at least one new image is
+          required — otherwise "submit" would just re-send the same approved set. */}
+      {!masked && (dirty || !bothOnFile) && (
+        <TouchableOpacity
+          disabled={busy || !allReady || (replacing && !dirty)}
           onPress={submit}
           className={`mt-4 py-3 rounded-xl border-2 border-black items-center shadow-brutalist ${
-            allReady ? 'bg-brand-green' : 'bg-slate-200'
+            allReady && !(replacing && !dirty) ? 'bg-brand-green' : 'bg-slate-200'
           }`}
         >
           {busy ? (
             <ActivityIndicator color="#000000" />
           ) : (
-            <Text className={`font-black uppercase ${allReady ? 'text-black' : 'text-slate-400'}`}>
+            <Text className={`font-black uppercase ${allReady && !(replacing && !dirty) ? 'text-black' : 'text-slate-400'}`}>
               {allReady ? 'Submit documents' : 'Add all three to submit'}
             </Text>
           )}
+        </TouchableOpacity>
+      )}
+
+      {replacing && (
+        <TouchableOpacity
+          onPress={() => { setLocal({}); setReplacing(false); }}
+          disabled={busy}
+          className="mt-2 py-2.5 items-center"
+        >
+          <Text className="font-black uppercase text-[10px] text-slate-400">Cancel — keep verified documents</Text>
         </TouchableOpacity>
       )}
     </View>

@@ -17,10 +17,16 @@ import { COLORS } from '../theme';
 const Tab = createBottomTabNavigator();
 const Stack = createNativeStackNavigator();
 
-// Total unread across ALL support threads (customers + providers): messages not
-// yet read by admin and not sent by admin/bot. Drives the Chat tab red dot.
-function useHqSupportUnread(): boolean {
-  const [unread, setUnread] = useState(false);
+// Anything waiting in the Chat Center, across BOTH inboxes it now merges:
+//   • general threads → supportMessages not yet read by admin and not sent by
+//     admin/bot;
+//   • order threads   → orders flagged providerUnreadMessage by
+//     onCustomerMessageSent, read off the provider-safe mirror.
+// Drives the Chat tab red dot.
+function useHqChatUnread(): boolean {
+  const [supportUnread, setSupportUnread] = useState(false);
+  const [orderUnread, setOrderUnread] = useState(false);
+
   useEffect(() => {
     // Bound this always-on listener: the badge only needs to know whether ANY
     // unread messages exist, so a cap of 50 is plenty (was unbounded for the
@@ -31,15 +37,25 @@ function useHqSupportUnread(): boolean {
       .onSnapshot((snap) => {
         const docs = snap?.docs?.map((d) => d.data() as any) || [];
         const hasIncoming = docs.some((m) => m?.senderPhone !== 'admin' && m?.senderPhone !== 'system');
-        setUnread(hasIncoming);
-      }, () => setUnread(false));
+        setSupportUnread(hasIncoming);
+      }, () => setSupportUnread(false));
     return unsub;
   }, []);
-  return unread;
+
+  useEffect(() => {
+    // Single-field equality — no composite index needed.
+    const unsub = db.collection('providerOrders')
+      .where('providerUnreadMessage', '==', true)
+      .limit(20)
+      .onSnapshot((snap) => setOrderUnread((snap?.docs?.length || 0) > 0), () => setOrderUnread(false));
+    return unsub;
+  }, []);
+
+  return supportUnread || orderUnread;
 }
 
 function MainTabs() {
-  const hqUnread = useHqSupportUnread();
+  const hqUnread = useHqChatUnread();
   return (
     <Tab.Navigator screenOptions={{
       headerShown: false,

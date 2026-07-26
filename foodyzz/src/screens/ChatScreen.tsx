@@ -1,64 +1,113 @@
-import React, { useState, useEffect, useRef, useLayoutEffect } from 'react';
+// The ONE chat screen the customer ever sees.
+//
+// There used to be two — SupportScreen (global FoodyzzHQ thread, WhatsApp-styled)
+// and this one (per-order thread, brutalist) — with different layouts, different
+// bubbles and different bugs. A customer has no idea why "chat" looks different
+// depending on where they tapped, so both entry points now render THIS screen:
+//
+//   Chat tab / Account → Support   → no `orderId` param → general FoodyzzHQ thread
+//                                    (`supportMessages`, tagged source:'footer')
+//   My Rentals → order card Chat   → `orderId` param    → that order's thread
+//                                    (`messages`, tagged source:'order')
+//
+// The customer sees one design either way. The order/non-order distinction is
+// carried in the data (collection + `source` + `orderId`) so FoodyzzHQ can tell
+// them apart in its Chat Center — that's where the difference is meant to show.
+import React, { useState, useEffect, useRef, useLayoutEffect, useMemo, useCallback } from 'react';
 import {
     View,
     Text,
-    ScrollView,
+    FlatList,
     TouchableOpacity,
     TextInput,
     ActivityIndicator,
     KeyboardAvoidingView,
     Platform,
-    Alert
+    Alert,
 } from 'react-native';
-import { ArrowLeft, Send, MessageSquare } from 'lucide-react-native';
-import { useNavigation, useRoute } from '@react-navigation/native';
+import { ArrowLeft, Send, MessageSquare, Clock } from 'lucide-react-native';
+import { useNavigation, useRoute, useIsFocused } from '@react-navigation/native';
 import { useHeaderHeight } from '@react-navigation/elements';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { auth, db } from '../services/firebase';
-import { COLORS, LAYOUT } from '../theme';
+import { COLORS } from '../theme';
 import { AppRole } from '../types';
+import { useUserProfile } from '../context/UserProfileContext';
+
+// One shape for both threads so the renderer never branches on the collection.
+type ChatMessage = {
+    id: string;
+    text: string;
+    timestamp: string;
+    mine: boolean;
+    senderName?: string;
+    // A message that's been written locally but hasn't come back on the snapshot
+    // yet. Rendered immediately (dimmed) so a sent message is ALWAYS visible the
+    // instant it's sent — the old screen relied entirely on the listener echo,
+    // which is what made "hello" appear only after closing and reopening chat.
+    pending?: boolean;
+};
+
+const newMessageId = () => `msg_${Math.random().toString(36).substring(2, 11).toUpperCase()}`;
 
 export default function ChatScreen() {
-    const navigation = useNavigation();
-    const route = useRoute();
+    const navigation = useNavigation<any>();
+    const route = useRoute<any>();
+    const isFocused = useIsFocused();
     const insets = useSafeAreaInsets();
     const headerHeight = useHeaderHeight();
-    const { orderId } = route.params as { orderId: string };
+    // Present → order-scoped thread. Absent → global FoodyzzHQ thread.
+    const orderId: string | undefined = route.params?.orderId;
+    const isOrderThread = !!orderId;
 
     // `auth` is the RN-Firebase module factory — it must be CALLED to get the
     // instance. Reading `auth.currentUser` (no parens) is always undefined, which
-    // made handleSendMessage bail at the `!user?.phoneNumber` guard so customer
-    // messages never reached the provider.
+    // made the send handler bail at the `!user?.phoneNumber` guard so customer
+    // messages never reached FoodyzzHQ.
     const user = auth().currentUser;
+    const { profile } = useUserProfile();
     const [inputText, setInputText] = useState('');
-    const [messages, setMessages] = useState<any[]>([]);
+    const [remote, setRemote] = useState<ChatMessage[]>([]);
+    const [pending, setPending] = useState<ChatMessage[]>([]);
     const [loading, setLoading] = useState(true);
     const [orderData, setOrderData] = useState<any>(null);
-    const scrollViewRef = useRef<ScrollView>(null);
+    const listRef = useRef<FlatList<ChatMessage>>(null);
 
-    // In the independent Customer app, the role is fixed. 
-    // For the Provider app version, this would be set to 'provider'.
-    const SENDER_ROLE = AppRole.CUSTOMER;
+    // Drop optimistic echoes once the real doc lands on the snapshot.
+    const messages = useMemo(() => {
+        const seen = new Set(remote.map((m) => m.id));
+        return [...remote, ...pending.filter((p) => !seen.has(p.id))];
+    }, [remote, pending]);
 
     useLayoutEffect(() => {
         navigation.setOptions({
             headerShown: true,
             headerTitle: () => (
                 <View>
-                    <Text className="text-[8px] font-mono font-black text-indigo-600 uppercase tracking-widest leading-none">Order Dispatch</Text>
-                    <Text className="text-sm font-black text-black uppercase tracking-tight leading-none">{orderData?.providerName || 'Assigning Partner...'}</Text>
-                    <Text className="text-[7px] font-mono text-slate-400 font-bold uppercase mt-0.5">REF: {orderId.replace(/^order_/, '')}</Text>
+                    <Text className="text-[8px] font-mono font-black text-indigo-600 uppercase tracking-widest leading-none">
+                        {isOrderThread ? 'Order Dispatch' : 'Direct Line'}
+                    </Text>
+                    <Text className="text-sm font-black text-black uppercase tracking-tight leading-none">
+                        {isOrderThread ? (orderData?.providerName || 'Assigning Partner...') : 'FoodyzzHQ'}
+                    </Text>
+                    <Text className="text-[7px] font-mono text-slate-400 font-bold uppercase mt-0.5">
+                        {isOrderThread ? `REF: ${orderId!.replace(/^order_/, '')}` : 'We usually reply in minutes'}
+                    </Text>
                 </View>
             ),
             headerTitleAlign: 'left',
-            headerLeft: () => (
-                <TouchableOpacity
-                    onPress={() => navigation.goBack()}
-                    className="p-2 bg-slate-100 rounded-xl border-2 border-black ml-4 mr-2"
-                >
-                    <ArrowLeft size={18} color="black" />
-                </TouchableOpacity>
-            ),
+            // As the Chat tab there's nothing to go back to, so only show the arrow
+            // when this screen was pushed (order card / Account → Support).
+            headerLeft: navigation.canGoBack()
+                ? () => (
+                    <TouchableOpacity
+                        onPress={() => navigation.goBack()}
+                        className="p-2 bg-slate-100 rounded-xl border-2 border-black ml-4 mr-2"
+                    >
+                        <ArrowLeft size={18} color="black" />
+                    </TouchableOpacity>
+                )
+                : undefined,
             headerRight: () => (
                 <View className="bg-indigo-50 px-2 py-0.5 rounded-lg border-2 border-indigo-600 mr-4">
                     <Text className="text-[8px] font-black text-indigo-600 uppercase">Secure Line</Text>
@@ -66,81 +115,148 @@ export default function ChatScreen() {
             ),
             headerStyle: { elevation: 0, shadowOpacity: 0, borderBottomWidth: 4, borderBottomColor: 'black', backgroundColor: 'white' },
         });
-    }, [navigation, orderData, orderId]);
+    }, [navigation, orderData, orderId, isOrderThread]);
 
+    // Switching between threads (tab → order card) must not leak the previous
+    // thread's bubbles into the new one for a frame.
     useEffect(() => {
-        if (!orderId) return;
+        setRemote([]);
+        setPending([]);
+        setLoading(true);
+    }, [orderId]);
 
-        // 1. Fetch Order Details for Header Information, and clear the customer
-        //    unread flag so the My Rentals card alert resets on open (mirror of
-        //    the provider side clearing providerUnreadMessage).
-        const fetchOrder = async () => {
-            try {
-                const orderRef = db.collection('orders').doc(orderId);
-                const orderSnap = await orderRef.get();
-                if (orderSnap && orderSnap.exists) {
-                    setOrderData(orderSnap.data());
-                    if (orderSnap.data()?.customerUnreadMessage) {
-                        orderRef.update({ customerUnreadMessage: false }).catch(() => {});
-                    }
+    // ── Order-scoped thread: `messages` where orderId == ─────────────────────
+    useEffect(() => {
+        if (!isOrderThread) return;
+
+        // Order context for the header + clear the customer unread flag so the My
+        // Rentals card alert resets on open (mirror of the provider side clearing
+        // providerUnreadMessage).
+        const orderRef = db.collection('orders').doc(orderId!);
+        orderRef.get()
+            .then((snap) => {
+                if (!snap?.exists) return;
+                setOrderData(snap.data());
+                if (snap.data()?.customerUnreadMessage) {
+                    orderRef.update({ customerUnreadMessage: false }).catch(() => {});
                 }
-            } catch (error) {
-                console.error("Error fetching order context:", error);
-            }
-        };
-        fetchOrder();
+            })
+            .catch((e) => console.error('Error fetching order context:', e));
 
-        // 2. Subscribe to Real-Time Messages for this specific Order.
-        //    Bound the read: fetch only the 100 most recent (DESC + limit) instead
-        //    of the whole thread, then reverse so display stays oldest→newest.
+        // Bound the read: only the 100 most recent (DESC + limit) instead of the
+        // whole thread, then reverse so display stays oldest→newest.
         const unsub = db.collection('messages')
             .where('orderId', '==', orderId)
             .orderBy('timestamp', 'desc')
             .limit(100)
             .onSnapshot((snapshot) => {
-            if (!snapshot) return;
-            const msgs = snapshot.docs.map(d => ({
-                id: d.id,
-                ...d.data()
-            })).reverse();
-            setMessages(msgs);
-            setLoading(false);
-        }, (error) => {
-            console.error("Firestore Messaging Error:", error);
-            setLoading(false);
-        });
+                if (!snapshot) return;
+                setRemote(snapshot.docs.map((d) => {
+                    const data = d.data() as any;
+                    return {
+                        id: d.id,
+                        text: data.text,
+                        timestamp: data.timestamp,
+                        mine: data.senderRole === AppRole.CUSTOMER,
+                        senderName: data.senderName || 'FoodyzzHQ',
+                    };
+                }).reverse());
+                setLoading(false);
+            }, (error) => {
+                console.error('Firestore Messaging Error:', error);
+                setLoading(false);
+            });
 
         return unsub;
-    }, [orderId]);
+    }, [orderId, isOrderThread]);
 
+    // ── General thread: `supportMessages` where userPhone == ─────────────────
     useEffect(() => {
-        // Auto-scroll to the most recent message
-        if (scrollViewRef.current) {
-            scrollViewRef.current.scrollToEnd({ animated: true });
-        }
-    }, [messages]);
+        if (isOrderThread) return;
+        const phone = user?.phoneNumber;
+        if (!phone) return;
 
-    const handleSendMessage = async () => {
-        if (!inputText.trim() || !user?.phoneNumber) return;
+        const unsub = db.collection('supportMessages')
+            .where('userPhone', '==', phone)
+            .orderBy('timestamp', 'desc')
+            .limit(100)
+            .onSnapshot((snapshot) => {
+                if (!snapshot) return;
+                setRemote(snapshot.docs.map((d) => {
+                    const data = d.data() as any;
+                    return {
+                        id: d.id,
+                        text: data.text,
+                        timestamp: data.timestamp,
+                        mine: data.senderPhone === phone,
+                        senderName: data.senderName || 'FoodyzzHQ',
+                    };
+                }).reverse());
+                setLoading(false);
+            }, (error) => {
+                console.error('Error fetching support messages:', error);
+                setLoading(false);
+            });
 
-        // Generate visually relatable Document ID as per requirements
-        const msgId = `msg_${Math.random().toString(36).substring(2, 11).toUpperCase()}`;
-        const newMsg = {
-            id: msgId,
-            orderId,
-            senderPhone: user.phoneNumber,
-            senderRole: SENDER_ROLE,
-            text: inputText.trim(),
-            timestamp: new Date().toISOString()
-        };
+        return unsub;
+    }, [user, isOrderThread]);
+
+    // While the general thread is open, stamp it read so the Chat tab's unread dot
+    // clears. Fires once on focus — `remote` is intentionally NOT a dependency,
+    // otherwise it would re-write the doc on every inbound message.
+    useEffect(() => {
+        if (isOrderThread || !isFocused || !user?.phoneNumber) return;
+        db.collection('users').doc(user.phoneNumber)
+            .set({ supportLastReadAt: new Date().toISOString() }, { merge: true })
+            .catch(() => {});
+    }, [isFocused, user, isOrderThread]);
+
+    const handleSend = useCallback(async () => {
+        const text = inputText.trim();
+        const phone = user?.phoneNumber;
+        if (!text || !phone) return;
+
+        const msgId = newMessageId();
+        const timestamp = new Date().toISOString();
+        const senderName = profile?.name || 'Customer';
+
+        // Show it immediately, clear the box, then write.
+        setPending((prev) => [...prev, { id: msgId, text, timestamp, mine: true, senderName, pending: true }]);
+        setInputText('');
 
         try {
-            await db.collection('messages').doc(msgId).set(newMsg);
-            setInputText('');
+            if (isOrderThread) {
+                await db.collection('messages').doc(msgId).set({
+                    id: msgId,
+                    orderId,
+                    senderPhone: phone,
+                    senderName,
+                    senderRole: AppRole.CUSTOMER,
+                    // Lets FoodyzzHQ tell an order thread from the global one without
+                    // inferring it from the collection.
+                    source: 'order',
+                    text,
+                    timestamp,
+                });
+            } else {
+                await db.collection('supportMessages').doc(msgId).set({
+                    userPhone: phone,
+                    userName: senderName,
+                    userRole: AppRole.CUSTOMER,
+                    senderPhone: phone,
+                    senderName,
+                    source: 'footer',
+                    text,
+                    timestamp,
+                    isReadByAdmin: false, // FoodyzzHQ marks it read when it opens the thread
+                });
+            }
         } catch (error) {
-            Alert.alert("Connection Error", "Message could not be sent to the dispatch node.");
+            setPending((prev) => prev.filter((m) => m.id !== msgId));
+            setInputText(text);
+            Alert.alert('Connection Error', 'Message could not be sent. Please try again.');
         }
-    };
+    }, [inputText, user, profile, isOrderThread, orderId]);
 
     if (loading) {
         return (
@@ -156,39 +272,55 @@ export default function ChatScreen() {
             keyboardVerticalOffset={Platform.OS === 'ios' ? headerHeight : 0}
             className="flex-1 bg-slate-50"
         >
-
-            {/* Messaging Stream Feed */}
-            <ScrollView
-                ref={scrollViewRef}
-                className="flex-1 p-4"
+            {/* Virtualized so a long thread doesn't mount every bubble. Auto-scroll is
+                driven by onContentSizeChange rather than a messages-length effect: the
+                effect fired BEFORE the new bubble had laid out, so the list stopped
+                short of the bottom and a just-sent message sat below the fold. */}
+            <FlatList
+                ref={listRef}
+                data={messages}
+                keyExtractor={(item) => item.id}
+                className="flex-1"
+                contentContainerStyle={{ padding: 16, flexGrow: 1 }}
                 showsVerticalScrollIndicator={false}
-            >
-                {messages.length === 0 ? (
+                onContentSizeChange={() => listRef.current?.scrollToEnd({ animated: true })}
+                onLayout={() => listRef.current?.scrollToEnd({ animated: false })}
+                ListEmptyComponent={
                     <View className="mt-10 p-10 bg-white border-2 border-dashed border-slate-200 rounded-[32px] items-center">
                         <MessageSquare size={32} color="#cbd5e1" />
                         <Text className="text-slate-400 font-bold text-center text-xs mt-3 uppercase leading-relaxed">
-                            Dispatch Line Connected.{"\n"}Contact the team about your rental.
+                            {isOrderThread
+                                ? 'Dispatch Line Connected.\nContact the team about your rental.'
+                                : 'Chat with FoodyzzHQ.\nAsk us anything — we reply fast.'}
                         </Text>
                     </View>
-                ) : (
-                    messages.map((m, i) => {
-                        const isMe = m.senderRole === SENDER_ROLE;
-                        return (
-                            <View key={m.id || i} className={`flex-row ${isMe ? 'justify-end' : 'justify-start'} mb-4`}>
-                                <View className={`max-w-[85%] p-3 rounded-2xl border-2 border-black shadow-sm ${isMe ? 'bg-indigo-600 rounded-tr-none' : 'bg-white rounded-tl-none'
-                                    }`}>
-                                    <Text className={`text-[11px] font-bold leading-relaxed ${isMe ? 'text-white' : 'text-slate-800'}`}>
-                                        {m.text}
-                                    </Text>
-                                    <Text className={`text-[7.5px] font-mono font-black uppercase mt-2 text-right ${isMe ? 'text-indigo-200' : 'text-slate-400'}`}>
-                                        {new Date(m.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                                    </Text>
-                                </View>
+                }
+                renderItem={({ item: m }) => (
+                    <View className={`flex-row ${m.mine ? 'justify-end' : 'justify-start'} mb-4`}>
+                        <View
+                            style={m.pending ? { opacity: 0.6 } : undefined}
+                            className={`max-w-[85%] p-3 rounded-2xl border-2 border-black shadow-sm ${
+                                m.mine ? 'bg-indigo-600 rounded-tr-none' : 'bg-white rounded-tl-none'
+                            }`}
+                        >
+                            {!m.mine && (
+                                <Text className="text-[8px] font-mono font-black uppercase mb-1 text-slate-400">
+                                    {m.senderName}
+                                </Text>
+                            )}
+                            <Text className={`text-[11px] font-bold leading-relaxed ${m.mine ? 'text-white' : 'text-slate-800'}`}>
+                                {m.text}
+                            </Text>
+                            <View className="flex-row items-center justify-end gap-1 mt-2">
+                                {m.pending && <Clock size={8} color={m.mine ? '#c7d2fe' : '#94a3b8'} />}
+                                <Text className={`text-[7.5px] font-mono font-black uppercase ${m.mine ? 'text-indigo-200' : 'text-slate-400'}`}>
+                                    {new Date(m.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                </Text>
                             </View>
-                        );
-                    })
+                        </View>
+                    </View>
                 )}
-            </ScrollView>
+            />
 
             {/* Input Control Block */}
             <View
@@ -198,15 +330,16 @@ export default function ChatScreen() {
                 <TextInput
                     value={inputText}
                     onChangeText={setInputText}
-                    placeholder="Send a message..."
+                    placeholder={isOrderThread ? 'Message about this order...' : 'Message FoodyzzHQ...'}
                     placeholderTextColor="#94a3b8"
                     className="flex-1 bg-slate-50 border-2 border-black rounded-2xl px-4 py-3 text-xs font-bold text-black focus:bg-stone-50"
                 />
                 <TouchableOpacity
-                    onPress={handleSendMessage}
+                    onPress={handleSend}
                     disabled={!inputText.trim()}
-                    className={`w-12 h-12 rounded-2xl items-center justify-center border-2 border-black shadow-brutalist ${inputText.trim() ? 'bg-white' : 'bg-slate-200 opacity-50'
-                        }`}
+                    className={`w-12 h-12 rounded-2xl items-center justify-center border-2 border-black shadow-brutalist ${
+                        inputText.trim() ? 'bg-white' : 'bg-slate-200 opacity-50'
+                    }`}
                 >
                     <Send size={18} color={inputText.trim() ? '#507425' : '#94a3b8'} />
                 </TouchableOpacity>

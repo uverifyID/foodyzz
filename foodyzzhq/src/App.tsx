@@ -18,7 +18,7 @@ import Constants from 'expo-constants';
 import ReactNativeAsyncStorage from '@react-native-async-storage/async-storage';
 
 // Firebase initialization and Auth state
-import { auth, db, saveProviderFcmToken, onAuthStateChanged, signOutClean, signOutColdStart, getActiveProviderId } from './services/firebase';
+import { auth, db, saveProviderFcmToken, onAuthStateChanged, signOutClean, signOutColdStart, getActiveProviderId, syncAdminClaim } from './services/firebase';
 import { playNotificationSound, stopCurrentSound, SOUND_NAMES } from './services/soundPlayer';
 import type { FirebaseAuthTypes } from '@react-native-firebase/auth';
 
@@ -162,6 +162,11 @@ export default function App() {
       }
       setUser(authenticatedUser);
       if (initializing) setInitializing(false);
+      // Pull the staff `admin` claim onto this token before any screen reads a
+      // customer's identity documents — Storage rules gate those on the claim.
+      // Fire-and-forget: it self-guards against the re-entry its own token refresh
+      // causes, and a failure only costs a retry on the next auth event.
+      if (authenticatedUser) syncAdminClaim().catch(() => {});
       // Re-evaluate onboarding for whatever store is now active (login, logout, switch).
       subscribeOnboarded();
     });
@@ -250,8 +255,15 @@ export default function App() {
 
       if (navigationRef.isReady()) {
         if (data.type === 'NEW_CUSTOMER_MESSAGE' && data.orderId) {
-          // Deep-link directly to the chat screen
+          // Order chat → that order's thread.
           navigationRef.navigate('Chat', { orderId: data.orderId });
+        } else if (data.type === 'NEW_CUSTOMER_SUPPORT_MESSAGE' || data.type === 'NEW_PROVIDER_SUPPORT_MESSAGE') {
+          // General chat → the Chat Center, opened on that person's thread.
+          navigationRef.navigate('Main', { screen: 'HQChat', params: { openPhone: data.userPhone } });
+        } else if (data.type === 'ID_DOCS_UPLOADED') {
+          // The customer just sent their documents — Dispatch is where the accepted
+          // order card (and its CustomerIdCard review panel) lives.
+          navigationRef.navigate('Dispatch');
         } else if (data.type === 'BROADCAST_ORDER' || data.type === 'DIRECT_ORDER' || data.type === 'ORDER_CANCELLED') {
           navigationRef.navigate('Dispatch');
         } else if (data.type === 'DAILY_PROMO_SUMMARY') {
