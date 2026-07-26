@@ -87,12 +87,22 @@ export const syncAdminClaim = async (force = false): Promise<boolean> => {
   try {
     const res: any = await functions().httpsCallable('syncAdminClaim')({});
     adminClaimSyncedFor = user.uid;
-    // Always refresh on a forced retry: the claim may already be correct on the
-    // auth record (changed === false) while this device's token predates it, which
-    // is precisely the state a retry is trying to escape.
-    if (res?.data?.changed || force) await user.getIdToken(true);
+    const shouldBeAdmin = res?.data?.admin === true;
+
+    // Refresh when THIS DEVICE'S TOKEN disagrees with the server, not merely when
+    // the server changed something. `changed` describes the auth RECORD; it is
+    // false whenever the record was already correct — including the common case
+    // where the account was enrolled while this device held a token minted just
+    // before the grant. Keying the refresh off `changed` alone left that device
+    // sending a claim-less token until it expired on its own (~1h), which reads as
+    // "no access — staff permissions" long after enrolment succeeded.
+    const tokenHasAdmin = ((await user.getIdTokenResult()).claims as any)?.admin === true;
+    if (force || res?.data?.changed || tokenHasAdmin !== shouldBeAdmin) {
+      await user.getIdToken(true);
+    }
+
     if (__DEV__) console.log('[auth] admin claim =', res?.data?.admin);
-    return res?.data?.admin === true;
+    return shouldBeAdmin;
   } catch (e: any) {
     console.warn('[auth] admin claim sync failed:', e?.message || e);
     return false;
