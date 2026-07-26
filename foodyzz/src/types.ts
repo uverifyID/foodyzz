@@ -146,6 +146,8 @@ export interface RentalOrder {
   conditionAtDelivery?: BikeConditionReport;
   // Stamped when FoodyzzHQ verifies BOTH documents; gates Ready for Delivery.
   docsVerifiedAt?: string;
+  // Stamped when staff reject the documents and ask for a replacement set.
+  docsRejectedAt?: string;
   idRequestedAt?: string;
   readyForDeliveryAt?: string;
   // Per-order chat unread flags. `customerUnreadMessage` is set by the

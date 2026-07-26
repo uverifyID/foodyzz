@@ -15,7 +15,7 @@ import {
   View, Text, TouchableOpacity, Image, ActivityIndicator, Alert, Linking, Modal, ScrollView,
 } from 'react-native';
 import storage from '@react-native-firebase/storage';
-import { CreditCard, CheckCircle, Clock, Send, Phone, MessageSquare, X, AlertTriangle, RefreshCw } from 'lucide-react-native';
+import { CreditCard, CheckCircle, Clock, Send, Phone, MessageSquare, X, AlertTriangle, RefreshCw, XCircle } from 'lucide-react-native';
 import { db, auth, syncAdminClaim } from '../services/firebase';
 
 interface Props {
@@ -43,6 +43,12 @@ type ImageState =
   | { status: 'ok'; url: string }
   | { status: 'error'; code?: string };
 
+// The one rejection reason staff send. It is stored on BOTH documents so the
+// customer app can render it, and it is what the customer's push says: their pair
+// was refused and a fresh licence plus a DIFFERENT proof of address is needed.
+const REJECTION_REASON =
+  'Your identity check was rejected. Please re-upload your driver license and a different proof of address.';
+
 // storage/unauthorized here means the staff `admin` claim is missing from this
 // device's token — the documents exist, we just can't read them. Anything else is
 // a genuinely missing object or a network fault.
@@ -59,6 +65,7 @@ export default function CustomerIdCard({ order, onMessage }: Props) {
   const [reloadKey, setReloadKey] = useState(0);
   const [requesting, setRequesting] = useState(false);
   const [verifying, setVerifying] = useState(false);
+  const [rejecting, setRejecting] = useState(false);
   const [zoom, setZoom] = useState<string | null>(null);
 
   useEffect(() => {
@@ -82,6 +89,9 @@ export default function CustomerIdCard({ order, onMessage }: Props) {
   // here — otherwise the card would show "verified" while the order gate stayed
   // locked with no button to unlock it.
   const allVerified = allUploaded && !!order.docsVerifiedAt;
+  // Rejected until the customer submits again — saveDocumentToProfile clears
+  // rejectedReason on every upload, so this flips back off by itself.
+  const rejected = !allVerified && !!(license?.rejectedReason || address?.rejectedReason);
 
   // Resolve every present image to a display URL, keeping per-image status so a
   // failure surfaces as a retryable error tile rather than an endless spinner.
@@ -179,6 +189,49 @@ export default function CustomerIdCard({ order, onMessage }: Props) {
     }
   };
 
+  // Rejecting is the mirror of approving: it clears the review stamps and writes the
+  // reason onto BOTH documents, which is what the customer app renders and what the
+  // onUserWriteLifecycleEmails trigger turns into an "ID check rejected" push. The
+  // customer's next upload clears rejectedReason, putting the pair back in review.
+  const rejectDocuments = () => {
+    Alert.alert(
+      'Reject documents?',
+      'The customer is told their identity check failed and asked to upload their driver ' +
+      'license again plus a DIFFERENT proof of address. This order stays blocked until they do.',
+      [
+        { text: 'Keep reviewing', style: 'cancel' },
+        {
+          text: 'Reject',
+          style: 'destructive',
+          onPress: async () => {
+            setRejecting(true);
+            const now = new Date().toISOString();
+            const by = order.providerId || null;
+            try {
+              await db.collection('users').doc(order.customerPhone).set(
+                {
+                  driverLicense: { ...license, reviewedAt: null, reviewedBy: null, rejectedReason: REJECTION_REASON },
+                  addressProof: { ...address, reviewedAt: null, reviewedBy: null, rejectedReason: REJECTION_REASON },
+                },
+                { merge: true },
+              );
+              // Clearing docsVerifiedAt re-locks "Ready for Delivery" even if this
+              // order had already been approved once.
+              await db.collection('orders').doc(order.id).update({
+                docsVerifiedAt: null,
+                docsRejectedAt: now,
+              });
+            } catch (e: any) {
+              Alert.alert('Could not reject', e?.message || 'Please try again.');
+            } finally {
+              setRejecting(false);
+            }
+          },
+        },
+      ],
+    );
+  };
+
   const renderDoc = (kind: DocKind, keys: string[]) => {
     const doc = kind === 'driverLicense' ? license : address;
     if (!isComplete(doc, kind)) return null;
@@ -245,6 +298,11 @@ export default function CustomerIdCard({ order, onMessage }: Props) {
             <CheckCircle size={13} color="#059669" />
             <Text className="ml-1 text-[9px] font-black text-emerald-600 uppercase">Verified</Text>
           </View>
+        ) : rejected ? (
+          <View className="flex-row items-center">
+            <XCircle size={13} color="#dc2626" />
+            <Text className="ml-1 text-[9px] font-black text-red-600 uppercase">Rejected</Text>
+          </View>
         ) : allUploaded ? (
           <View className="flex-row items-center">
             <Clock size={13} color="#eab308" />
@@ -273,21 +331,55 @@ export default function CustomerIdCard({ order, onMessage }: Props) {
             </TouchableOpacity>
           )}
 
+          {/* Already rejected — the pair is refused and we're waiting on a new upload.
+              Approve stays available so a mis-tap can be undone without the customer
+              having to re-send anything. */}
+          {rejected && (
+            <View className="bg-red-50 border border-red-200 rounded-xl px-3 py-2 mb-2">
+              <Text className="text-[10px] font-bold text-red-700">
+                Rejected — the customer has been asked to upload a new license and a different
+                proof of address. This card updates when they do.
+              </Text>
+            </View>
+          )}
+
           {!allVerified && (
-            <TouchableOpacity
-              onPress={verifyDocuments}
-              disabled={verifying || anyFailed}
-              className="bg-[#86B54F] py-3 rounded-xl items-center border-2 border-black mt-1"
-              style={{ opacity: verifying || anyFailed ? 0.6 : 1 }}
-            >
-              {verifying ? (
-                <ActivityIndicator size="small" color="black" />
-              ) : (
-                <Text className="text-black font-black uppercase text-[10px] tracking-widest">
-                  Verify documents
-                </Text>
+            <View className="flex-row mt-1">
+              <TouchableOpacity
+                onPress={verifyDocuments}
+                disabled={verifying || rejecting || anyFailed}
+                className="flex-1 bg-[#86B54F] py-3 rounded-xl items-center justify-center border-2 border-black"
+                style={{ opacity: verifying || rejecting || anyFailed ? 0.6 : 1 }}
+              >
+                {verifying ? (
+                  <ActivityIndicator size="small" color="black" />
+                ) : (
+                  <Text className="text-black font-black uppercase text-[10px] tracking-widest">
+                    Approve
+                  </Text>
+                )}
+              </TouchableOpacity>
+
+              {!rejected && (
+                <TouchableOpacity
+                  onPress={rejectDocuments}
+                  disabled={verifying || rejecting || anyFailed}
+                  className="flex-1 ml-2 bg-red-50 py-3 rounded-xl flex-row items-center justify-center border-2 border-red-500"
+                  style={{ opacity: verifying || rejecting || anyFailed ? 0.6 : 1 }}
+                >
+                  {rejecting ? (
+                    <ActivityIndicator size="small" color="#dc2626" />
+                  ) : (
+                    <>
+                      <XCircle size={13} color="#dc2626" />
+                      <Text className="ml-1.5 text-red-600 font-black uppercase text-[10px] tracking-widest">
+                        Reject
+                      </Text>
+                    </>
+                  )}
+                </TouchableOpacity>
               )}
-            </TouchableOpacity>
+            </View>
           )}
 
           {allVerified && (

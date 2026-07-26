@@ -3280,6 +3280,44 @@ async function notifyDocsUploaded(
   }
 }
 
+// The rejection half of the review loop: staff tapped Reject in FoodyzzHQ, which
+// stamped rejectedReason onto both documents, so tell the customer their identity
+// check failed and what to send instead.
+//
+// Piggybacked on onUserWriteLifecycleEmails for exactly the reason notifyDocsUploaded
+// is — users/{phone} is a very hot document and a second trigger on it would double
+// invocations platform-wide for an event that fires a handful of times per customer.
+// Both guards are plain field comparisons and no I/O happens until they pass, so the
+// ordinary profile write (fcmToken refresh, badge count) costs nothing here.
+//
+// Keyed on the null → set transition of rejectedReason: saveDocumentToProfile clears
+// it on every upload, so a second rejection after a re-submission notifies again,
+// while an unrelated profile write to an already-rejected customer stays silent.
+async function notifyDocsRejected(
+  phone: string,
+  before: any,
+  after: any,
+): Promise<void> {
+  const reasonOf = (u: any): string =>
+    String(u?.driverLicense?.rejectedReason || u?.addressProof?.rejectedReason || "");
+  const reason = reasonOf(after);
+  if (!reason || reason === reasonOf(before)) return;
+
+  try {
+    await notifyCustomer(
+      phone,
+      "",
+      "ID check rejected",
+      `${reason} Tap to open Account and upload them.`,
+      "ID_DOCS_REJECTED",
+    );
+  } catch (err) {
+    // Non-fatal — the reason is already on the profile, and the customer app shows
+    // it on the Identity documents card the next time they open Account.
+    console.warn(`notifyDocsRejected: notify failed for ${phone}`, err);
+  }
+}
+
 // NOTE: customer notification on the → DELIVERED transition is handled by
 // onOrderDeliveryStatusNotify (the DELIVERED case), which sends a richer message
 // (amount charged / deposit held) plus an email receipt. A previous
@@ -3695,6 +3733,10 @@ export const onUserWriteLifecycleEmails = onDocumentWritten("users/{phone}", asy
   // document path — see notifyDocsUploaded. Awaited but self-contained: it swallows
   // its own errors so it can never block the welcome email below.
   await notifyDocsUploaded(event.params.phone, before, after);
+  // Same piggyback, opposite direction: staff rejected the pair. Mutually exclusive
+  // with the above in practice — an upload clears rejectedReason, a rejection leaves
+  // uploadedAt untouched — so a single write can never fire both.
+  await notifyDocsRejected(event.params.phone, before, after);
 
   // Welcome to Foodyzz — fire only as onboarding COMPLETES (onboarded flips to
   // true, carrying the email). Gating on the transition — not merely "has email"

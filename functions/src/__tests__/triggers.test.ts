@@ -1,9 +1,17 @@
 import {
-  triggerCreated, triggerUpdated, fns, seedConfig, seedProvider, seedOrder,
-  db, getDoc, clearFirestore, spyExpo,
+  triggerCreated, triggerUpdated, fns, seedConfig, seedProvider, seedOrder, seedUser,
+  db, getDoc, clearFirestore, spyExpo, test as fft,
 } from './helpers';
 
 const ZIP = '11743';
+
+// onDocumentWritten harness: build a before/after change from two data states.
+async function triggerWritten(fn: any, refPath: string, before: any, after: any, params: Record<string, string>) {
+  const wrapped: any = fft.wrap(fn);
+  const beforeSnap = fft.firestore.makeDocumentSnapshot(before, refPath);
+  const afterSnap = fft.firestore.makeDocumentSnapshot(after, refPath);
+  return wrapped({ data: fft.makeChange(beforeSnap, afterSnap), params });
+}
 
 beforeEach(async () => {
   await clearFirestore();
@@ -132,5 +140,62 @@ describe('onOrderCreatedUpdateStats', () => {
     const today = new Date().toISOString().split('T')[0];
     const daily = await getDoc(`stats/${today}`);
     expect(daily.orderCount).toBe(1);
+  });
+});
+
+describe('notifyDocsRejected (piggybacked on onUserWriteLifecycleEmails)', () => {
+  const phone = '+14025550000';
+  const REASON = 'Your identity check was rejected. Please re-upload your driver license and a different proof of address.';
+  const docs = (extra: any = {}) => ({
+    driverLicense: { frontPath: 'l/f.jpg', backPath: 'l/b.jpg', uploadedAt: '2026-07-01T00:00:00.000Z', ...extra },
+    addressProof: { frontPath: 'a/f.jpg', uploadedAt: '2026-07-01T00:00:00.000Z', ...extra },
+  });
+
+  test('staff rejecting the pair pushes ID_DOCS_REJECTED to the customer', async () => {
+    await seedUser(phone, { fcmToken: 'ExponentPushToken[cust]' });
+    const expo = spyExpo();
+    await triggerWritten(fns.onUserWriteLifecycleEmails, `users/${phone}`,
+      { phoneNumber: phone, ...docs() },
+      { phoneNumber: phone, ...docs({ reviewedAt: null, rejectedReason: REASON }) },
+      { phone });
+    const msgs = expo.messages();
+    expo.restore();
+
+    const push = msgs.find(m => m.data?.type === 'ID_DOCS_REJECTED');
+    expect(push?.to).toBe('ExponentPushToken[cust]');
+    expect(push?.body).toContain('different proof of address');
+  });
+
+  test('a later profile write on an already-rejected customer does not re-push', async () => {
+    await seedUser(phone, { fcmToken: 'ExponentPushToken[cust]' });
+    const expo = spyExpo();
+    await triggerWritten(fns.onUserWriteLifecycleEmails, `users/${phone}`,
+      { phoneNumber: phone, badgeCount: 1, ...docs({ reviewedAt: null, rejectedReason: REASON }) },
+      { phoneNumber: phone, badgeCount: 2, ...docs({ reviewedAt: null, rejectedReason: REASON }) },
+      { phone });
+    const msgs = expo.messages();
+    expo.restore();
+
+    expect(msgs.some(m => m.data?.type === 'ID_DOCS_REJECTED')).toBe(false);
+  });
+
+  test('re-uploading after a rejection notifies the store, not the customer', async () => {
+    await seedUser(phone, { fcmToken: 'ExponentPushToken[cust]', name: 'Cust' });
+    await seedProvider('14025551111_11743', { fcmToken: 'ExponentPushToken[store]' });
+    await seedOrder('order_r1', { customerPhone: phone, providerId: '14025551111_11743', status: 'confirmed', idRequestedAt: '2026-07-01T00:00:00.000Z' });
+    const expo = spyExpo();
+    await triggerWritten(fns.onUserWriteLifecycleEmails, `users/${phone}`,
+      { phoneNumber: phone, ...docs({ reviewedAt: null, rejectedReason: REASON }) },
+      {
+        phoneNumber: phone,
+        driverLicense: { frontPath: 'l/f2.jpg', backPath: 'l/b2.jpg', uploadedAt: '2026-07-02T00:00:00.000Z', reviewedAt: null, rejectedReason: null },
+        addressProof: { frontPath: 'a/f2.jpg', uploadedAt: '2026-07-02T00:00:00.000Z', reviewedAt: null, rejectedReason: null },
+      },
+      { phone });
+    const msgs = expo.messages();
+    expo.restore();
+
+    expect(msgs.some(m => m.data?.type === 'ID_DOCS_REJECTED')).toBe(false);
+    expect(msgs.some(m => m.data?.type === 'ID_DOCS_UPLOADED' && m.to === 'ExponentPushToken[store]')).toBe(true);
   });
 });

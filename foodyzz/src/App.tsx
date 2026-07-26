@@ -200,8 +200,9 @@ export default function App() {
         } else if (data.type === 'ADMIN_SUPPORT_REPLY' || data.type === 'NEW_PROVIDER_MESSAGE') {
           // Global FoodyzzHQ thread (same screen, no orderId).
           navigationRef.navigate('Main', { screen: 'Chat' });
-        } else if (data.type === 'ID_DOCS_REQUESTED') {
-          // "We need your ID" → drop them exactly where they upload it.
+        } else if (data.type === 'ID_DOCS_REQUESTED' || data.type === 'ID_DOCS_REJECTED') {
+          // "We need your ID" / "your ID was rejected" → drop them exactly where
+          // they upload it.
           navigationRef.navigate('Main', { screen: 'Account' });
         } else if (data.type === 'ORDER_DELIVERED' && data.orderId) {
           // Open the delivered order's detail so the customer can rate + tip.

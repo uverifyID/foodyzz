@@ -6,7 +6,7 @@
 // Used in Account → Profile, and right after FoodyzzHQ accepts an order.
 import React, { useEffect, useState } from 'react';
 import { View, Text, TouchableOpacity, Image, ActivityIndicator, Alert } from 'react-native';
-import { CreditCard, FileText, CheckCircle, Clock, ShieldCheck, Lock } from 'lucide-react-native';
+import { CreditCard, FileText, CheckCircle, Clock, ShieldCheck, Lock, AlertTriangle } from 'lucide-react-native';
 import {
   pickDocumentImage,
   uploadDocumentImage,
@@ -92,10 +92,22 @@ export default function IdentityDocumentsCard({ profile, subtitle, onSaved }: Pr
 
   const allReady = SLOTS.every((s) => has(s.key));
   const dirty = !!local.licenseFront || !!local.licenseBack || !!local.address;
+  // A rejected set can't be re-sent as-is: FoodyzzHQ refused these exact images and
+  // asked for the licence again plus a DIFFERENT proof of address, so every slot has
+  // to carry a freshly captured photo before Submit unlocks.
+  const allFresh = SLOTS.every((s) => !!local[s.key]);
+  const blockedOnRetake = !!rejected && !allFresh;
 
   const submit = async () => {
     if (!allReady) {
       Alert.alert('All three needed', 'Add the front and back of your license and your proof of address.');
+      return;
+    }
+    if (blockedOnRetake) {
+      Alert.alert(
+        'New photos needed',
+        'Your last submission was rejected. Take a new photo of both sides of your license and use a different proof of address.',
+      );
       return;
     }
     setBusy(true);
@@ -186,6 +198,14 @@ export default function IdentityDocumentsCard({ profile, subtitle, onSaved }: Pr
             <CheckCircle size={14} color="#059669" />
             <Text className="ml-1 text-[10px] font-black text-emerald-600 uppercase">Verified</Text>
           </View>
+        ) : rejected ? (
+          // Rejected documents are still "on file" (the images stay until replaced),
+          // so this has to win over the In-review badge below or the card would claim
+          // FoodyzzHQ is still looking at a set they've already refused.
+          <View className="flex-row items-center">
+            <AlertTriangle size={14} color="#dc2626" />
+            <Text className="ml-1 text-[10px] font-black text-red-600 uppercase">Action needed</Text>
+          </View>
         ) : bothOnFile ? (
           <View className="flex-row items-center">
             <Clock size={14} color="#eab308" />
@@ -227,23 +247,28 @@ export default function IdentityDocumentsCard({ profile, subtitle, onSaved }: Pr
       {/* Only actionable once all three are present, so a partial set never reaches
           the reviewer. While replacing verified documents, at least one new image is
           required — otherwise "submit" would just re-send the same approved set. */}
-      {!masked && (dirty || !bothOnFile) && (
+      {!masked && (dirty || !bothOnFile || !!rejected) && (() => {
+        const ready = allReady && !(replacing && !dirty) && !blockedOnRetake;
+        return (
         <TouchableOpacity
-          disabled={busy || !allReady || (replacing && !dirty)}
+          disabled={busy || !ready}
           onPress={submit}
           className={`mt-4 py-3 rounded-xl border-2 border-black items-center shadow-brutalist ${
-            allReady && !(replacing && !dirty) ? 'bg-brand-green' : 'bg-slate-200'
+            ready ? 'bg-brand-green' : 'bg-slate-200'
           }`}
         >
           {busy ? (
             <ActivityIndicator color="#000000" />
           ) : (
-            <Text className={`font-black uppercase ${allReady && !(replacing && !dirty) ? 'text-black' : 'text-slate-400'}`}>
-              {allReady ? 'Submit documents' : 'Add all three to submit'}
+            <Text className={`font-black uppercase ${ready ? 'text-black' : 'text-slate-400'}`}>
+              {blockedOnRetake
+                ? 'Retake all three to submit'
+                : allReady ? 'Submit documents' : 'Add all three to submit'}
             </Text>
           )}
         </TouchableOpacity>
-      )}
+        );
+      })()}
 
       {replacing && (
         <TouchableOpacity

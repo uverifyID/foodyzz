@@ -5,7 +5,7 @@ import { Calendar, Clock, X, CheckCircle, AlertTriangle, ChevronRight, MapPin, S
 import { COLORS, LAYOUT } from '../theme'; // Adjusted import path
 import { db, getFunctionsInstance } from '../services/firebase';
 import authNative from '@react-native-firebase/auth';
-import { collection, query, where, orderBy, limit, onSnapshot, doc, getDoc, updateDoc, deleteField } from '@react-native-firebase/firestore';
+import { collection, query, where, orderBy, limit, onSnapshot } from '@react-native-firebase/firestore';
 import { useStripe } from '@stripe/stripe-react-native';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import MapView from 'react-native-maps'; // Assuming react-native-maps is installed
@@ -31,8 +31,20 @@ const ID_PENDING_ORANGE = '#f97316';
 
 // Documents are "on file" once BOTH the licence (front + back) and the proof of
 // address have been uploaded. Verification is a separate, later stamp.
+//
+// A rejected pair counts as NOT on file even though the images are still stored:
+// FoodyzzHQ has refused them and is waiting for replacements, so the order is once
+// again blocked on the customer and the ID-Pending prompt has to come back.
 const hasIdOnFile = (profile: any): boolean =>
-    hasDocumentOnFile(profile, 'driverLicense') && hasDocumentOnFile(profile, 'addressProof');
+    hasDocumentOnFile(profile, 'driverLicense') &&
+    hasDocumentOnFile(profile, 'addressProof') &&
+    !profile?.driverLicense?.rejectedReason &&
+    !profile?.addressProof?.rejectedReason;
+
+// The customer can pull out any time up until FoodyzzHQ marks the order ready for
+// delivery — from that point the bike is being dispatched and cancelling is a call
+// to the store, not a button.
+const CANCELLABLE_STATUSES: string[] = [OrderStatus.REQUESTED, OrderStatus.CONFIRMED];
 
 // Step for an order. 'confirmed' means accepted by FoodyzzHQ, but the customer only
 // sees CONFIRMED once their ID is verified (docsVerifiedAt) — until then it sits on
@@ -88,6 +100,9 @@ export default function OrdersScreen() {
     const [loading, setLoading] = useState(true);
     const [selectedOrder, setSelectedOrder] = useState<RentalOrder | null>(null); // Added RentalOrder type
     const [confirmCancelId, setConfirmCancelId] = useState<string | null>(null);
+    // Order whose cancellation is in flight — locks its button so a second tap can't
+    // fire the callable twice while Stripe releases the hold.
+    const [cancellingId, setCancellingId] = useState<string | null>(null);
     // Id of the order whose price adjustment is being approved/rejected. Locks the
     // Approve/Reject buttons so a second tap can't double-fire the (slow) Stripe
     // re-auth or send two status writes before the order leaves this state.
@@ -173,12 +188,22 @@ export default function OrdersScreen() {
         return () => unsubscribe();
     }, [user]);
 
+    // Goes through the cancelOrder callable rather than writing status directly: it
+    // releases the card authorization, frees any bike reserved for the order and
+    // notifies the store. A raw status write left the hold sitting on the customer's
+    // card until Stripe expired it ~7 days later.
     const handleCancelOrder = async (orderId: string) => {
+        setCancellingId(orderId);
         try {
-            await updateDoc(doc(db, 'orders', orderId), { status: 'cancelled' });
+            await getFunctionsInstance().httpsCallable('cancelOrder')({
+                orderId,
+                reason: 'Cancelled by customer',
+            });
             setConfirmCancelId(null);
-        } catch (error) {
-            Alert.alert("Error", "Could not cancel order.");
+        } catch (error: any) {
+            Alert.alert('Could not cancel', error?.message || 'Please try again.');
+        } finally {
+            setCancellingId(null);
         }
     };
 
@@ -435,31 +460,44 @@ export default function OrdersScreen() {
                                 </TouchableOpacity>
                             )}
 
-                            {/* Per-order chat with FoodyzzHQ (order-to-order, `messages` collection).
-                                The button alerts in-place when HQ has replied — indigo "New Reply"
-                                state driven by order.customerUnreadMessage. Cancel sits beside it
-                                while the order is still being placed. */}
-                            <View className="flex-row gap-2 mt-3">
-                                <TouchableOpacity
-                                    onPress={() => navigation.navigate('OrderChat', { orderId: order.id })}
-                                    className={`flex-1 py-3 rounded-xl border-2 flex-row items-center justify-center gap-2 ${order.customerUnreadMessage ? 'bg-indigo-600 border-black' : 'bg-white border-slate-100'}`}
-                                >
-                                    <MessageCircle size={14} color={order.customerUnreadMessage ? '#ffffff' : '#507425'} />
-                                    <Text className={`font-black text-[10px] uppercase ${order.customerUnreadMessage ? 'text-white' : 'text-slate-500'}`}>
-                                        {order.customerUnreadMessage ? 'New Reply' : 'Chat'}
-                                    </Text>
-                                </TouchableOpacity>
-                                {order.status === OrderStatus.REQUESTED && (
-                                    <TouchableOpacity
-                                        onPress={() => confirmCancelId === order.id ? handleCancelOrder(order.id) : setConfirmCancelId(order.id)}
-                                        className={`flex-1 py-3 rounded-xl border-2 items-center justify-center ${confirmCancelId === order.id ? 'bg-rose-600 border-black' : 'bg-white border-slate-100'}`}
-                                    >
-                                        <Text className={`font-black text-[10px] uppercase ${confirmCancelId === order.id ? 'text-white' : 'text-slate-400'}`}>
-                                            {confirmCancelId === order.id ? 'Confirm?' : 'Cancel'}
-                                        </Text>
-                                    </TouchableOpacity>
-                                )}
-                            </View>
+                            {/* Per-order chat with FoodyzzHQ (order-to-order, `messages`
+                                collection) reduced to an icon on the left, with Cancel taking
+                                the rest of the row. The chat icon still alerts in place when HQ
+                                has replied — indigo fill + a dot, driven by
+                                order.customerUnreadMessage. Cancel greys out for good once
+                                FoodyzzHQ marks the order ready for delivery. */}
+                            {(() => {
+                                const cancellable = CANCELLABLE_STATUSES.includes(order.status);
+                                const cancelling = cancellingId === order.id;
+                                const arming = confirmCancelId === order.id;
+                                return (
+                                    <View className="flex-row gap-2 mt-3">
+                                        <TouchableOpacity
+                                            onPress={() => navigation.navigate('OrderChat', { orderId: order.id })}
+                                            accessibilityLabel={order.customerUnreadMessage ? 'Open chat — new reply' : 'Open chat'}
+                                            className={`px-5 py-3 rounded-xl border-2 items-center justify-center ${order.customerUnreadMessage ? 'bg-indigo-600 border-black' : 'bg-white border-slate-100'}`}
+                                        >
+                                            <MessageCircle size={16} color={order.customerUnreadMessage ? '#ffffff' : '#507425'} />
+                                            {order.customerUnreadMessage && (
+                                                <View className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-white" />
+                                            )}
+                                        </TouchableOpacity>
+                                        <TouchableOpacity
+                                            disabled={!cancellable || cancelling}
+                                            onPress={() => arming ? handleCancelOrder(order.id) : setConfirmCancelId(order.id)}
+                                            className={`flex-1 py-3 rounded-xl border-2 items-center justify-center ${!cancellable ? 'bg-slate-50 border-slate-100' : arming ? 'bg-rose-600 border-black' : 'bg-white border-slate-100'}`}
+                                        >
+                                            {cancelling ? (
+                                                <ActivityIndicator size="small" color="#ffffff" />
+                                            ) : (
+                                                <Text className={`font-black text-[10px] uppercase ${!cancellable ? 'text-slate-300' : arming ? 'text-white' : 'text-slate-400'}`}>
+                                                    {arming && cancellable ? 'Confirm?' : 'Cancel'}
+                                                </Text>
+                                            )}
+                                        </TouchableOpacity>
+                                    </View>
+                                );
+                            })()}
                         </TouchableOpacity>
                     ))
                 )}
