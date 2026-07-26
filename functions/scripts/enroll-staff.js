@@ -21,6 +21,7 @@
 //
 // Run against PRODUCTION (uses application-default creds / GOOGLE_APPLICATION_CREDENTIALS):
 //   GCLOUD_PROJECT=foodyzz-27b3e node scripts/enroll-staff.js --list
+//   GCLOUD_PROJECT=foodyzz-27b3e node scripts/enroll-staff.js --check +14026061003
 //   GCLOUD_PROJECT=foodyzz-27b3e node scripts/enroll-staff.js --all --dry-run
 //   GCLOUD_PROJECT=foodyzz-27b3e node scripts/enroll-staff.js --all
 //   GCLOUD_PROJECT=foodyzz-27b3e node scripts/enroll-staff.js +14026061003
@@ -95,8 +96,65 @@ const enroll = async (entries) => {
   }
 };
 
+// Ground truth for "did it actually work". syncAdminClaim only logs when the claim
+// CHANGES, so a silent run is ambiguous: it means either "already correct" or "the
+// staff lookup missed". This prints the whole chain — allowlist doc, auth account,
+// live custom claims — so the answer isn't inferred from logs.
+const check = async (raw) => {
+  const e164 = toE164(raw);
+  console.log(`\n── ${e164} ${'─'.repeat(Math.max(0, 40 - e164.length))}`);
+
+  const staffDoc = await db.collection('staff').doc(e164).get();
+  if (staffDoc.exists) {
+    const active = staffDoc.data().active !== false;
+    console.log(`  staff/${e164}      EXISTS, active=${active}`);
+    if (!active) console.log('     ↳ active:false — the claim is REVOKED on next sign-in');
+  } else {
+    console.log(`  staff/${e164}      MISSING  ← the claim will never be granted`);
+    const all = await db.collection('staff').get();
+    const ids = all.docs.map((d) => d.id);
+    if (ids.length) {
+      console.log(`     ↳ allowlist currently holds: ${ids.join(', ')}`);
+      const digits = e164.replace(/\D/g, '');
+      const near = ids.filter((id) => id.replace(/\D/g, '') === digits && id !== e164);
+      if (near.length) {
+        console.log(`     ↳ NEAR MISS: ${near.join(', ')} — same digits, wrong key.`);
+        console.log(`        The doc id must be exactly "${e164}" (E.164, leading +).`);
+      }
+    }
+  }
+
+  let user = null;
+  try { user = await admin.auth().getUserByPhoneNumber(e164); } catch (e) { /* reported below */ }
+  if (!user) {
+    console.log('  firebase auth        NO ACCOUNT with that number');
+    console.log('     ↳ they must sign in to FoodyzzHQ at least once first');
+    return;
+  }
+  const claims = user.customClaims || {};
+  console.log(`  firebase auth        uid=${user.uid} phoneNumber=${user.phoneNumber}`);
+  console.log(`  custom claims        ${JSON.stringify(claims)}`);
+  console.log(`  ADMIN CLAIM          ${claims.admin === true ? '✅ GRANTED' : '❌ NOT granted'}`);
+  if (claims.admin === true) {
+    console.log('     ↳ Granted on the Auth record. If the DEVICE still cannot load');
+    console.log('       documents, its ID token predates the grant — force-quit and');
+    console.log('       relaunch FoodyzzHQ (signing out is not enough; the client');
+    console.log('       latches the sync per uid for the life of the JS context).');
+  }
+};
+
 (async () => {
   if (has('--list')) { await list(); process.exit(0); }
+
+  if (has('--check')) {
+    if (phoneArgs.length === 0) {
+      console.error('Usage: node scripts/enroll-staff.js --check +14026061003');
+      process.exit(1);
+    }
+    for (const raw of phoneArgs) await check(raw);
+    console.log('');
+    process.exit(0);
+  }
 
   if (has('--revoke')) {
     if (phoneArgs.length === 0) {
@@ -136,6 +194,7 @@ const enroll = async (entries) => {
   if (!has('--all')) {
     console.error('Usage:');
     console.error('  node scripts/enroll-staff.js --list');
+    console.error('  node scripts/enroll-staff.js --check +14026061003');
     console.error('  node scripts/enroll-staff.js --all [--dry-run]');
     console.error('  node scripts/enroll-staff.js +14026061003 [+1555...]');
     console.error('  node scripts/enroll-staff.js --revoke +14026061003');
