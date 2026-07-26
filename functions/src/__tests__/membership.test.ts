@@ -147,6 +147,25 @@ describe('preflightHqSignIn', () => {
     expect(res).toMatchObject({ allowed: true, mode: 'member', providerId: null, storeCount: 2 });
   });
 
+  test('an EXISTING store owner can still accept an invite to another store', async () => {
+    // The order of these two checks is the whole test. Membership-first would send
+    // this person back to their own store and quietly ignore the code — invisible,
+    // because they land somewhere that looks right.
+    await seedProvider(STORE);
+    await seedProvider('15167290269_14');
+    await db.doc(`providers/15167290269_14/members/${STAFF}`)
+      .set({ phone: STAFF, role: 'owner', addedAt: new Date().toISOString() });
+    await seedInvite('A7K2M9QP');
+
+    const res: any = await callable(fns.preflightHqSignIn, { phone: STAFF, code: 'A7K2M9QP' });
+    expect(res).toMatchObject({ allowed: true, mode: 'invite', providerId: STORE });
+
+    // ...and the redemption puts them in BOTH, rather than moving them.
+    await callable(fns.redeemHqInvite, { code: 'A7K2M9QP' }, phoneAuth(STAFF));
+    expect(await getDoc(`providers/${STORE}/members/${STAFF}`)).toMatchObject({ role: 'staff' });
+    expect(await getDoc(`providers/15167290269_14/members/${STAFF}`)).toMatchObject({ role: 'owner' });
+  });
+
   test('resolves the target store from a valid invite, before any SMS', async () => {
     await seedProvider(STORE);
     await seedInvite('A7K2M9QP');

@@ -3966,17 +3966,14 @@ export const preflightHqSignIn = onCall(async (request) => {
     throw new HttpsError("resource-exhausted", "Too many attempts. Please try again later.");
   }
 
-  // Already a member of at least one store — no code needed to come back.
-  const memberships = await storeMembershipsFor(phone);
-  if (memberships.length > 0) {
-    return {
-      allowed: true,
-      mode: "member",
-      providerId: memberships.length === 1 ? memberships[0].providerId : null,
-      storeCount: memberships.length,
-    };
-  }
-
+  // A SUPPLIED CODE IS CHECKED FIRST, ahead of any existing membership.
+  //
+  // The other order looks natural — "do you already belong somewhere?" — and is
+  // wrong: someone who already runs their own store would be routed straight back
+  // to it and their invite silently ignored, so they could never accept one. That
+  // is not an edge case; the first person you invite is often an existing
+  // provider, and the failure is invisible (they land somewhere plausible and the
+  // code stays unused).
   if (code) {
     if (!INVITE_CODE_RE.test(code)) {
       return {allowed: false, mode: "invite", reason: "invalid_code"};
@@ -3992,6 +3989,18 @@ export const preflightHqSignIn = onCall(async (request) => {
     // "right code, wrong phone" would confirm a code exists.
     if (!valid) return {allowed: false, mode: "invite", reason: "invalid_code"};
     return {allowed: true, mode: "invite", providerId: String(invite!.providerId), storeCount: 1};
+  }
+
+  // No code: already a member of at least one store, so nothing is needed to
+  // come back.
+  const memberships = await storeMembershipsFor(phone);
+  if (memberships.length > 0) {
+    return {
+      allowed: true,
+      mode: "member",
+      providerId: memberships.length === 1 ? memberships[0].providerId : null,
+      storeCount: memberships.length,
+    };
   }
 
   // Legacy owner: a store exists for this phone but the member doc has not been
