@@ -61,8 +61,6 @@ function ctx(env, phone) {
     await db.doc(`orders/order_1`).set({ customerPhone: OWNER_PHONE, status: "requested", providerId: PROVIDER_ID, createdAt: new Date().toISOString() });
     // Provider-safe mirror (customer charge fields stripped) — what scrubsHQ reads.
     await db.doc(`providerOrders/order_1`).set({ customerPhone: OWNER_PHONE, status: "requested", providerId: PROVIDER_ID, createdAt: new Date().toISOString() });
-    // Provider-payout ledger — admin-readable, server-only writes.
-    await db.doc(`payouts/payout_1`).set({ providerId: PROVIDER_ID, amount: 10, status: "paid" });
     // Store membership — written only by Cloud Functions, and the sole reason a
     // second person can operate a store whose id carries someone else's phone.
     await db.doc(`providers/${PROVIDER_ID}/members/${OWNER_PHONE}`).set({ phone: OWNER_PHONE, role: "owner", addedAt: new Date().toISOString() });
@@ -163,11 +161,17 @@ function ctx(env, phone) {
   await check("even an admin CANNOT read apiConfigSecret (functions-only)",
     assertFails(adminCtx.doc("apiConfigSecret/stripe").get()));
 
-  console.log("salesTaxByZip:");
-  await check("anyone can READ the tax table",
-    assertSucceeds(anon.doc(`salesTaxByZip/${ZIP}`).get()));
-  await check("client CANNOT write the tax table (server-only)",
-    assertFails(owner.doc(`salesTaxByZip/${ZIP}`).set({ taxRate: 0 })));
+  // NOTE: this file used to assert rules for `salesTaxByZip` and `payouts`. Neither
+  // collection was ever built — they existed nowhere but here, since the initial
+  // commit, so both assertions had always failed. They are gone rather than
+  // "fixed", because writing rules for them would open read surface on data that
+  // does not exist:
+  //   · Sales tax is declared per store at onboarding
+  //     (providers/{id}.chargesSalesTax + salesTaxRate) and read straight off the
+  //     provider doc — the rate that applies is the one for the jurisdiction the
+  //     bike is delivered FROM, so there is no per-zip lookup table to publish.
+  //   · There is no payout ledger. Stripe settles what the customer is charged
+  //     directly; the only payout state is `payoutStatus` on the order itself.
 
   console.log("users (self-only writes):");
   await check("owner can write their OWN user doc",
@@ -192,12 +196,6 @@ function ctx(env, phone) {
   console.log("default-deny (unlisted server-only collections):");
   await check("providerPerformance is denied to clients",
     assertFails(owner.doc(`providerPerformance/${PROVIDER_ID}`).get()));
-  await check("payouts is denied to clients",
-    assertFails(owner.doc("payouts/payout_1").get()));
-  await check("admin CAN read the provider-payouts ledger",
-    assertSucceeds(adminCtx.doc("payouts/payout_1").get()));
-  await check("clients CANNOT write the payouts ledger (server-only)",
-    assertFails(owner.doc("payouts/payout_1").set({ amount: 9999 }, { merge: true })));
   await check("providerCancellations is denied to clients",
     assertFails(owner.doc(`providerCancellations/${PROVIDER_ID}`).get()));
 
