@@ -165,11 +165,17 @@ export default function App() {
   // when detached (no clearing) so tab switches don't flash empty.
   useEffect(() => {
     if (!user || !isAdmin || !needOrders) return;
-    const unsub = onSnapshot(query(collection(db, 'orders')), (snap) => {
-      const all = snap.docs.map(d => ({ ...d.data(), id: d.id } as RentalOrder));
-      setOrders(all);
-      setActiveOrdersCount(all.filter(o => !['delivered', 'cancelled'].includes(o.status)).length);
-    });
+    const unsub = onSnapshot(
+      query(collection(db, 'orders')),
+      (snap) => {
+        const all = snap.docs.map(d => ({ ...d.data(), id: d.id } as RentalOrder));
+        setOrders(all);
+        setActiveOrdersCount(all.filter(o => !['delivered', 'cancelled'].includes(o.status)).length);
+      },
+      // Without this the listener fails silently and every order-derived figure on
+      // screen reads zero with no indication that the read was refused.
+      (e) => console.error('orders listener failed:', e),
+    );
     return unsub;
   }, [user, isAdmin, needOrders]);
 
@@ -500,7 +506,14 @@ export default function App() {
       <main className="flex-1 min-w-0 p-4 md:p-8 overflow-y-auto">
         <Suspense fallback={<div className="font-black uppercase tracking-widest text-sm text-stone-400 p-4">Loading…</div>}>
         {activeTab === 'analytics' && (
-          <AnalyticsTab dailyStats={dailyStats} providerPerf={providerPerf} ordersCount={activeOrders} orders={orders} />
+          <AnalyticsTab
+            dailyStats={dailyStats}
+            providerPerf={providerPerf}
+            ordersCount={activeOrders}
+            orders={orders}
+            config={config}
+            logistics={logistics}
+          />
         )}
         {activeTab === 'users' && (
           <UserManagementTab customers={customers} providers={providers} orders={orders} config={config} handleToggleBlock={handleToggleBlock} />

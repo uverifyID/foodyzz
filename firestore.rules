@@ -178,6 +178,15 @@ service cloud.firestore {
       allow read, write: if request.auth != null;
     }
 
+    // Promo redemptions - the single-use ledger. One doc per (promo, customer), written
+    // only by createPaymentIntent / onOrderCreatedRedeemPromo. Closed to clients in BOTH
+    // directions on purpose: a customer who could delete their own claim doc could spend
+    // the same code twice, and one who could read the collection could enumerate who
+    // redeemed what. The Admin SDK bypasses these rules.
+    match /promoRedemptions/{claimId} {
+      allow read, write: if false;
+    }
+
     // Support messages - unchanged (broad: customers, providers, admin all post).
     match /supportMessages/{messageId} {
       allow read: if request.auth != null;
@@ -229,6 +238,14 @@ service cloud.firestore {
     }
 
     match /providerPerformance/{providerId} {
+      allow read: if isAdmin();
+      allow write: if false;
+    }
+
+    // Settlement ledger — one document per money movement through Stripe, carrying
+    // what we charged AND what Stripe kept. That spread is the platform's margin, so
+    // it is admin-read only (never the customer, never a store) and server-written.
+    match /settlements/{stripeId} {
       allow read: if isAdmin();
       allow write: if false;
     }

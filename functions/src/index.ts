@@ -14,6 +14,8 @@ import {
   BillingSchedule,
   PickupAttempt,
   OrderReceipt,
+  Settlement,
+  SettlementKind,
 } from "./types";
 import {randomInt} from "crypto";
 import Stripe from "stripe";
@@ -503,6 +505,353 @@ const MIN_STRIPE_CHARGE_CENTS = 50;
 const chargeCentsFor = (totalDollars: number): number =>
   Math.max(Math.round((totalDollars || 0) * 100), MIN_STRIPE_CHARGE_CENTS);
 
+// ── Settlement ledger ───────────────────────────────────────────────────────
+// Every Stripe charge and refund is mirrored into `settlements/{stripeId}` as it
+// happens. The order says what the customer agreed to pay; only the charge's balance
+// transaction knows what Stripe kept for moving it, and without that number "revenue"
+// on the admin hub is a top line with no margin under it.
+
+const round2 = (n: number) => Math.round((n || 0) * 100) / 100;
+
+/**
+ * What Stripe actually took and actually paid us for one charge or refund, read from
+ * its balance transaction. Best-effort by design: a balance transaction can lag the
+ * charge, and no money movement should ever fail because reporting couldn't be
+ * written — the ledger entry is still recorded with a null fee and
+ * syncStripeSettlements fills it in later.
+ */
+async function readStripeBalance(
+  stripeClient: Stripe,
+  source: { paymentIntent?: Stripe.PaymentIntent | string; refundId?: string },
+): Promise<{ fee: number; net: number; availableOn: string | null } | null> {
+  try {
+    let bt: Stripe.BalanceTransaction | null = null;
+
+    if (source.refundId) {
+      // A refund's balance transaction is negative and carries no fee — Stripe does
+      // not give the processing fee back, which is exactly what makes a refunded
+      // deposit cost us money.
+      const refund = await stripeClient.refunds.retrieve(source.refundId, {expand: ["balance_transaction"]});
+      bt = refund.balance_transaction && typeof refund.balance_transaction !== "string" ?
+        refund.balance_transaction as Stripe.BalanceTransaction : null;
+    } else if (source.paymentIntent) {
+      let charge = typeof source.paymentIntent !== "string" &&
+        source.paymentIntent.latest_charge && typeof source.paymentIntent.latest_charge !== "string" ?
+        source.paymentIntent.latest_charge as Stripe.Charge : null;
+      // The PI we were handed may not have the charge — let alone its balance
+      // transaction — expanded. Re-retrieve rather than guess.
+      if (!charge?.balance_transaction || typeof charge.balance_transaction === "string") {
+        const piId = typeof source.paymentIntent === "string" ? source.paymentIntent : source.paymentIntent.id;
+        const pi = await stripeClient.paymentIntents.retrieve(piId, {expand: ["latest_charge.balance_transaction"]});
+        charge = pi.latest_charge && typeof pi.latest_charge !== "string" ? pi.latest_charge as Stripe.Charge : null;
+      }
+      bt = charge?.balance_transaction && typeof charge.balance_transaction !== "string" ?
+        charge.balance_transaction as Stripe.BalanceTransaction : null;
+    }
+
+    if (!bt) return null;
+    return {
+      fee: bt.fee / 100,
+      net: bt.net / 100,
+      availableOn: bt.available_on ? new Date(bt.available_on * 1000).toISOString() : null,
+    };
+  } catch (e) {
+    console.warn("readStripeBalance failed (non-fatal)", e);
+    return null;
+  }
+}
+
+interface SettlementEntry {
+  id: string; // Stripe PaymentIntent id, or refund id — also the ledger document id
+  orderId: string;
+  kind: SettlementKind;
+  at: string;
+  amount: number; // signed gross: charges positive, refunds negative
+  subtotal?: number;
+  tax?: number;
+  chargedCcFee?: number;
+  serviceFees?: number;
+  currency?: string;
+  // Where to read the real fee from. Pass the PaymentIntent object when you already
+  // hold one — an expanded balance transaction on it saves a Stripe round trip.
+  paymentIntent?: Stripe.PaymentIntent | string;
+  refundId?: string;
+}
+
+/**
+ * Mirror one money movement into the settlement ledger. Idempotent — keyed by the
+ * Stripe id, so a webhook redelivery or a re-run of the installment cron rewrites the
+ * same document instead of double-counting. Never throws; returns whether the write
+ * actually landed, so a caller reporting progress to a human can tell the truth
+ * rather than counting attempts.
+ */
+async function recordSettlement(
+  stripeClient: Stripe | null,
+  order: Partial<RentalOrder> | null | undefined,
+  entry: SettlementEntry,
+): Promise<boolean> {
+  try {
+    if (!entry.id) return false;
+    const balance = stripeClient ?
+      await readStripeBalance(stripeClient, {paymentIntent: entry.paymentIntent, refundId: entry.refundId}) :
+      null;
+    const amount = round2(entry.amount);
+    const doc: Settlement = {
+      id: entry.id,
+      orderId: entry.orderId,
+      kind: entry.kind,
+      at: entry.at,
+      amount,
+      subtotal: round2(entry.subtotal ?? 0),
+      tax: round2(entry.tax ?? 0),
+      chargedCcFee: round2(entry.chargedCcFee ?? 0),
+      serviceFees: round2(entry.serviceFees ?? 0),
+      stripeFee: balance ? round2(balance.fee) : null,
+      stripeNet: balance ? round2(balance.net) : null,
+      availableOn: balance?.availableOn ?? null,
+      currency: entry.currency || "usd",
+      customerPhone: String(order?.customerPhone ?? ""),
+      customerName: String(order?.customerName ?? ""),
+      providerId: String(order?.providerId ?? ""),
+      providerName: String(order?.providerName ?? ""),
+      updatedAt: new Date().toISOString(),
+    };
+    await db.collection("settlements").doc(entry.id).set(doc, {merge: true});
+    return true;
+  } catch (e) {
+    console.warn(`recordSettlement failed for ${entry.id} (non-fatal)`, e);
+    return false;
+  }
+}
+
+/**
+ * The fee-table portion of what an order was charged — the setup/insurance bundle,
+ * never the bike and never the deposit. Amounts come from the order's own accepted-fee
+ * snapshot (what the customer agreed to), while the current config is consulted only
+ * to tell which key IS the deposit, since the snapshot doesn't carry that flag.
+ * Mirrors computeRentalSubtotal: the bundle is charged once per rental, not per period.
+ */
+function orderServiceFees(order: any, depositFeeKeys: Set<string>): number {
+  if (order?.rentalType === "buy") return 0; // a purchase carries no fee bundle
+  return round2((Array.isArray(order?.fees) ? order.fees : [])
+    .filter((f: any) => f?.accepted && !depositFeeKeys.has(String(f?.key)))
+    .reduce((sum: number, f: any) => sum + (Number(f?.amount) || 0), 0));
+}
+
+const depositFeeKeysFrom = (logistics: LogisticsDoc): Set<string> =>
+  new Set((logistics.fees || []).filter((f) => f.isDeposit).map((f) => String(f.key)));
+
+/**
+ * Every money movement recoverable from an order document alone. Used to backfill the
+ * ledger for orders charged before it existed: each Stripe id lives on the order, and
+ * the order's own pricing fields describe the split. Installments are the one lossy
+ * case — only the most recent one keeps its payment-intent id, so earlier periods of a
+ * pre-existing plan can't be reconstructed.
+ */
+function deriveSettlementEntries(orderId: string, order: any, depositFeeKeys: Set<string>): SettlementEntry[] {
+  const entries: SettlementEntry[] = [];
+  const taxRate = Number(order.taxRate) || 0;
+  const serviceFees = orderServiceFees(order, depositFeeKeys);
+
+  if (order.paymentIntentId && order.paymentCaptured) {
+    const gross = Number(order.chargedAmount ?? order.finalPrice ?? order.estimatedPrice ?? 0);
+    const tax = Number(order.adjustedTax ?? order.tax ?? 0);
+    const ccFee = Number(order.adjustedProcessingFee ?? order.ccProcessingFee ?? 0);
+    if (gross > 0) {
+      entries.push({
+        id: String(order.paymentIntentId),
+        orderId,
+        kind: "rental",
+        at: order.chargedAt || order.deliveredAt || order.createdAt,
+        amount: gross,
+        subtotal: gross - tax - ccFee,
+        tax,
+        chargedCcFee: ccFee,
+        serviceFees,
+        paymentIntent: String(order.paymentIntentId),
+      });
+    }
+  }
+
+  const depositCharged = Number(order.depositChargedAmount ?? 0);
+  if (order.depositPaymentIntentId && depositCharged > 0) {
+    entries.push({
+      id: String(order.depositPaymentIntentId),
+      orderId,
+      kind: "deposit",
+      at: order.depositChargedAt || order.chargedAt || order.createdAt,
+      amount: depositCharged,
+      subtotal: depositCharged,
+      paymentIntent: String(order.depositPaymentIntentId),
+    });
+  }
+
+  const refunded = Number(order.depositRefundedAmount ?? 0);
+  if (order.depositRefundId && refunded > 0) {
+    entries.push({
+      id: String(order.depositRefundId),
+      orderId,
+      kind: "deposit_refund",
+      at: order.depositRefundedAt || order.completedAt || order.createdAt,
+      amount: -refunded,
+      subtotal: -refunded,
+      refundId: String(order.depositRefundId),
+    });
+  }
+
+  for (const r of (Array.isArray(order.receipts) ? order.receipts : []) as OrderReceipt[]) {
+    if (r.kind !== "renewal" || !r.paid || !r.paymentIntentId) continue;
+    // taxesAndFees is tax + card fee combined, as the customer sees it. Tax was
+    // computed off the pre-tax subtotal, so re-deriving it recovers the split.
+    const tax = round2(Number(r.subtotal || 0) * taxRate);
+    const extras = (r.extraLines || []).reduce((s, l) => s + Number(l.amount || 0), 0);
+    entries.push({
+      id: String(r.paymentIntentId),
+      orderId,
+      kind: "renewal",
+      at: r.issuedAt,
+      amount: Number(r.total || 0),
+      subtotal: Number(r.subtotal || 0) + extras,
+      tax,
+      chargedCcFee: round2(Number(r.taxesAndFees || 0) - tax),
+      // A renewal re-bills the recurring fee bundle (lines[0] is the bike), and the
+      // missed-collection admin fee arrives in extraLines.
+      serviceFees: round2((r.lines || []).slice(1).reduce((s, l) => s + Number(l.amount || 0), 0) + extras),
+      paymentIntent: String(r.paymentIntentId),
+    });
+  }
+
+  const sched = order.billingSchedule as BillingSchedule | undefined;
+  const plan = order.rentToBuyPlan as RentToBuyPlan | undefined;
+  if (sched?.lastPaymentIntentId && sched.lastChargedAt) {
+    entries.push({
+      id: String(sched.lastPaymentIntentId),
+      orderId,
+      kind: "installment",
+      at: sched.lastChargedAt,
+      amount: Number(sched.perPeriodAmount || 0),
+      subtotal: Number(plan?.perPeriodSubtotal || 0),
+      tax: Number(plan?.perPeriodTax || 0),
+      chargedCcFee: Number(plan?.perPeriodCcFee || 0),
+      // An installment carries the recurring fees for its period; the rest is the bike.
+      serviceFees: round2(Math.max(0, Number(plan?.perPeriodSubtotal || 0) - Number(order.baseRate || 0))),
+      paymentIntent: String(sched.lastPaymentIntentId),
+    });
+  }
+
+  if (order.tipPaymentIntentId && Number(order.tip || 0) > 0) {
+    entries.push({
+      id: String(order.tipPaymentIntentId),
+      orderId,
+      kind: "tip",
+      at: order.tipChargedAt || order.completedAt || order.createdAt,
+      amount: Number(order.tip),
+      subtotal: Number(order.tip),
+      paymentIntent: String(order.tipPaymentIntentId),
+    });
+  }
+
+  return entries.filter((e) => !!e.at);
+}
+
+/**
+ * Reconcile the settlement ledger against Stripe. Two jobs, both bounded so the admin
+ * hub can run it on demand without a call ever running away:
+ *
+ *  1. Backfill — an order charged before the ledger existed has no entry at all. Its
+ *     payment-intent ids are all on the order, so entries are reconstructed from it.
+ *  2. Fill fees — an entry written the instant a charge cleared can have a null
+ *     stripeFee, because the balance transaction lags the charge by a moment. Those
+ *     are re-read from Stripe.
+ *
+ * Orders are walked newest-first; pass back the returned `nextCursor` to continue.
+ */
+export const syncStripeSettlements = onCall({timeoutSeconds: 300, memory: "512MiB"}, async (request) => {
+  if (!request.auth || request.auth.token.admin !== true) {
+    throw new HttpsError("permission-denied", "Unauthorized.");
+  }
+  const clamp = (n: any, lo: number, hi: number, dflt: number) => {
+    const v = Number(n);
+    return Number.isFinite(v) ? Math.min(hi, Math.max(lo, Math.floor(v))) : dflt;
+  };
+  const maxOrders = clamp(request.data?.maxOrders, 1, 300, 150);
+  const maxFees = clamp(request.data?.maxFees, 0, 300, 150);
+  const cursor: string | undefined = request.data?.cursor;
+
+  const [config, logistics] = await Promise.all([getConfig(), getLogistics()]);
+  const stripeClient = getStripe(config.stripe.secretKey);
+  const depositFeeKeys = depositFeeKeysFrom(logistics);
+
+  // ── 1. Backfill missing ledger entries ────────────────────────────────────
+  let q = db.collection("orders").orderBy("createdAt", "desc").limit(maxOrders);
+  if (cursor) q = db.collection("orders").orderBy("createdAt", "desc").startAfter(cursor).limit(maxOrders);
+  const orderSnap = await q.get();
+
+  const candidates: SettlementEntry[] = [];
+  const orderById = new Map<string, any>();
+  for (const doc of orderSnap.docs) {
+    const order = doc.data();
+    orderById.set(doc.id, order);
+    candidates.push(...deriveSettlementEntries(doc.id, order, depositFeeKeys));
+  }
+
+  // One batched read to find which are already ledgered, rather than a get per entry.
+  const existing = new Set<string>();
+  for (let i = 0; i < candidates.length; i += 200) {
+    const refs = candidates.slice(i, i + 200).map((e) => db.collection("settlements").doc(e.id));
+    if (!refs.length) continue;
+    const snaps = await db.getAll(...refs);
+    snaps.forEach((s) => { if (s.exists) existing.add(s.id); });
+  }
+
+  const missing = candidates.filter((e) => !existing.has(e.id));
+  let backfilled = 0;
+  let failed = 0;
+  for (const entry of missing) {
+    // recordSettlement swallows its own errors, so count what it reports rather than
+    // what we attempted — otherwise a run that wrote nothing still reads as a success.
+    if (await recordSettlement(stripeClient, orderById.get(entry.orderId), entry)) backfilled += 1;
+    else failed += 1;
+  }
+
+  // ── 2. Fill in fees Stripe hadn't posted when the entry was written ───────
+  let feesFilled = 0;
+  if (maxFees > 0) {
+    const pending = await db.collection("settlements")
+      .where("stripeFee", "==", null)
+      .limit(maxFees)
+      .get();
+    for (const doc of pending.docs) {
+      const s = doc.data() as Settlement;
+      const balance = await readStripeBalance(
+        stripeClient,
+        s.kind === "deposit_refund" ? {refundId: s.id} : {paymentIntent: s.id},
+      );
+      if (!balance) continue;
+      await doc.ref.update({
+        stripeFee: round2(balance.fee),
+        stripeNet: round2(balance.net),
+        availableOn: balance.availableOn,
+        updatedAt: new Date().toISOString(),
+      });
+      feesFilled += 1;
+    }
+  }
+
+  const lastOrder = orderSnap.docs[orderSnap.docs.length - 1];
+  return {
+    ordersScanned: orderSnap.size,
+    // How many money movements this page of orders held at all, so "0 added" can be
+    // told apart from "nothing to add" without reading the logs.
+    candidates: candidates.length,
+    backfilled,
+    failed,
+    feesFilled,
+    // null once the walk has reached the oldest order — nothing left to page through.
+    nextCursor: orderSnap.size === maxOrders && lastOrder ? String(lastOrder.data().createdAt ?? "") : null,
+  };
+});
+
 // One rent-to-buy billing interval forward from an ISO timestamp, honoring the model's
 // configured cadence. Month math uses setMonth so a Jan-31 start lands correctly.
 // 'daily'/'weekly' are testing conveniences; 'monthly' is the production default.
@@ -667,13 +1016,152 @@ function computeRentalSubtotal(
   };
 }
 
+// ── Promo codes ──────────────────────────────────────────────────────────────
+// A promo lives at promos/{providerId}_{promoId} and its `offerType` binds it to ONE
+// transaction type (rent · rentToBuy · buy). Mirrored client-side in
+// foodyzz/src/services/promos.ts so the confirm step shows the same discount this
+// resolves — but the amount authorized is always the one computed here.
+
+interface PromoDoc {
+  offerCode?: string;
+  offerType?: string;
+  discountType?: string;
+  discountValue?: number;
+  isActive?: boolean;
+  expirationDate?: string;
+  offerExpDate?: string;
+}
+
+const RENTAL_TYPE_LABEL: Record<string, string> = {
+  rent: "Rent",
+  rentToBuy: "Rent to Buy",
+  buy: "Buy",
+};
+
+interface ResolvedCoupon {
+  promoId: string;
+  code: string;
+  discount: number;
+}
+
+// How long a checkout may hold a promo before another attempt can take it back. Long
+// enough to finish a payment sheet, short enough that abandoning checkout doesn't
+// strand the customer's own code.
+const PROMO_CLAIM_TTL_MS = 15 * 60 * 1000;
+
+// One claim doc per (promo, customer) — its existence IS the redemption record, and
+// `confirmed` is what makes the use permanent. Server-only (see firestore.rules): a
+// customer must not be able to delete their own claim and spend the code twice.
+const promoClaimRef = (promoId: string, phone: string) =>
+  db.collection("promoRedemptions").doc(`${promoId}__${String(phone).replace(/[^0-9]/g, "")}`);
+
+/**
+ * Resolve a coupon code to the promo behind it and prove it may be spent on THIS
+ * order, then price the discount off the rental subtotal.
+ *
+ * Every rejection throws. The customer was shown a discounted total on the confirm
+ * step, so quietly dropping a bad code and authorizing the full price is not an
+ * option — the client surfaces the message and re-prices instead.
+ */
+async function resolveCoupon(
+  rawCode: unknown,
+  rentalType: string,
+  subtotal: number,
+): Promise<ResolvedCoupon> {
+  const code = String(rawCode ?? "").trim().toUpperCase();
+  if (!code) throw new HttpsError("invalid-argument", "Missing promo code.");
+
+  // Offer codes are not document ids, so scan the (tiny) set of matches and take the
+  // live one. Bounded read.
+  const snap = await db.collection("promos").where("offerCode", "==", code).limit(10).get();
+  const hit = snap.docs.find((d) => (d.data() as PromoDoc).isActive !== false);
+  if (!hit) throw new HttpsError("failed-precondition", "That promo code isn't valid.");
+  const promo = hit.data() as PromoDoc;
+
+  // Promos store plain YYYY-MM-DD days, so expiry compares as a string.
+  const today = new Date().toISOString().slice(0, 10);
+  for (const day of [promo.offerExpDate, promo.expirationDate]) {
+    if (day && String(day) < today) {
+      throw new HttpsError("failed-precondition", "That promo code has expired.");
+    }
+  }
+
+  // Prior use is NOT checked here — claimCoupon owns that, in a transaction, so there
+  // is exactly one place that decides whether a code is still spendable.
+
+  // The type gate. A promo with no offerType predates the field and is treated as
+  // rent-only rather than as a wildcard — an offer we can't read is never widened.
+  const offerType = promo.offerType || "rent";
+  if (offerType !== rentalType) {
+    throw new HttpsError(
+      "failed-precondition",
+      `That code only works on ${RENTAL_TYPE_LABEL[offerType] || offerType} orders.`,
+    );
+  }
+
+  const value = Number(promo.discountValue) || 0;
+  if (value <= 0) throw new HttpsError("failed-precondition", "That promo code doesn't carry a discount.");
+
+  // Capped at the subtotal — a coupon can zero the rental out but never becomes credit.
+  const raw = promo.discountType === "percentage" ? (subtotal * value) / 100 : value;
+  const discount = Math.round(Math.min(Math.max(raw, 0), subtotal) * 100) / 100;
+
+  return {promoId: hit.id, code, discount};
+}
+
+/**
+ * Take the code out of circulation for this customer, atomically, BEFORE their card is
+ * authorized. The customer's own `redeemedPromoIds` is advisory only — it is written
+ * after the fact and two checkouts racing each other would both read it as clean — so
+ * the guarantee lives in a transaction against a single claim doc instead.
+ *
+ * A claim is confirmed for good once the order it belongs to is created
+ * (onOrderCreatedRedeemPromo). Until then it is a reservation: the SAME checkout may
+ * retake it on a retry, and it lapses after PROMO_CLAIM_TTL_MS so a customer who
+ * abandons the payment sheet doesn't lose their own code.
+ */
+async function claimCoupon(coupon: ResolvedCoupon, phone: string, orderId: string): Promise<void> {
+  if (!phone) throw new HttpsError("failed-precondition", "A verified phone number is required to use a promo code.");
+  const ref = promoClaimRef(coupon.promoId, phone);
+
+  await db.runTransaction(async (tx) => {
+    const snap = await tx.get(ref);
+    const existing = snap.data();
+    if (existing) {
+      if (existing.confirmed === true) {
+        throw new HttpsError("failed-precondition", "You've already used that promo code.");
+      }
+      // An unreadable timestamp counts as fresh — fail toward refusing the code, never
+      // toward handing out a second discount.
+      const claimedMs = typeof existing.claimedAt?.toMillis === "function" ?
+        existing.claimedAt.toMillis() :
+        Number.POSITIVE_INFINITY;
+      if (existing.orderId !== orderId && Date.now() - claimedMs < PROMO_CLAIM_TTL_MS) {
+        throw new HttpsError(
+          "failed-precondition",
+          "That promo code is already being used on another checkout. Try again in a few minutes.",
+        );
+      }
+    }
+    tx.set(ref, {
+      promoId: coupon.promoId,
+      code: coupon.code,
+      customerPhone: phone,
+      orderId,
+      discount: coupon.discount,
+      claimedAt: Timestamp.now(),
+      confirmed: false,
+    });
+  });
+}
+
 export const createPaymentIntent = onCall(async (request) => {
   if (!request.auth) throw new HttpsError("unauthenticated", "Authentication required.");
   const {
     orderId, currency, providerId, stripeCustomerId,
     // The customer's SELECTIONS. The server re-derives the price from these against
     // apiConfig/logistics — a client-sent amount is never trusted.
-    rentalType, bikeModel, durationValue, fees,
+    rentalType, bikeModel, durationValue, fees, couponCode,
   } = request.data;
 
   if (!providerId || providerId === "broadcast") {
@@ -705,11 +1193,24 @@ export const createPaymentIntent = onCall(async (request) => {
     const provSnap = await db.collection("providers").doc(String(providerId)).get();
     const prov = provSnap.data() || {};
     const taxRate = prov.chargesSalesTax === true ? (prov.salesTaxRate ?? 0) : 0;
-    const pricing = computePricing(quote.subtotal, taxRate, config);
+
+    // A promo code must match this order's rental type or resolveCoupon throws — the
+    // discount only ever comes off the amount charged at checkout.
+    const buyerPhone = request.auth.token.phone_number || "";
+    const coupon = couponCode ?
+      await resolveCoupon(couponCode, rentalType, quote.subtotal) :
+      null;
+    // Reserve the code before the card is touched, so a second checkout can never be
+    // authorized at a discount off the same promo.
+    if (coupon) await claimCoupon(coupon, buyerPhone, String(orderId));
+
+    const pricing = computePricing(quote.subtotal, taxRate, config, coupon?.discount ?? 0);
 
     // Rent-to-buy: price the recurring installment now so the amount is locked at
     // checkout. quote.subtotal already charges only the first period at delivery; each
     // later period bills `perPeriodAmount` (per-period subtotal + its own tax + card fee).
+    // The coupon is deliberately NOT applied here — it discounts the first payment
+    // only, so every installment after delivery bills the undiscounted period.
     let rentToBuyPlan: RentToBuyPlan | undefined;
     if (rentalType === "rentToBuy" && typeof quote.perPeriodSubtotal === "number") {
       const perPeriod = computePricing(quote.perPeriodSubtotal, taxRate, config);
@@ -739,7 +1240,6 @@ export const createPaymentIntent = onCall(async (request) => {
     // Every rental needs a Customer attached: `setup_future_usage` below only saves
     // the card if there is somewhere to save it to. Create one on first order and
     // persist it so later charges (and the deposit hold) reuse the same record.
-    const buyerPhone = request.auth.token.phone_number || "";
     if (!verifiedCustomerId && buyerPhone) {
       const userRef = db.collection("users").doc(String(buyerPhone));
       const existing = (await userRef.get()).data()?.stripeCustomerId;
@@ -797,6 +1297,11 @@ export const createPaymentIntent = onCall(async (request) => {
         tax: pricing.tax,
         ccProcessingFee: pricing.ccFee,
         total: chargeTotal,
+        // The coupon as the server priced it — the client persists these on the order
+        // so the receipt and the promo's redemption record agree with what was charged.
+        couponCode: coupon?.code ?? null,
+        couponDiscount: coupon?.discount ?? null,
+        couponPromoId: coupon?.promoId ?? null,
         // Present only for rent-to-buy — the installment plan the client persists on
         // the order so delivery can seed the billing schedule from it.
         rentToBuyPlan: rentToBuyPlan ?? null,
@@ -882,6 +1387,13 @@ export const stripeWebhook = onRequest(async (req, res) => {
       }
       break;
     }
+    // Everything below describes the BASE rental charge. Every other payment on an
+    // order — the security deposit, a missed-collection renewal, a rent-to-buy
+    // installment — is created off-session with its own `kind` and its own
+    // PaymentIntent, and each is already recorded (and ledgered) at its call site.
+    // Those events carry the same orderId, so without this guard a deposit clearing
+    // would stamp paymentCaptured and overwrite chargedAmount with the deposit.
+    if (intent.metadata.kind) break;
     // `succeeded` fires only once funds are actually CAPTURED — for manual
     // capture this is after capturePaymentIntent runs (at rental start), not
     // at authorization. So paymentCaptured is always true here.
@@ -889,6 +1401,7 @@ export const stripeWebhook = onRequest(async (req, res) => {
     // Backstop the settlement date + charged amount from the charge's balance
     // transaction (capturePaymentIntent already stamps these; only fill, don't clobber).
     const chargeId = typeof intent.latest_charge === "string" ? intent.latest_charge : undefined;
+    let settledFee: { fee: number; net: number; availableOn: string | null } | null = null;
     if (chargeId) {
       try {
         const charge = await stripe.charges.retrieve(chargeId, {expand: ["balance_transaction"]});
@@ -896,11 +1409,47 @@ export const stripeWebhook = onRequest(async (req, res) => {
         const bt = charge.balance_transaction && typeof charge.balance_transaction !== "string" ?
             charge.balance_transaction as Stripe.BalanceTransaction : null;
         if (bt?.available_on) upd.chargeAvailableOn = new Date(bt.available_on * 1000).toISOString();
+        if (bt) settledFee = {fee: bt.fee / 100, net: bt.net / 100, availableOn: upd.chargeAvailableOn ?? null};
       } catch (e) {
         console.warn("stripeWebhook: charge retrieve failed (non-fatal)", e);
       }
     }
     await db.collection("orders").doc(orderId).update(upd);
+    // Ledger backstop. capturePaymentIntent normally records this entry with the same
+    // key; the webhook only fills a gap (or a fee that wasn't available yet), so the
+    // merge below can't double-count. Only the base rental charge reaches here — the
+    // tip branch returned above, and every off-session charge is ledgered at its site.
+    {
+      const settledSnap = await db.collection("orders").doc(orderId).get();
+      const settledOrder = settledSnap.data() as RentalOrder | undefined;
+      const gross = Number(upd.chargedAmount ?? settledOrder?.chargedAmount ?? 0);
+      const tax = Number(settledOrder?.adjustedTax ?? settledOrder?.tax ?? 0);
+      const ccFee = Number(settledOrder?.adjustedProcessingFee ?? settledOrder?.ccProcessingFee ?? 0);
+      if (gross > 0) {
+        await db.collection("settlements").doc(intent.id).set({
+          id: intent.id,
+          orderId,
+          kind: "rental" as SettlementKind,
+          at: settledOrder?.chargedAt || new Date().toISOString(),
+          amount: round2(gross),
+          subtotal: round2(gross - tax - ccFee),
+          tax: round2(tax),
+          chargedCcFee: round2(ccFee),
+          serviceFees: orderServiceFees(settledOrder, depositFeeKeysFrom(await getLogistics())),
+          ...(settledFee ? {
+            stripeFee: round2(settledFee.fee),
+            stripeNet: round2(settledFee.net),
+            availableOn: settledFee.availableOn,
+          } : {}),
+          currency: intent.currency || "usd",
+          customerPhone: String(settledOrder?.customerPhone ?? ""),
+          customerName: String(settledOrder?.customerName ?? ""),
+          providerId: String(settledOrder?.providerId ?? ""),
+          providerName: String(settledOrder?.providerName ?? ""),
+          updatedAt: new Date().toISOString(),
+        }, {merge: true}).catch((e) => console.warn("stripeWebhook: settlement write failed (non-fatal)", e));
+      }
+    }
     break;
   }
   case "payment_intent.payment_failed":
@@ -995,6 +1544,9 @@ export const capturePaymentIntent = onCall(async (request) => {
     // comes from the charge too (source of truth).
     let chargeAvailableOn: string | undefined;
     let capturedCents: number | undefined;
+    // Held for the settlement-ledger entry below: it already carries the expanded
+    // balance transaction, so recording the real Stripe fee costs no extra API call.
+    let capturedPi: Stripe.PaymentIntent | undefined;
 
     if (order.paymentIntentId) {
       let pi = await stripe.paymentIntents.retrieve(order.paymentIntentId, {expand: ["latest_charge.balance_transaction"]});
@@ -1027,6 +1579,7 @@ export const capturePaymentIntent = onCall(async (request) => {
         );
       }
 
+      capturedPi = pi;
       const charge = pi.latest_charge && typeof pi.latest_charge !== "string" ? pi.latest_charge as Stripe.Charge : null;
       if (charge) capturedCents = charge.amount_captured ?? charge.amount;
       const bt = charge && charge.balance_transaction && typeof charge.balance_transaction !== "string" ?
@@ -1058,6 +1611,27 @@ export const capturePaymentIntent = onCall(async (request) => {
       });
       customerPhone = cur.customerPhone;
     });
+
+    // Ledger the delivery charge. Tax and the card-processing line are what the
+    // customer was billed; the rest of the capture is the rental itself, so the three
+    // always add back up to the gross even after a price adjustment or a clamp.
+    if (capturedPi) {
+      const tax = Number(order.adjustedTax ?? order.tax ?? 0);
+      const ccFee = Number(order.adjustedProcessingFee ?? order.ccProcessingFee ?? 0);
+      await recordSettlement(stripe, order, {
+        id: capturedPi.id,
+        orderId,
+        kind: "rental",
+        at: nowIso,
+        amount: chargedAmount,
+        subtotal: chargedAmount - tax - ccFee,
+        tax,
+        chargedCcFee: ccFee,
+        serviceFees: orderServiceFees(order, depositFeeKeysFrom(await getLogistics())),
+        currency: capturedPi.currency,
+        paymentIntent: capturedPi,
+      });
+    }
 
     if (customerPhone) {
       // Non-fatal: the payment is already captured and the order updated inside
@@ -1322,6 +1896,18 @@ async function recordTipPaid(orderRef: DocumentReference, order: RentalOrder, pi
     tipChargedAt: nowIso,
     tipChargeAvailableOn,
     updatedAt: nowIso,
+  });
+  // A tip is untaxed and carries no card-fee line, so Stripe's cut on it comes
+  // straight off the top — worth seeing in the ledger.
+  await recordSettlement(getStripe((await getConfig()).stripe.secretKey), order, {
+    id: pi.id,
+    orderId: orderRef.id,
+    kind: "tip",
+    at: nowIso,
+    amount: tip,
+    subtotal: tip,
+    currency: pi.currency,
+    paymentIntent: pi,
   });
   if (order.providerId && order.providerId !== "broadcast") {
     await notifyProvider(
@@ -1789,6 +2375,54 @@ export const incrementPromoViews = onCall(async (request) => {
   if (promoSnap.data()?.isActive !== true) return {success: false};
   await promoRef.update({viewsCounter: FieldValue.increment(1)});
   return {success: true};
+});
+
+/**
+ * Make a promo redemption permanent once the order that spent it exists.
+ *
+ * createPaymentIntent already RESERVED the code (claimCoupon) — that reservation is
+ * what stops a concurrent checkout. This flips it to `confirmed`, which no later
+ * checkout can take back.
+ *
+ * Only the order the claim was made for may confirm it: a second order carrying the
+ * same code (the claim having lapsed under it) must not consume someone's live claim.
+ *
+ * The customer-facing mirror goes on the CUSTOMER's own doc, not on the promo. A
+ * `usedBy` roster on promos/{id} would put every redeemer's phone number inside a
+ * document that is world-readable AND live-streamed to every home screen — so each
+ * redemption would re-deliver a forever-growing phone list to every online client.
+ * users/{phone} is already streamed to exactly one client: its owner.
+ */
+export const onOrderCreatedRedeemPromo = onDocumentCreated("orders/{orderId}", async (event) => {
+  const order = event.data?.data() as { couponPromoId?: string; customerPhone?: string } | undefined;
+  const promoId = order?.couponPromoId;
+  const phone = order?.customerPhone;
+  if (!promoId || !phone) return;
+  const orderId = event.params.orderId;
+
+  try {
+    const ref = promoClaimRef(String(promoId), String(phone));
+    await db.runTransaction(async (tx) => {
+      const claim = (await tx.get(ref)).data();
+      // No claim (or it has moved on to another checkout) → nothing of ours to confirm.
+      if (claim && claim.orderId !== orderId && claim.confirmed === true) return;
+      tx.set(ref, {
+        promoId: String(promoId),
+        customerPhone: String(phone),
+        orderId,
+        confirmed: true,
+        confirmedAt: Timestamp.now(),
+      }, {merge: true});
+    });
+    await db.collection("users").doc(String(phone)).set({
+      redeemedPromoIds: FieldValue.arrayUnion(String(promoId)),
+    }, {merge: true});
+  } catch (e) {
+    // Best-effort: the order is already paid for, and a promo deleted between checkout
+    // and this trigger must not surface as an order failure. The claim doc written at
+    // checkout still blocks a reuse even if the mirror never lands.
+    console.warn(`redeem promo ${promoId} for order ${orderId} failed:`, e);
+  }
 });
 
 // Cancels broadcast orders no provider has claimed within 12 hours: releases the
@@ -2518,6 +3152,19 @@ export const markRentalDelivered = onCall(async (request) => {
       updates.depositStatus = "charged";
       updates.depositChargedAmount = depositAmount;
       updates.depositChargedAt = new Date().toISOString();
+      // Ledger it. The deposit is billed as pure principal — no tax, no card-fee line —
+      // but Stripe still takes its cut on the way in and keeps it on the way out, so
+      // this entry is the only place that cost is visible.
+      await recordSettlement(stripe, order, {
+        id: res.pi.id,
+        orderId: String(orderId),
+        kind: "deposit",
+        at: updates.depositChargedAt,
+        amount: depositAmount,
+        subtotal: depositAmount,
+        currency: res.pi.currency,
+        paymentIntent: res.pi,
+      });
     } catch (err: any) {
       // The bike IS delivered and the rental IS charged, so don't fail the whole
       // call — flag the deposit for follow-up instead.
@@ -2665,6 +3312,11 @@ function quoteRentalRenewal(order: any, logistics: LogisticsDoc, config: GlobalC
   lines: { label: string; amount: number }[];
   subtotal: number;
   taxesAndFees: number;
+  // The two halves of taxesAndFees, kept apart for the settlement ledger — the
+  // customer sees them combined, but margin reporting has to compare the card fee we
+  // billed against the one Stripe actually took.
+  tax: number;
+  ccFee: number;
   rentalCharge: number;
   adminFee: number;
   total: number;
@@ -2701,6 +3353,8 @@ function quoteRentalRenewal(order: any, logistics: LogisticsDoc, config: GlobalC
     lines,
     subtotal: renewalSubtotal,
     taxesAndFees: round2(pricing.tax + pricing.ccFee),
+    tax: round2(pricing.tax),
+    ccFee: round2(pricing.ccFee),
     rentalCharge: round2(pricing.total),
     adminFee: round2(adminFee),
     total: round2(pricing.total + adminFee),
@@ -2877,8 +3531,25 @@ export const recordRentalPickupFailed = onCall(async (request) => {
       const res = await chargeRentalRenewal(
         stripe, String(orderId), card.customerId, card.paymentMethodId, quote.total, attemptNo,
       );
-      if (res.ok) paymentIntentId = res.pi.id;
-      else chargeError = res.error;
+      if (res.ok) {
+        paymentIntentId = res.pi.id;
+        // The admin fee is untaxed revenue, so it belongs in the subtotal alongside
+        // the renewed term rather than in either fee bucket.
+        await recordSettlement(stripe, order, {
+          id: res.pi.id,
+          orderId: String(orderId),
+          kind: "renewal",
+          at: nowIso,
+          amount: quote.total,
+          subtotal: quote.subtotal + quote.adminFee,
+          tax: quote.tax,
+          chargedCcFee: quote.ccFee,
+          // lines[0] is the bike; the rest of the renewed term is the fee bundle.
+          serviceFees: quote.lines.slice(1).reduce((s, l) => s + l.amount, 0) + quote.adminFee,
+          currency: res.pi.currency,
+          paymentIntent: res.pi,
+        });
+      } else chargeError = res.error;
     }
   }
   if (chargeError) {
@@ -3138,6 +3809,17 @@ export const markRentalReturned = onCall(async (request) => {
       if (res.ok) {
         updates.depositRefundId = res.refundId;
         refundAmount = refundTarget;
+        // Negative ledger entry: money leaving. Stripe returns no fee with a refund,
+        // so this line reduces gross without recovering what the deposit cost to take.
+        await recordSettlement(stripe, order, {
+          id: res.refundId,
+          orderId: String(orderId),
+          kind: "deposit_refund",
+          at: now.toISOString(),
+          amount: -refundTarget,
+          subtotal: -refundTarget,
+          refundId: res.refundId,
+        });
       } else {
         // Bike is still back in stock — surface the refund failure for manual follow-up
         // rather than failing the return.
@@ -3389,6 +4071,23 @@ async function chargeRentToBuyPeriods(
         toPeriod: String(toPeriod),
       },
     }, {idempotencyKey: `${orderRef.id}:rtb:${fromPeriod}-${toPeriod}`});
+    // Ledger it here rather than at the two call sites, so the cron and an early
+    // payoff both land in the settlement ledger with the same split. The per-period
+    // tax and card fee were locked at checkout on the plan.
+    const plan = (order.rentToBuyPlan || {}) as RentToBuyPlan;
+    await recordSettlement(stripe, order, {
+      id: pi.id,
+      orderId: orderRef.id,
+      kind: "installment",
+      at: new Date().toISOString(),
+      amount: cents / 100,
+      subtotal: Number(plan.perPeriodSubtotal || 0) * count,
+      tax: Number(plan.perPeriodTax || 0) * count,
+      chargedCcFee: Number(plan.perPeriodCcFee || 0) * count,
+      serviceFees: Math.max(0, Number(plan.perPeriodSubtotal || 0) - Number(order.baseRate || 0)) * count,
+      currency: pi.currency,
+      paymentIntent: pi,
+    });
     return {ok: true, pi};
   } catch (err: any) {
     return {ok: false, error: String(err?.message ?? err)};
@@ -3420,8 +4119,18 @@ async function completeRentToBuyOwnership(orderRef: DocumentReference, order: an
     const amount = Number(order.depositChargedAmount ?? order.depositAmount ?? 0);
     if (stripe && amount > 0) {
       const res = await refundChargedDeposit(stripe, orderRef.id, order.depositPaymentIntentId, amount);
-      if (res.ok) updates.depositRefundId = res.refundId;
-      else console.error(`completeRentToBuyOwnership: deposit refund failed for ${orderRef.id}`, res.error);
+      if (res.ok) {
+        updates.depositRefundId = res.refundId;
+        await recordSettlement(stripe, order, {
+          id: res.refundId,
+          orderId: orderRef.id,
+          kind: "deposit_refund",
+          at: nowIso,
+          amount: -amount,
+          subtotal: -amount,
+          refundId: res.refundId,
+        });
+      } else console.error(`completeRentToBuyOwnership: deposit refund failed for ${orderRef.id}`, res.error);
     }
     updates.depositStatus = "refunded";
     updates.depositRefundedAmount = amount;

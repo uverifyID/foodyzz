@@ -36,6 +36,10 @@ export interface UserProfile {
   addressProof?: CustomerDocument;
   // Sales-rep referral attribution (visibility / thank-you only — does not earn
   // the manager commission; only the provider's referrer earns).
+  // Promo ids this customer has redeemed, written by onOrderCreatedRedeemPromo. Lives
+  // here — on the customer's own doc — rather than as a roster of redeemers on the
+  // promo, which is world-readable and streamed to every home screen.
+  redeemedPromoIds?: string[];
 }
 
 export interface ProviderProfile {
@@ -183,6 +187,52 @@ export interface OrderReceipt {
   paid: boolean;         // false when the card declined — the term still renewed
   paymentIntentId?: string | null;
   error?: string | null;
+}
+
+// ── Settlement ledger (settlements/{stripeId}) ──────────────────────────────
+// One document per money movement through Stripe: the delivery charge, the security
+// deposit, its refund, a missed-collection renewal, a rent-to-buy installment, a tip.
+// The order documents describe what the CUSTOMER agreed to pay; this ledger records
+// what actually moved and, crucially, what Stripe kept for moving it — the balance
+// transaction's fee is nowhere on the order, so program margin can't be read without
+// it. Server-written, admin-read (firestore.rules); the customer never sees it.
+export type SettlementKind =
+  | "rental" // the delivery capture — the first period / the whole term
+  | "deposit" // the refundable security deposit, charged as its own transaction
+  | "deposit_refund" // that deposit going back, minus any damage adjustments
+  | "renewal" // a term renewed because staff found nobody home at collection
+  | "installment" // one rent-to-buy period
+  | "tip"; // post-delivery, provider-kept, untaxed
+
+export interface Settlement {
+  id: string; // Stripe PaymentIntent id (or refund id) — also the document id
+  orderId: string;
+  kind: SettlementKind;
+  at: string; // ISO — when the money moved. The ledger's only sort/filter key.
+  // Signed, in dollars: charges positive, refunds negative. This is the gross the
+  // card was asked for, which is what Stripe's fee is computed against.
+  amount: number;
+  // The split of `amount` as WE billed it. subtotal + tax + chargedCcFee ≈ amount
+  // (a deposit is all subtotal; a tip is untaxed and carries no card-fee line).
+  subtotal: number;
+  tax: number;
+  chargedCcFee: number; // the card-processing line item the customer paid us
+  // The fee-table portion of `subtotal` — setup/insurance/whatever the fee bundle
+  // holds, plus the missed-collection admin fee. The bike itself is subtotal − this.
+  serviceFees: number;
+  // What Stripe ACTUALLY took, and what it actually paid us, from the charge's
+  // balance transaction. null while the balance transaction isn't readable yet —
+  // syncStripeSettlements backfills those. stripeNet = amount − stripeFee.
+  stripeFee: number | null;
+  stripeNet: number | null;
+  availableOn: string | null; // when the funds land in the platform balance
+  currency: string;
+  // Denormalized so the ledger renders without fanning out to orders/users.
+  customerPhone: string;
+  customerName: string;
+  providerId: string;
+  providerName: string;
+  updatedAt: string;
 }
 
 // ── Foodyzz bike-rental domain ──────────────────────────────────────────────
@@ -409,7 +459,11 @@ export interface RentalOrder {
   tax?: number;
   taxRate?: number;
   ccProcessingFee?: number;
+  couponCode?: string | null;
   couponDiscount?: number | null;
+  // The promos/{id} the code came from. onOrderCreatedRedeemPromo uses it to confirm
+  // the redemption claim, so the code can't be spent a second time.
+  couponPromoId?: string | null;
   adjustedSubtotal?: number;
   adjustedDeliveryFee?: number;
   adjustedTax?: number;

@@ -14,8 +14,8 @@ import {
   View, Text, ScrollView, TouchableOpacity, Alert, ActivityIndicator, Image, TextInput,
   KeyboardAvoidingView, Platform,
 } from 'react-native';
-import { Bike as BikeIcon, Calendar, Clock, MapPin, ShieldCheck, Check, CreditCard, Info } from 'lucide-react-native';
-import { useNavigation } from '@react-navigation/native';
+import { Bike as BikeIcon, Calendar, Clock, MapPin, ShieldCheck, Check, CreditCard, Info, Ticket, X } from 'lucide-react-native';
+import { useNavigation, useRoute } from '@react-navigation/native';
 import { useStripe } from '@stripe/stripe-react-native';
 import * as Haptics from 'expo-haptics';
 import { db, generateOrderId, subscribeToGlobalConfig, auth, getFunctionsInstance } from '../services/firebase';
@@ -36,7 +36,14 @@ import {
   toOrderFees,
   computeQuote,
 } from '../services/logistics';
-import type { Bike, LogisticsConfig, RentalType } from '../types';
+import {
+  normalizeCouponCode,
+  lookupPromoByCode,
+  checkPromoForOrder,
+  promoDiscountFor,
+  promoDiscountLabel,
+} from '../services/promos';
+import type { Bike, LogisticsConfig, PromoCampaign, RentalType } from '../types';
 import { useUserProfile } from '../context/UserProfileContext';
 import { useStripeReady } from '../context/StripeReadyContext';
 
@@ -56,6 +63,14 @@ const dayLabel = (day: string): string =>
 
 export default function OrderWizard() {
   const navigation = useNavigation<any>();
+  // Home's "Apply to Next Order" opens the wizard with the promo's code and the type
+  // it was minted for, so tapping an offer starts the matching transaction and the
+  // code is already waiting on the confirm step.
+  const route = useRoute<any>();
+  const { initialCouponCode, initialOfferType } = (route.params ?? {}) as {
+    initialCouponCode?: string;
+    initialOfferType?: RentalType;
+  };
   const { initPaymentSheet, presentPaymentSheet, confirmPayment } = useStripe();
   const scrollRef = useRef<ScrollView>(null);
   // False until the real Stripe publishable key has replaced the placeholder the
@@ -65,6 +80,10 @@ export default function OrderWizard() {
   // Rental type is the first step (step id 3) so the date step can adapt its label —
   // Buy asks "when do you need it by?" instead of "when do you start?".
   const [step, setStep] = useState(3);
+  // One order id for the whole wizard session, not one per pay attempt: the promo
+  // claim the backend takes out is bound to this id, so a retry after a declined card
+  // has to come back under the same id or it reads as a second checkout on the code.
+  const orderIdRef = useRef<string | null>(null);
   const [config, setConfig] = useState<any>(null);
   const [logistics, setLogistics] = useState<LogisticsConfig>(DEFAULT_LOGISTICS);
   // Customer profile from the shared single listener (UserProfileContext) instead of
@@ -76,7 +95,12 @@ export default function OrderWizard() {
   // ── Selections ────────────────────────────────────────────────────────────
   const [startDate, setStartDate] = useState<string>(tomorrowDay());
   const [deliveryTime, setDeliveryTime] = useState<string>('');
-  const [rentalType, setRentalType] = useState<RentalType | null>(null);
+  // Preselect the type an incoming promo is for, so the code it arrived with actually
+  // has a matching transaction to land on. The customer can still change it — the
+  // coupon comes back off if they do (see the re-check effect below).
+  const [rentalType, setRentalType] = useState<RentalType | null>(
+    initialOfferType && RENTAL_TYPES.some((t) => t.key === initialOfferType) ? initialOfferType : null,
+  );
   const [bikeModel, setBikeModel] = useState<number | null>(null);
   // Fees the customer switched OFF. Only possible for `required: false` fees.
   const [optedOutFees, setOptedOutFees] = useState<string[]>([]);
@@ -86,6 +110,20 @@ export default function OrderWizard() {
   const [providers, setProviders] = useState<any[]>([]);
   const [notes, setNotes] = useState('');
   const [submitting, setSubmitting] = useState(false);
+
+  // ── Promo code ────────────────────────────────────────────────────────────
+  // Prefilled when the wizard was opened from an offer card; otherwise typed or
+  // pasted on the confirm step. `appliedPromo` is only ever set by a promo that
+  // passed every check — above all that its offerType IS this rental type.
+  const [couponInput, setCouponInput] = useState(
+    initialCouponCode ? normalizeCouponCode(initialCouponCode) : '',
+  );
+  const [appliedPromo, setAppliedPromo] = useState<PromoCampaign | null>(null);
+  const [couponError, setCouponError] = useState<string | null>(null);
+  const [couponChecking, setCouponChecking] = useState(false);
+  // The incoming code we've already auto-applied, so clearing it by hand sticks and a
+  // fresh offer tapped later still gets its turn.
+  const autoAppliedRef = useRef<string | null>(null);
 
   // Display order: rental type (3) first, then date (1), delivery (2), bike (4),
   // fees (5), confirm (6). Buy has no fee step.
@@ -207,10 +245,29 @@ export default function OrderWizard() {
     return Math.round(fee * 100) / 100;
   }, [quote, salesTax, config]);
 
-  const grandTotal = useMemo(
+  // What the promo takes off the rental. Sales tax and the card fee are deliberately
+  // left on the pre-discount base — that is how computePricing prices it server-side,
+  // and the amount shown here has to be the amount actually authorized.
+  const couponDiscount = useMemo(
+    () => (quote ? promoDiscountFor(appliedPromo, quote.total) : 0),
+    [appliedPromo, quote],
+  );
+
+  // The undiscounted charge for one period. A coupon only ever comes off the payment
+  // taken at checkout, so the rent-to-buy plan quotes its installments from this.
+  const totalBeforeCoupon = useMemo(
     () => (quote ? Math.round((quote.total + salesTax + ccFee) * 100) / 100 : 0),
     [quote, salesTax, ccFee],
   );
+
+  const grandTotal = useMemo(() => {
+    if (!quote) return 0;
+    const total = Math.max(0, quote.total - couponDiscount) + salesTax + ccFee;
+    // Stripe won't hold less than $0.50, and the backend clamps up to it — a coupon
+    // that eats the whole rental is the one case that reaches the floor, so mirror it
+    // rather than promise a total the card is never charged.
+    return Math.max(Math.round(total * 100) / 100, 0.5);
+  }, [quote, couponDiscount, salesTax, ccFee]);
 
   const endDate = useMemo(() => {
     if (!rentalType || rentalType === 'buy' || !durationValue) return null;
@@ -222,6 +279,84 @@ export default function OrderWizard() {
     const first = tomorrowDay();
     return Array.from({ length: 14 }, (_, i) => addDays(first, i));
   }, []);
+
+  // ── Promo code ────────────────────────────────────────────────────────────
+  const redeemedPromoIds = userProfile?.redeemedPromoIds;
+
+  // Only the newest lookup may write state. Two taps in a row against different codes
+  // resolve in whatever order the network decides, and without this the slower one
+  // wins — leaving a discount on screen for a code the customer replaced.
+  const couponRequestRef = useRef(0);
+
+  const applyCoupon = useCallback(async (rawCode: string) => {
+    const code = normalizeCouponCode(rawCode);
+    if (!code) {
+      setAppliedPromo(null);
+      setCouponError('Enter a promo code.');
+      return;
+    }
+    const requestId = ++couponRequestRef.current;
+    const isStale = () => couponRequestRef.current !== requestId;
+    setCouponChecking(true);
+    setCouponError(null);
+    try {
+      const promo = await lookupPromoByCode(code);
+      if (isStale()) return;
+      // The gate that matters: a code minted for Rent is refused on Rent to Buy and
+      // Buy, and vice versa. checkPromoForOrder also covers expiry and prior use — the
+      // backend re-runs all of it before it authorizes anything.
+      const check = checkPromoForOrder(promo, rentalType, redeemedPromoIds);
+      if (!check.ok || !promo) {
+        setAppliedPromo(null);
+        setCouponError(check.message ?? "That promo code isn't valid.");
+        return;
+      }
+      setAppliedPromo(promo);
+      setCouponInput(code);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+    } catch (e) {
+      if (isStale()) return;
+      console.warn('promo lookup failed:', e);
+      setAppliedPromo(null);
+      setCouponError("We couldn't check that code. Try again.");
+    } finally {
+      if (!isStale()) setCouponChecking(false);
+    }
+  }, [rentalType, redeemedPromoIds]);
+
+  const clearCoupon = useCallback(() => {
+    // Retires any lookup still in flight, so one landing after this can't re-apply.
+    couponRequestRef.current++;
+    setAppliedPromo(null);
+    setCouponInput('');
+    setCouponError(null);
+    setCouponChecking(false);
+  }, []);
+
+  // A code carried in from an offer card applies itself once the customer reaches the
+  // confirm step — by then the rental type is settled, so the match is decided against
+  // what they are actually buying rather than against a half-built order.
+  useEffect(() => {
+    const incoming = initialCouponCode ? normalizeCouponCode(initialCouponCode) : '';
+    if (!incoming || autoAppliedRef.current === incoming) return;
+    // Show it in the field on the way there; only spend the one auto-apply once the
+    // rental type is settled and the customer is actually looking at the total.
+    setCouponInput(incoming);
+    if (step !== 6 || !rentalType) return;
+    autoAppliedRef.current = incoming;
+    applyCoupon(incoming);
+  }, [step, initialCouponCode, rentalType, applyCoupon]);
+
+  // Going back and switching the rental type invalidates a code bound to the old one.
+  // Drop it rather than carry a discount the backend would refuse at payment.
+  useEffect(() => {
+    if (!appliedPromo) return;
+    const check = checkPromoForOrder(appliedPromo, rentalType, redeemedPromoIds);
+    if (!check.ok) {
+      setAppliedPromo(null);
+      setCouponError(check.message ?? 'That promo code no longer applies to this order.');
+    }
+  }, [appliedPromo, rentalType, redeemedPromoIds]);
 
   const canProceed = (): boolean => {
     switch (step) {
@@ -256,7 +391,8 @@ export default function OrderWizard() {
     if (!selectedProviderId || !rentalType || !bikeModel || !quote) return;
 
     setSubmitting(true);
-    const orderId = generateOrderId();
+    if (!orderIdRef.current) orderIdRef.current = generateOrderId();
+    const orderId = orderIdRef.current;
     const user = auth().currentUser;
     const provider = providers.find((p) => p.id === selectedProviderId);
 
@@ -277,6 +413,10 @@ export default function OrderWizard() {
         durationUnit: quote.durationUnit,
         fees: orderFees,
         amount: quote.total,
+        // The backend re-validates the code against this order's rental type and
+        // claims it for single use before it authorizes anything; the discount it
+        // returns — not the one displayed — is what gets stored.
+        couponCode: appliedPromo?.offerCode || undefined,
         stripeCustomerId: userProfile?.stripeCustomerId || undefined,
       });
 
@@ -356,6 +496,11 @@ export default function OrderWizard() {
         taxRate: pricing.taxRate ?? 0,
         ccProcessingFee: pricing.ccProcessingFee ?? 0,
         platformFee: pricing.platformFee ?? null,
+        // Server-priced coupon. couponPromoId is what onOrderCreatedRedeemPromo uses to
+        // confirm the redemption, so the code can never be spent again.
+        couponCode: pricing.couponCode ?? null,
+        couponDiscount: pricing.couponDiscount ?? null,
+        couponPromoId: pricing.couponPromoId ?? null,
         // Rent-to-buy installment plan (server-priced). Delivery seeds the billing
         // schedule from this; absent for rent/buy.
         ...(pricing.rentToBuyPlan ? { rentToBuyPlan: pricing.rentToBuyPlan } : {}),
@@ -376,9 +521,21 @@ export default function OrderWizard() {
         console.warn('recordOrderCard failed (non-fatal):', e);
       }
 
+      // Release the id now that it belongs to a real order. Held across FAILED attempts
+      // so a retry keeps its promo claim, but a second order started from a wizard the
+      // customer never unmounted must not write over the one they just placed.
+      orderIdRef.current = null;
+
       navigation.navigate('Main', { screen: 'My Rentals' });
     } catch (error: any) {
       console.error('Checkout Error:', error);
+      // A code the backend refused (wrong type, expired, or already spent) has to come
+      // off before a retry — otherwise every retry fails on the same coupon, and the
+      // total on screen no longer matches what would be charged.
+      if (appliedPromo && String(error?.code || '').includes('failed-precondition')) {
+        setAppliedPromo(null);
+        setCouponError(error.message || 'That promo code could not be applied.');
+      }
       Alert.alert('Error', error.message || 'An unexpected error occurred during checkout.');
     } finally {
       setSubmitting(false);
@@ -789,6 +946,73 @@ export default function OrderWizard() {
               </Text>
             </View>
 
+            {/* Promo code — typed, pasted, or carried in from an offer card. A code is
+                minted for ONE transaction type and is refused on the other two. */}
+            <View className="border-2 border-black rounded-2xl bg-white p-4 mb-4 shadow-brutalist">
+              <View className="flex-row items-center mb-2">
+                <Ticket size={16} color="#507425" />
+                <Text className="ml-2 text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                  Promo code
+                </Text>
+              </View>
+
+              {appliedPromo ? (
+                <View className="flex-row items-center justify-between border-2 border-emerald-500 bg-emerald-50 rounded-xl px-3 py-3">
+                  <View className="flex-1 pr-3">
+                    <Text className="font-black text-emerald-700 font-mono tracking-[2px]">
+                      {appliedPromo.offerCode}
+                    </Text>
+                    <Text className="text-[11px] font-bold text-emerald-600 mt-0.5">
+                      {promoDiscountLabel(appliedPromo)}
+                      {appliedPromo.title ? ` · ${appliedPromo.title}` : ''}
+                    </Text>
+                  </View>
+                  <TouchableOpacity
+                    onPress={clearCoupon}
+                    className="w-9 h-9 rounded-lg border-2 border-emerald-500 items-center justify-center bg-white"
+                    accessibilityLabel="Remove promo code"
+                  >
+                    <X size={16} color="#059669" />
+                  </TouchableOpacity>
+                </View>
+              ) : (
+                <View className="flex-row items-center">
+                  <TextInput
+                    value={couponInput}
+                    onChangeText={(t) => {
+                      setCouponInput(t.toUpperCase());
+                      if (couponError) setCouponError(null);
+                    }}
+                    placeholder="Enter or paste a code"
+                    autoCapitalize="characters"
+                    autoCorrect={false}
+                    onSubmitEditing={() => applyCoupon(couponInput)}
+                    returnKeyType="done"
+                    className="flex-1 border-2 border-black rounded-xl bg-white px-3 py-3 font-black text-slate-700 font-mono tracking-[2px]"
+                  />
+                  <TouchableOpacity
+                    disabled={!couponInput.trim() || couponChecking}
+                    onPress={() => applyCoupon(couponInput)}
+                    className={`ml-2 px-4 py-3 rounded-xl border-2 border-black items-center justify-center ${
+                      couponInput.trim() && !couponChecking ? 'bg-brand-green' : 'bg-slate-200'
+                    }`}
+                  >
+                    {couponChecking ? (
+                      <ActivityIndicator color="#000000" />
+                    ) : (
+                      <Text className={`font-black uppercase text-xs ${couponInput.trim() ? 'text-black' : 'text-slate-400'}`}>
+                        Apply
+                      </Text>
+                    )}
+                  </TouchableOpacity>
+                </View>
+              )}
+
+              {couponError && (
+                <Text className="text-[11px] font-bold text-red-500 mt-2">{couponError}</Text>
+              )}
+            </View>
+
             {/* Summary */}
             {quote && bikeModel && rentalType && (
               <View className="border-2 border-black rounded-2xl bg-white p-4 mb-4 shadow-brutalist">
@@ -815,6 +1039,16 @@ export default function OrderWizard() {
                   label={rentalType === 'rentToBuy' ? 'First month + fees' : 'Rental + fees'}
                   value={`$${quote.total.toFixed(2)}`}
                 />
+                {couponDiscount > 0 && appliedPromo && (
+                  <View className="flex-row items-center justify-between py-1">
+                    <Text className="text-xs font-bold text-emerald-600 uppercase">
+                      Promo {appliedPromo.offerCode}
+                    </Text>
+                    <Text className="text-xs font-black text-emerald-600">
+                      −${couponDiscount.toFixed(2)}
+                    </Text>
+                  </View>
+                )}
                 {salesTax + ccFee > 0 && (
                   <SummaryRow label="Taxes and fees" value={`$${(salesTax + ccFee).toFixed(2)}`} />
                 )}
@@ -832,14 +1066,19 @@ export default function OrderWizard() {
                         Rent-to-buy plan
                       </Text>
                       <Text className="text-[12px] font-bold text-slate-600">
-                        ${grandTotal.toFixed(2)}/month for {quote.durationValue} months, then the bike is yours.
+                        ${totalBeforeCoupon.toFixed(2)}/month for {quote.durationValue} months, then the bike is yours.
                         The first month is charged at delivery; the rest are billed automatically each month to
                         your saved card.
                       </Text>
+                      {couponDiscount > 0 && (
+                        <Text className="text-[11px] font-black text-emerald-600 mt-1">
+                          Your promo comes off the first month only — ${grandTotal.toFixed(2)} at delivery.
+                        </Text>
+                      )}
                       <View className="flex-row items-center justify-between mt-2 pt-2 border-t border-pink-200">
                         <Text className="text-[11px] font-black text-slate-500 uppercase">Total over {quote.durationValue} months</Text>
                         <Text className="text-sm font-black text-slate-800">
-                          ${(grandTotal * quote.durationValue).toFixed(2)}
+                          ${(totalBeforeCoupon * quote.durationValue - couponDiscount).toFixed(2)}
                         </Text>
                       </View>
                     </View>

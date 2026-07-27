@@ -137,6 +137,9 @@ export interface RentalOrder {
   providerCurrentStatus?: string;
   couponCode?: string | null;
   couponDiscount?: number | null;
+  // The promos/{id} the code came from. onOrderCreatedRedeemPromo uses it to confirm
+  // the redemption claim, so the code can't be spent a second time.
+  couponPromoId?: string | null;
   // Persisted pricing breakdown (commission-inclusive subtotal; taxRate is the
   // provider's rate actually applied).
   orderSubtotal?: number;
@@ -227,6 +230,43 @@ export interface DailyStats {
   ratingSum: number;
   ratedCount: number;
   updatedAt: any;
+}
+
+// ── Settlement ledger (settlements/{stripeId}) ──────────────────────────────
+// Mirrors functions/src/types.ts. One document per money movement through Stripe.
+// Orders record what the customer agreed to pay; this records what actually moved and
+// what Stripe kept for moving it — the spread between `chargedCcFee` and `stripeFee`
+// is the platform's margin on card processing. Admin-read, server-written.
+export type SettlementKind =
+  | 'rental'
+  | 'deposit'
+  | 'deposit_refund'
+  | 'renewal'
+  | 'installment'
+  | 'tip';
+
+export interface Settlement {
+  id: string;
+  orderId: string;
+  kind: SettlementKind;
+  at: string;
+  // Signed gross: charges positive, refunds negative.
+  amount: number;
+  subtotal: number;
+  tax: number;
+  chargedCcFee: number;
+  serviceFees: number;
+  // null until Stripe's balance transaction is readable — syncStripeSettlements
+  // backfills those, and the UI estimates from config in the meantime.
+  stripeFee: number | null;
+  stripeNet: number | null;
+  availableOn: string | null;
+  currency: string;
+  customerPhone: string;
+  customerName: string;
+  providerId: string;
+  providerName: string;
+  updatedAt: string;
 }
 
 export interface ProviderPerformance {

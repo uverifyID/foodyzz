@@ -251,6 +251,9 @@ export interface RentalOrder {
   expiryReason?: string; // Reason for cancellation if timed out
   couponCode?: string | null;
   couponDiscount?: number | null;
+  // The promos/{id} the code came from. onOrderCreatedRedeemPromo uses it to confirm
+  // the redemption claim, so the code can't be spent a second time.
+  couponPromoId?: string | null;
 }
 
 export interface PromoCampaign {

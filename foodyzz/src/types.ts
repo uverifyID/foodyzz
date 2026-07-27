@@ -49,6 +49,11 @@ export interface UserProfile {
   // Sales-rep referral attribution (visibility / thank-you only — no commission).
   referredByManagerId?: string;
   referralCodeUsed?: string;
+  // Promo ids this customer has redeemed — written server-side by
+  // onOrderCreatedRedeemPromo. Hides spent offers from the promo carousel and gives
+  // the checkout wizard an instant "already used" without a round trip. Advisory:
+  // single use is actually enforced by the promoRedemptions claim transaction.
+  redeemedPromoIds?: string[];
 }
 
 export interface ProviderProfile {
@@ -257,6 +262,9 @@ export interface RentalOrder {
   completedAt?: string;
   couponCode?: string | null;
   couponDiscount?: number | null;
+  // The promos/{id} the code came from. onOrderCreatedRedeemPromo uses it to confirm
+  // the redemption claim, so the code can't be spent a second time.
+  couponPromoId?: string | null;
   platformFee?: number | null;
   referredByManagerId?: string | null;
   confirmedAt?: string;
@@ -287,6 +295,8 @@ export interface PromoCampaign {
   offerCode?: string;
   discountType?: 'percentage' | 'amount';
   discountValue?: number;
+  // Which kind of transaction the code may be spent on. A code is minted for exactly
+  // one of the three and is refused on the other two (see services/promos).
   offerType?: 'rent' | 'rentToBuy' | 'buy';
   offerExpDate?: string;
   // Provider-defined reach: the promo is only shown to customers within this many

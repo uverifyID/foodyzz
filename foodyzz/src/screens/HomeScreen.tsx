@@ -8,7 +8,6 @@ import { useNavigation } from '@react-navigation/native';
 import { db, subscribeToGlobalConfig } from '../services/firebase';
 import firebase from '@react-native-firebase/app';
 import '@react-native-firebase/functions';
-import authNative from '@react-native-firebase/auth';
 import { UserProfile, GlobalConfig } from '../types';
 import { geocodeZip, geocodeAddress, haversineMiles, extractZip, Coords } from '../services/geo';
 import { useUserProfile } from '../context/UserProfileContext';
@@ -206,14 +205,15 @@ export default function HomeScreen() {
   // Each promo's own reachMiles controls visibility independently.
   const promoCarouselItems = useMemo(() => {
     const broadcastMile = config?.maxPushBroadCastMile || DEFAULT_RADIUS;
-    // Hide offers this customer has already redeemed (per-customer single-use): the
-    // promo's `usedBy` array holds the phone numbers that have used the code.
-    const myPhone = authNative().currentUser?.phoneNumber;
+    // Hide offers this customer has already redeemed (per-customer single-use). The
+    // list lives on THEIR user doc — which this app already streams — rather than as a
+    // roster of redeemers published on each promo.
+    const redeemed = currentUserProfile?.redeemedPromoIds;
 
     const items = promos
       .filter(promo => {
         if (!promo.isActive) return false;
-        if (myPhone && promo.usedBy?.includes(myPhone)) return false;
+        if (redeemed?.includes(promo.id)) return false;
         const provider = providerMap.get(promo.providerId);
         // Fail CLOSED: if we can't place the provider (no address/zip → no distance),
         // don't surface the promo rather than showing it everywhere.
@@ -232,7 +232,6 @@ export default function HomeScreen() {
           promoId: promo.id,
           promoTitle: promo.title,
           promoText: promo.text,
-          promoPrice: promo.price,
           promoExpirationDate: promo.expirationDate,
           promoOfferCode: promo.offerCode,
           promoDiscountType: promo.discountType,
@@ -259,7 +258,10 @@ export default function HomeScreen() {
     const orderIndex = new Map(shuffleOrderRef.current.order.map((id, idx) => [id, idx] as const));
     items.sort((a, b) => (orderIndex.get(a.promoId) ?? 0) - (orderIndex.get(b.promoId) ?? 0));
     return items;
-  }, [promos, providerMap, config?.maxPushBroadCastMile]);
+    // Redeeming a code rewrites the customer's own profile doc, so the carousel has to
+    // recompute off it to drop the offer they just spent. A recompute with the same set
+    // of ids reuses the stored shuffle (see setKey above), so this can't reorder cards.
+  }, [promos, providerMap, config?.maxPushBroadCastMile, currentUserProfile?.redeemedPromoIds]);
 
   const handleCopyCode = async (promoId: string, code: string) => {
     await Clipboard.setStringAsync(code);
@@ -346,6 +348,10 @@ export default function HomeScreen() {
         <TouchableOpacity
           onPress={() => navigation.navigate('Wizard', {
             initialCouponCode: provider.promoOfferCode,
+            // Start the transaction this code was minted for — the wizard preselects
+            // the type, then applies the code on the confirm step. A code only works
+            // on its own type, so sending them anywhere else would just get it refused.
+            initialOfferType: provider.promoOfferType ?? undefined,
           })}
           activeOpacity={0.85}
           className="mx-4 mb-3 bg-black rounded-xl py-2.5 flex-row items-center justify-center gap-2"
@@ -362,11 +368,6 @@ export default function HomeScreen() {
           </View>
           {provider.promoExpirationDate && (
             <Text className="text-orange-200 text-[8px] font-mono">Exp {provider.promoExpirationDate}</Text>
-          )}
-          {provider.promoPrice != null && (
-            <View className="px-2 py-0.5 rounded-lg" style={{ backgroundColor: 'rgba(0,0,0,0.25)' }}>
-              <Text className="text-white font-black text-[9px]">${Number(provider.promoPrice).toFixed(2)}/ld</Text>
-            </View>
           )}
         </View>
       </View>
