@@ -405,7 +405,7 @@ export default function HomeScreen() {
 
         {/* Section title */}
         <Text className="text-lg font-extrabold text-slate-900 tracking-tight mb-3">
-          Deals & Coupons
+          Deals
         </Text>
 
       </View>
