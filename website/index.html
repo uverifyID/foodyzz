@@ -6,16 +6,178 @@
   <title>Foodyzz — E-Bike Rentals for NYC Delivery Riders | Rent, Rent-to-Own, or Buy</title>
   <meta name="description" content="Foodyzz delivers e-bikes to your door in New York City. Flexible rentals, rent-to-own plans that end in ownership, and outright purchase — all managed from one app. Built for delivery riders." />
   <meta name="theme-color" content="#86B54F" />
+  <meta name="robots" content="index, follow, max-image-preview:large" />
+  <link rel="canonical" href="https://foodyzz.com/" />
   <link rel="icon" type="image/png" sizes="64x64" href="assets/favicon-64.png" />
   <link rel="apple-touch-icon" href="assets/foodyzz-icon.png" />
+  <meta property="og:type" content="website" />
+  <meta property="og:site_name" content="Foodyzz" />
+  <meta property="og:locale" content="en_US" />
   <meta property="og:title" content="Foodyzz — E-Bike Rentals for NYC Delivery Riders" />
   <meta property="og:description" content="Rent today, own it later. E-bikes delivered to your door in New York City — flexible plans built for delivery riders." />
   <meta property="og:image" content="https://foodyzz.com/assets/foodyzz-icon.png" />
-  <meta property="og:url" content="https://foodyzz.com" />
+  <meta property="og:image:alt" content="Foodyzz — e-bike rentals for NYC delivery riders" />
+  <meta property="og:url" content="https://foodyzz.com/" />
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="Foodyzz — E-Bike Rentals for NYC Delivery Riders" />
+  <meta name="twitter:description" content="Rent today, own it later. E-bikes delivered to your door in New York City — flexible plans built for delivery riders." />
+  <meta name="twitter:image" content="https://foodyzz.com/assets/foodyzz-icon.png" />
+  <meta name="twitter:image:alt" content="Foodyzz — e-bike rentals for NYC delivery riders" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&family=Space+Grotesk:wght@500;700&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="css/style.css" />
+
+  <!-- ═══════════ STRUCTURED DATA ═══════════
+       Organization + WebSite + Service + FAQPage, cross-linked by @id.
+       Every claim here must stay in sync with the visible copy below. -->
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@graph": [
+      {
+        "@type": "Organization",
+        "@id": "https://foodyzz.com/#organization",
+        "name": "Foodyzz",
+        "url": "https://foodyzz.com/",
+        "logo": {
+          "@type": "ImageObject",
+          "url": "https://foodyzz.com/assets/foodyzz-icon.png"
+        },
+        "description": "E-bike rentals, rent-to-own plans, and outright purchase for New York City delivery riders — delivered to your door.",
+        "areaServed": {
+          "@type": "City",
+          "name": "New York City",
+          "address": {
+            "@type": "PostalAddress",
+            "addressLocality": "New York",
+            "addressRegion": "NY",
+            "addressCountry": "US"
+          }
+        },
+        "contactPoint": [
+          {
+            "@type": "ContactPoint",
+            "contactType": "customer support",
+            "email": "privacy@foodyzz.com",
+            "areaServed": "US",
+            "availableLanguage": "English"
+          },
+          {
+            "@type": "ContactPoint",
+            "contactType": "legal",
+            "email": "legal@foodyzz.com",
+            "areaServed": "US",
+            "availableLanguage": "English"
+          }
+        ]
+      },
+      {
+        "@type": "WebSite",
+        "@id": "https://foodyzz.com/#website",
+        "url": "https://foodyzz.com/",
+        "name": "Foodyzz",
+        "inLanguage": "en-US",
+        "publisher": { "@id": "https://foodyzz.com/#organization" }
+      },
+      {
+        "@type": "Service",
+        "@id": "https://foodyzz.com/#service",
+        "name": "E-Bike Rental and Rent-to-Own",
+        "serviceType": "Electric bicycle rental",
+        "provider": { "@id": "https://foodyzz.com/#organization" },
+        "areaServed": {
+          "@type": "City",
+          "name": "New York City"
+        },
+        "hasOfferCatalog": {
+          "@type": "OfferCatalog",
+          "name": "Foodyzz plans",
+          "itemListElement": [
+            {
+              "@type": "Offer",
+              "name": "Rent",
+              "description": "Rent a delivery-grade e-bike by the week, delivered to your door. Return or extend when your term ends."
+            },
+            {
+              "@type": "Offer",
+              "name": "Rent-to-Own",
+              "description": "Fixed monthly installments that build toward ownership. Pay off the remaining balance early any time with no penalty."
+            },
+            {
+              "@type": "Offer",
+              "name": "Buy",
+              "description": "Purchase a delivery-grade e-bike outright, delivered to your door."
+            }
+          ]
+        }
+      },
+      {
+        "@type": "FAQPage",
+        "@id": "https://foodyzz.com/#faq",
+        "isPartOf": { "@id": "https://foodyzz.com/#website" },
+        "mainEntity": [
+          {
+            "@type": "Question",
+            "name": "How does the security deposit work?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "When your rental is delivered, a deposit is held on your card — it is not charged. When you return the bike in good condition, the hold is released a couple of days after inspection. If there's damage, only the documented repair amount is deducted and you see an itemized breakdown in the app and by email."
+            }
+          },
+          {
+            "@type": "Question",
+            "name": "When is my card actually charged?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "At checkout we place an authorization for the quoted total — the charge only completes when your bike is actually delivered to you. Cancel before delivery and the hold is released without a charge."
+            }
+          },
+          {
+            "@type": "Question",
+            "name": "How does rent-to-own work?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "You pay a fixed monthly installment. Every payment builds toward ownership, and the app shows your remaining balance at all times. You can pay off the remaining balance early any time with no penalty — after the final payment, the bike is 100% yours."
+            }
+          },
+          {
+            "@type": "Question",
+            "name": "Do I need a credit check?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "No credit check. You sign up with your phone number, add a payment card, and verify your ID in the app. That's it."
+            }
+          },
+          {
+            "@type": "Question",
+            "name": "Where do you deliver?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "We currently deliver across our New York City service zone. Put your address into the app and it will confirm coverage instantly. More neighborhoods and cities are coming."
+            }
+          },
+          {
+            "@type": "Question",
+            "name": "What if something goes wrong with my order?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "Every order has its own chat with the delivery rider, plus a direct line to Foodyzz HQ support in the app. You'll also get live status notifications from confirmation to handoff."
+            }
+          },
+          {
+            "@type": "Question",
+            "name": "Can I return the bike early?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "Yes. Rentals can be returned when your term ends or extended if you want to keep riding. Schedule the return in the app and we pick the bike up from your address."
+            }
+          }
+        ]
+      }
+    ]
+  }
+  </script>
 </head>
 <body>
 
