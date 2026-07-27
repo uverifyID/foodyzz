@@ -15,11 +15,28 @@ DirectoryIndex index.html
   RewriteCond %{HTTP_HOST} ^www\.(.+)$ [NC]
   RewriteRule ^ https://foodyzz.com%{REQUEST_URI} [L,R=301]
 
-  # Clean URLs: /privacy -> privacy.html etc.
+  # ---- Canonical URL form is the extensionless one: /contact, not /contact.html
+  # These three redirects run off THE_REQUEST (the literal browser request line),
+  # which the internal rewrite at the bottom never rewrites — so /contact -> contact.html
+  # is invisible here and the rules can't ping-pong.
+
+  # /index.html -> /
+  RewriteCond %{THE_REQUEST} \s/+index\.html[\s?] [NC]
+  RewriteRule ^ / [R=301,L]
+
+  # /privacy.html -> /privacy
+  RewriteCond %{THE_REQUEST} \s/+([a-z-]+)\.html[\s?] [NC]
+  RewriteRule ^ /%1 [R=301,L]
+
+  # /privacy/ -> /privacy  (no trailing slash on clean URLs)
+  RewriteCond %{REQUEST_FILENAME} !-d
+  RewriteRule ^([a-z-]+)/$ /$1 [R=301,L]
+
+  # ---- Serve the real file for the clean URL (internal, no redirect)
   RewriteCond %{REQUEST_FILENAME} !-f
   RewriteCond %{REQUEST_FILENAME} !-d
   RewriteCond %{DOCUMENT_ROOT}/$1.html -f
-  RewriteRule ^([a-z-]+)/?$ /$1.html [L]
+  RewriteRule ^([a-z-]+)$ /$1.html [L]
 </IfModule>
 
 # Compression
