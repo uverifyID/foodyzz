@@ -61,9 +61,6 @@ export interface ProviderProfile {
     saturday: string;
     sunday: string;
   };
-  // Bank details are no longer stored here — providers connect their bank directly
-  // to Stripe (Connect). Only the payout cadence preference lives on the profile.
-  payoutCadence?: 'standard' | 'daily';
   onboarded: boolean;
   onboardedAt?: string;
   // Sales tax the provider collects and remits themselves (decimal, e.g.
@@ -82,7 +79,6 @@ export interface ProviderProfile {
   // (faster) window. chargesPriorityFee=false / priorityPrice=0 → no surcharge.
   chargesPriorityFee?: boolean;
   priorityPrice?: number | null;
-  stripeAccountId?: string; // Stripe Connect Account ID for payouts
   // LEGACY single-device push token, still delivered to for devices on an older
   // build. A store can have several members now, so this app writes fcmTokens.
   fcmToken?: string;
@@ -168,7 +164,9 @@ export interface RentalOrder {
   // stays DELIVERED throughout (the rental is still running and still billable), so
   // the run's progress lives here rather than in `status`. Cleared when the run
   // ends — the bike is checked in, or nobody was home and the rental renews.
-  returnStage?: 'ready_for_pickup' | 'at_location' | null;
+  // 'inspecting' is set while the check-in sheet is open (staff are going over the
+  // bike with the customer) and reverted if they back out without checking it in.
+  returnStage?: 'ready_for_pickup' | 'at_location' | 'inspecting' | null;
   returnStageAt?: string | null;
   // One entry per trip that found nobody home, each recording the renewal it caused.
   pickupAttempts?: {
@@ -227,13 +225,7 @@ export interface RentalOrder {
   providerId: string; // phoneNumber_zipCode or 'broadcast'
   providerName: string;
   providerPhone: string;
-  // Provider-payout lifecycle (see functions/src/types.ts). 'unpaid' until a Connect
-  // transfer for this order completes. (Replaces the old overloaded depositStatus.)
-  payoutStatus?: 'unpaid' | 'paid';
   chargeAvailableOn?: string; // when the captured charge settles (~3 days)
-  depositedAt?: string;       // when this order was paid out
-  payoutId?: string;
-  depositedAmount?: number;   // provider net transferred for this order
   createdAt: string; // ISO string date
   // Persisted pricing breakdown (orderSubtotal is commission-inclusive).
   orderSubtotal?: number;
@@ -272,7 +264,6 @@ export interface PromoCampaign {
   expirationDate: string; // YYYY-MM-DD
   viewsCounter: number;
   isActive: boolean;
-  cardNameOnInvoice: string;
   createdAt: string; // ISO string date
   deactivatedAt?: string; // ISO string date when promo was deactivated
 }
@@ -288,7 +279,6 @@ export interface GlobalConfig {
     webSecret?: string; // Stripe Webhook Secret
     transactionFee: number; // Added for consistency with functions
     processingFee: number; // Added for consistency with functions
-    dailyPayoutFee?: number; // per-transfer fee for the daily payout cadence
   };
   deliveryFee: { // Added for consistency with functions
     radius: number;
@@ -324,20 +314,6 @@ export interface SupportMessage {
   timestamp: string; // ISO string date
   isReadByAdmin: boolean;
   adminNotifiedOfUnread?: boolean; // Added for tracking unread notifications
-}
-
-export interface Payout {
-  id: string;
-  providerId: string; // phoneNumber_zipCode
-  providerName: string;
-  amount: number; // Net amount transferred to provider
-  currency: string;
-  transferId: string; // Stripe Transfer ID
-  status: 'pending' | 'paid' | 'failed';
-  periodStart: string; // ISO date of the start of the payout period
-  periodEnd: string;   // ISO date of the end of the payout period
-  createdAt: string;   // ISO date of when the payout was initiated
-  ordersIncluded: string[]; // Array of order IDs included in this payout
 }
 
 export interface MarketingInvoice {

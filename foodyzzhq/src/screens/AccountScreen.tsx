@@ -125,7 +125,6 @@ export default function AccountScreen() {
   // setState (setPreviewingSound) after the component is gone.
   const previewTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [validatingAddress, setValidatingAddress] = useState(false);
-  const [editPayoutCadence, setEditPayoutCadence] = useState<'standard' | 'daily'>('standard');
   const [editSlotCapacity, setEditSlotCapacity] = useState('5');
 
   // Services state. Bike rates are global (apiConfig/logistics), not per location.
@@ -155,7 +154,6 @@ export default function AccountScreen() {
     setEditBusName(data.businessName || '');
     setEditEmail(data.email || '');
     setEditAddress(data.address || '');
-    setEditPayoutCadence(data.payoutCadence === 'daily' ? 'daily' : 'standard');
     if (data.slotCapacity) setEditSlotCapacity(String(data.slotCapacity));
     if (data.businessHours) setEditOperatingHours(data.businessHours);
 
@@ -294,9 +292,6 @@ export default function AccountScreen() {
         address: editAddress,
         zipCode: serviceZip,
         ...(coords ? { lat: coords.lat, lng: coords.lng } : {}),
-        // Bank details are no longer stored here — providers connect their bank to
-        // Stripe directly (see PayoutSetup). We only keep the cadence preference.
-        payoutCadence: editPayoutCadence,
         businessHours: editHours,
         slotCapacity: parseInt(editSlotCapacity) || 5,
         turnaroundNormal: parseInt(editTurnaroundNormal, 10) || 0,
@@ -523,20 +518,6 @@ export default function AccountScreen() {
                 <Text className="text-[10px] font-mono font-bold text-white">{hours as string}</Text>
               </View>
             ))}
-          </View>
-        </View>
-
-        {/* Bank Settlement Node */}
-        {/* Payout Setup (Stripe Connect) + cadence */}
-        <View className="bg-slate-900 border-2 border-slate-800 rounded-3xl p-5 mb-4 shadow-brutalist">
-          <Text className="text-[10px] font-mono font-black text-slate-300 uppercase tracking-widest mb-4">Payout Account</Text>
-          <View className="mt-4 pt-4 border-t border-slate-800">
-            <Text className="text-[10px] font-mono font-black text-slate-300 uppercase tracking-widest mb-1">Payout Schedule</Text>
-            <Text className="text-slate-400 text-[10px] font-bold">
-              {profile?.payoutCadence === 'daily'
-                ? `Daily — settled funds transfer each day for $${(config?.stripe?.dailyPayoutFee ?? 0.99).toFixed(2)} per transfer.`
-                : 'Standard — free transfers on the 1st & 15th. Switch to Daily in Edit.'}
-            </Text>
           </View>
         </View>
 
@@ -799,33 +780,6 @@ export default function AccountScreen() {
                     className="bg-slate-950 border-2 border-slate-800 rounded-2xl p-4 font-bold text-white font-mono"
                   />
                 </View>
-              </View>
-
-              {/* Section: Payout Schedule (bank is connected via Stripe, not stored here) */}
-              <View className="space-y-4">
-                <Text className="text-white text-[10px] font-black uppercase tracking-widest border-b border-slate-800 pb-1">5. Payout Schedule</Text>
-                <View className="flex-row gap-2">
-                  {(['standard', 'daily'] as const).map(opt => {
-                    const active = editPayoutCadence === opt;
-                    return (
-                      <TouchableOpacity
-                        key={opt}
-                        onPress={() => setEditPayoutCadence(opt)}
-                        className={`flex-1 p-4 rounded-2xl border ${active ? 'bg-brand-green/20 border-brand-green' : 'bg-slate-950 border-slate-800'}`}
-                      >
-                        <Text className={`text-xs font-black uppercase ${active ? 'text-white' : 'text-slate-400'}`}>
-                          {opt === 'standard' ? 'Standard' : 'Daily'}
-                        </Text>
-                        <Text className="text-slate-400 text-[9px] font-bold mt-1">
-                          {opt === 'standard'
-                            ? 'Free · 1st & 15th'
-                            : `$${(config?.stripe?.dailyPayoutFee ?? 0.99).toFixed(2)}/transfer · settled daily`}
-                        </Text>
-                      </TouchableOpacity>
-                    );
-                  })}
-                </View>
-                <Text className="text-slate-500 text-[9px] font-bold">Connect your bank for payouts in the Payout Account card above (handled securely by Stripe).</Text>
               </View>
 
               <TouchableOpacity

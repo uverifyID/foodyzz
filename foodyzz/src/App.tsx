@@ -36,6 +36,14 @@ const navigationRef = createNavigationContainerRef<any>();
 // charges/authorizes against this placeholder.
 const STRIPE_PLACEHOLDER_KEY = 'pk_test_placeholder';
 
+// Push types whose subject is one order's detail screen — the rating/tip prompt at
+// delivery, and everything on the return leg (due-date reminder, collection visit,
+// missed pickup and its renewal receipt). All of it lives on the order card.
+const RENTAL_DETAIL_PUSH_TYPES = [
+  'ORDER_DELIVERED', 'RENTAL_DUE_SOON', 'PICKUP_ON_THE_WAY', 'PICKUP_ARRIVED',
+  'PICKUP_MISSED', 'DEPOSIT_REFUNDED',
+];
+
 // Configure foreground notification behavior
 // shouldPlaySound is false because we handle sound manually via expo-av
 Notifications.setNotificationHandler({
@@ -204,8 +212,10 @@ export default function App() {
           // "We need your ID" / "your ID was rejected" → drop them exactly where
           // they upload it.
           navigationRef.navigate('Main', { screen: 'Account' });
-        } else if (data.type === 'ORDER_DELIVERED' && data.orderId) {
-          // Open the delivered order's detail so the customer can rate + tip.
+        } else if (RENTAL_DETAIL_PUSH_TYPES.includes(data.type as string) && data.orderId) {
+          // Open the order's detail: delivery ends there (rate + tip), and every
+          // message about the return leg — the due-date reminder, the collection
+          // visit, a missed pickup — is about the Rental Due flow on that screen.
           navigationRef.navigate('Main', { screen: 'My Rentals', params: { focusOrderId: data.orderId } });
         } else if (data.orderId) {
           // Deep-link to the "My Rentals" tab for status updates or cancellations

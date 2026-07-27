@@ -124,6 +124,7 @@ describe('scheduled jobs run cleanly against an empty database', () => {
   test('expireStaleOrders', async () => { await expect(runCron(fns.expireStaleOrders)).resolves.not.toThrow(); });
   test('scheduledDepositRelease', async () => { await expect(runCron(fns.scheduledDepositRelease)).resolves.not.toThrow(); });
   test('chargeRentToBuyInstallments', async () => { await expect(runCron(fns.chargeRentToBuyInstallments)).resolves.not.toThrow(); });
+  test('rentalDueReminders', async () => { await expect(runCron(fns.rentalDueReminders)).resolves.not.toThrow(); });
 });
 
 // ── 3b. bulkBroadcast paginated fan-out ─────────────────────────────────────

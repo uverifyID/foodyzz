@@ -50,10 +50,6 @@ export interface ProviderProfile {
   // the provider is the merchant of record and remits it. 0 / unset = no tax.
   chargesSalesTax?: boolean;
   salesTaxRate?: number;
-  stripeAccountId?: string;
-  // Payout cadence: 'standard' = free 1st/15th batch; 'daily' = aggregate of each
-  // day's settled funds, transferred daily for a per-transfer fee. Default standard.
-  payoutCadence?: "standard" | "daily";
   // LEGACY single-device push token. A store can now have several members, each
   // on their own device, so the current apps write `fcmTokens` instead. Kept and
   // still delivered to so devices running an older build keep receiving pushes;
@@ -140,7 +136,12 @@ export interface BikeConditionReport {
 // Where a bike-collection run has got to. The order stays DELIVERED throughout:
 //   ready_for_pickup — announced to the customer ("we're on our way, please be home")
 //   at_location      — staff are outside; next tap is either check-in or "not present"
-export type ReturnStage = "ready_for_pickup" | "at_location";
+//   inspecting       — staff have the check-in sheet open and are going over the bike
+//                      with the customer. Set by FoodyzzHQ, not by a callable, and
+//                      cleared when the check-in completes (or reverted if they back
+//                      out) — so the customer's Rental Due flow shows the inspection
+//                      happening rather than jumping straight from "outside" to done.
+export type ReturnStage = "ready_for_pickup" | "at_location" | "inspecting";
 
 // A collection run that found nobody home. The bike stays out, so the rental renews
 // for another term and the customer pays for it plus the wasted trip (admin fee).
@@ -157,6 +158,31 @@ export interface PickupAttempt {
   total: number;                  // what the card was actually asked for
   paymentIntentId?: string | null;
   error?: string | null;          // set when the card declined — needs manual follow-up
+}
+
+// A customer-facing receipt for ONE payment taken after checkout. The original
+// rental charge is described by the order's own pricing fields (orderSubtotal / tax /
+// chargedAmount), so it needs no entry here; every LATER payment on the same order —
+// today only a missed-collection renewal — appends one of these, so My Rentals can
+// show that charge with the same breakdown the delivery receipt has.
+export interface OrderReceipt {
+  id: string;            // stable per event ("renewal-1"), so a retry can't duplicate it
+  kind: "renewal";
+  issuedAt: string;      // ISO
+  title: string;         // headline shown to the customer
+  subtitle?: string;     // e.g. the term the payment bought
+  periodFrom?: string | null; // YYYY-MM-DD the renewed term runs from
+  periodTo?: string | null;   // YYYY-MM-DD it now runs to
+  lines: { label: string; amount: number }[]; // pre-tax line items; sum to `subtotal`
+  subtotal: number;
+  taxesAndFees: number;  // sales tax + card processing, combined as customers see it
+  // Flat charges applied AFTER tax (the missed-collection admin fee is untaxed), so
+  // they sit between "taxes and fees" and the total rather than inside the subtotal.
+  extraLines?: { label: string; amount: number }[];
+  total: number;         // what the card was asked for
+  paid: boolean;         // false when the card declined — the term still renewed
+  paymentIntentId?: string | null;
+  error?: string | null;
 }
 
 // ── Foodyzz bike-rental domain ──────────────────────────────────────────────
@@ -343,6 +369,13 @@ export interface RentalOrder {
   missedPickups?: number; // pickupAttempts.length, denormalized for display
   // Running total of everything charged by failed-pickup renewals (rental + admin fee).
   renewalChargedTotal?: number;
+  // Receipts for payments taken AFTER the delivery charge (renewals). Append-only.
+  receipts?: OrderReceipt[];
+  // The due date the "your rental ends in 2 days" reminder was last sent for. Keyed on
+  // the date itself so a renewal (which moves expectedEndDate out) gets its own
+  // reminder, while a re-run of the cron on the same date does not send twice.
+  dueReminderSentFor?: string | null; // YYYY-MM-DD
+  dueReminderSentAt?: string | null;  // ISO
   // Condition recorded when the bike comes back, to compare against handover.
   conditionAtReturn?: BikeConditionReport;
   // Bike condition recorded at handover — notes + photos, visible to both sides.
@@ -400,22 +433,15 @@ export interface RentalOrder {
   paymentCaptured?: boolean;
   paymentIntentId?: string;
 
-  // ── Payout state machine (dedicated fields — never overload depositStatus) ──
-  // Provider-payout lifecycle, independent of the customer-charge flags above.
-  // 'unpaid' at creation → 'paid' once a Connect transfer for this order completes.
-  payoutStatus?: "unpaid" | "paid";
   // When the captured charge's funds become available in the platform Stripe
-  // balance (~3 days). Payouts only include settled funds. ISO string.
+  // balance (~3 days). ISO string.
   chargeAvailableOn?: string;
-  payoutId?: string; // the Payout doc / Stripe transfer that paid this order
-  depositedAt?: string; // when payoutStatus flipped to 'paid'
 
   // ── Money audit trail (write-once per lifecycle event; for future audits) ──
   authorizedAmount?: number; // the hold placed at checkout
   authorizedAt?: string;
   chargedAmount?: number; // the amount actually captured
   chargedAt?: string;
-  depositedAmount?: number; // provider net transferred for this order
   adjustments?: AdjustmentEntry[]; // append-only history of customer-amount changes
   // Status to restore after a claim-time tax re-auth completes (see claimOrder /
   // finalizeAdjustedReauth). Absent for a normal post-pickup price adjustment.
@@ -430,29 +456,14 @@ export interface RentalOrder {
 
   // ── Post-delivery tip ──────────────────────────────────────────────────────
   // A tip is added by the customer AFTER delivery, charged on a SEPARATE payment
-  // intent (the original charge is already captured). It is flat, untaxed,
-  // commission-free and 100% provider-kept (mirrors the priority surcharge). It is
-  // paid out independently of the base order so a tip arriving after the order has
-  // already been settled is never double-paid (see tipPayoutStatus).
+  // intent (the original charge is already captured). It is flat, untaxed and
+  // commission-free (mirrors the priority surcharge).
   tip?: number;
   tipPaymentIntentId?: string; // Stripe PI for the tip charge (hidden from provider mirror)
   tipChargedAt?: string; // ISO timestamp the tip was captured
   tipChargeAvailableOn?: string; // when the tip charge's funds settle (~3 days)
-  tipPayoutStatus?: "unpaid" | "paid";
-  tipPayoutId?: string; // the Payout/transfer that paid the tip
-  tipDepositedAt?: string; // when tipPayoutStatus flipped to 'paid'
   providerLocation?: { lat: number; lng: number; timestamp: string; };
   providerCurrentStatus?: string;
-  // Point-in-time copy of the fulfilling provider's referrer, stamped at order
-  // creation so manager payouts/reports don't depend on later provider edits.
-  // Manager-payout lifecycle, independent of the provider's payoutStatus.
-  // Set to 'pending' when a managerId is stamped; 'deposited' once the order has
-  // been rolled into a managerPayouts record; 'paid' once that payout is settled
-  // (Stripe transfer succeeded or admin marked it paid). Drives the AdminHUB
-  // outstanding-balance vs lifetime-paid split.
-  managerPayoutStatus?: "pending" | "deposited" | "paid";
-  managerDepositedAt?: any; // when rolled into a managerPayouts record
-  managerPaidAt?: string; // when the manager was actually paid for this order
 }
 
 // Append-only audit entry for every change to the customer's charged amount.
@@ -495,9 +506,6 @@ export interface GlobalConfig {
     transactionFee: number;
     processingFee: number;
     webSecret?: string;
-    // Per-transfer fee for the opt-in daily payout cadence (deducted from each
-    // daily transfer). Admin-editable at apiConfig/global → stripe.dailyPayoutFee.
-    dailyPayoutFee?: number;
   };
 }
 

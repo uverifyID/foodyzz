@@ -198,7 +198,7 @@ export default function DispatchScreen() {
   };
 
   // Foodyzz owns the fleet, so this is the rental total, not a provider cut.
-  const getPayout = (order: any) =>
+  const getOrderTotal = (order: any) =>
     Number(order.chargedAmount ?? order.estimatedPrice ?? 0).toFixed(2);
 
   if (loading) {
@@ -334,7 +334,7 @@ export default function DispatchScreen() {
                     </TouchableOpacity>
                   </View>
                   <View className="items-end">
-                    <Text className="text-brand-green-dark font-mono font-black text-sm tracking-tight">${getPayout(order)}</Text>
+                    <Text className="text-brand-green-dark font-mono font-black text-sm tracking-tight">${getOrderTotal(order)}</Text>
                   </View>
                 </View>
 

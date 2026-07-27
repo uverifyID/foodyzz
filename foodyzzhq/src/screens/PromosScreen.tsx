@@ -1,18 +1,16 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, TextInput, Alert, ActivityIndicator } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Tags, Plus, Compass, X, Sparkles, CreditCard, Tag, RefreshCw, ArrowLeft, User } from 'lucide-react-native';
+import { Tags, Plus, Compass, X, Sparkles, Tag, RefreshCw, ArrowLeft, User } from 'lucide-react-native';
 import { useNavigation, useRoute } from '@react-navigation/native';
-import { useStripe, CardField } from '@stripe/stripe-react-native';
 import { COLORS, LAYOUT } from '../theme';
-import { db, auth, getPromoDoc, getFunctionsInstance } from '../services/firebase';
-import { useActiveProvider, useGlobalConfig } from '../hooks';
+import { db, auth, getPromoDoc } from '../services/firebase';
+import { useActiveProvider } from '../hooks';
 import ReactNativeAsyncStorage from '@react-native-async-storage/async-storage';
 
 export default function PromosScreen() {
   const { top } = useSafeAreaInsets();
   const [promos, setPromos] = useState<any[]>([]);
-  const config = useGlobalConfig();
   const { profile, loading: providerLoading } = useActiveProvider();
   const [isAddingPromo, setIsAddingPromo] = useState(false);
   const [promosLoading, setPromosLoading] = useState(true);
@@ -25,12 +23,6 @@ export default function PromosScreen() {
   const [promoPrice, setPromoPrice] = useState('12.00');
   const [promoText, setPromoText] = useState('');
   const [promoMonths, setPromoMonths] = useState(3);
-  const [promoCardName, setPromoCardName] = useState('');
-  const [cardComplete, setCardComplete] = useState(false);
-  const [isSavingBilling, setIsSavingBilling] = useState(false);
-  const [billingCardLast4, setBillingCardLast4] = useState('');
-  const [billingCardBrand, setBillingCardBrand] = useState('');
-  const [billingCardName, setBillingCardName] = useState('');
 
   // Detail modal states
   const [selectedPromo, setSelectedPromo] = useState<any | null>(null);
@@ -52,10 +44,9 @@ export default function PromosScreen() {
   const scrollViewRef = useRef<ScrollView>(null);
 
   const user = auth().currentUser;
-  const { createPaymentMethod } = useStripe();
 
-  // Promos for the active store. The provider doc (zip + billing card) now comes
-  // from useActiveProvider, so this effect only owns the promos listener.
+  // Promos for the active store. The provider doc (zip) now comes from
+  // useActiveProvider, so this effect only owns the promos listener.
   useEffect(() => {
     if (!profile?.id) return;
     const unsub = db.collection('promos')
@@ -70,13 +61,10 @@ export default function PromosScreen() {
     return () => unsub();
   }, [profile?.id]);
 
-  // Mirror the store zip + saved billing card from the live provider doc.
+  // Mirror the store zip from the live provider doc.
   useEffect(() => {
     if (!profile) return;
     setProviderZip(profile.zipCode || '');
-    setBillingCardLast4(profile.billingCardLast4 || '');
-    setBillingCardBrand(profile.billingCardBrand || '');
-    setBillingCardName(profile.billingCardName || '');
   }, [profile]);
 
   useEffect(() => {
@@ -110,8 +98,6 @@ export default function PromosScreen() {
       setDiscountType('percentage');
       setOfferExpMonths(3);
       setPromoMiles(5);
-      setCardComplete(false);
-      setPromoCardName('');
     }
   }, [isAddingPromo]);
 
@@ -133,41 +119,8 @@ export default function PromosScreen() {
 
     const cleanPhone = user?.phoneNumber?.replace(/\D/g, '') || user?.email?.split('@')[0];
     // The provider's unique doc id — NOT `${phone}_${serviceZip}` (the service zip
-    // is no longer the doc-key suffix). Promos are listed/billed by this id.
+    // is no longer the doc-key suffix). Promos are listed by this id.
     const currentProviderId = profile?.id || `${cleanPhone}_${providerZip}`;
-
-    if (!billingCardLast4) {
-      if (!promoCardName || !cardComplete) {
-        Alert.alert("Billing Incomplete", "Please enter cardholder name and complete card details.");
-        return;
-      }
-      setIsSavingBilling(true);
-      try {
-        const { paymentMethod, error } = await createPaymentMethod({
-          paymentMethodType: 'Card',
-          paymentMethodData: { billingDetails: { name: promoCardName } },
-        });
-        if (error || !paymentMethod) {
-          setIsSavingBilling(false);
-          Alert.alert("Card Error", error?.message || "Could not process card details.");
-          return;
-        }
-        const result = await getFunctionsInstance().httpsCallable('saveProviderBillingCard')({
-          providerId: currentProviderId,
-          paymentMethodId: paymentMethod.id,
-          cardName: promoCardName,
-        });
-        const { last4, brand } = (result as any).data;
-        setBillingCardLast4(last4);
-        setBillingCardBrand(brand);
-        setBillingCardName(promoCardName);
-      } catch (err: any) {
-        setIsSavingBilling(false);
-        Alert.alert("Billing Error", err.message || "Could not save payment method.");
-        return;
-      }
-      setIsSavingBilling(false);
-    }
 
     const promoId = Math.random().toString(36).substring(2, 7).toUpperCase();
     const expiration = new Date();
@@ -187,7 +140,6 @@ export default function PromosScreen() {
       expirationDate: expiration.toISOString().split('T')[0],
       viewsCounter: 0,
       isActive: true,
-      cardNameOnInvoice: promoCardName || billingCardName,
       offerType,
       discountType,
       discountValue: parseFloat(discountValue),
@@ -203,8 +155,6 @@ export default function PromosScreen() {
       setIsAddingPromo(false);
       setPromoTitle('');
       setPromoText('');
-      setPromoCardName('');
-      setCardComplete(false);
       setDiscountValue('');
       Alert.alert("Success", `Campaign is now live in Zip Code: ${providerZip} · ${promoMiles}mi radius`);
     } catch (error) {
@@ -215,7 +165,7 @@ export default function PromosScreen() {
   const handleDeactivate = async (promoId: string) => {
     Alert.alert(
       "Deactivate Campaign",
-      "Stop this marketing run immediately? Impressions served so far will still be billed.",
+      "Stop this marketing run immediately? Customers will no longer see this promo.",
       [
         { text: "Cancel", style: "cancel" },
         {
@@ -274,8 +224,8 @@ export default function PromosScreen() {
 
       <ScrollView ref={scrollViewRef} className="flex-1 px-4" showsVerticalScrollIndicator={false}>
         {/* Marketing Performance Statistics Summary */}
-        <View className="flex-row gap-3 mb-8">
-          <View className="flex-1 bg-slate-900 border-2 border-slate-800 rounded-3xl p-4 shadow-brutalist">
+        <View className="mb-8">
+          <View className="bg-slate-900 border-2 border-slate-800 rounded-3xl p-4 shadow-brutalist">
             <Text className="text-slate-400 text-[8px] font-black uppercase tracking-widest mb-1">Total Impressions</Text>
             <Text className="text-xl font-black text-white font-mono">
               {promos.reduce((sum, p) => sum + (p.viewsCounter || 0), 0)}
@@ -283,16 +233,6 @@ export default function PromosScreen() {
             <View className="flex-row items-center gap-1.5 mt-2">
               <Sparkles size={10} color="#86B54F" />
               <Text className="text-slate-400 text-[7px] font-bold uppercase tracking-tighter">Live reach metrics</Text>
-            </View>
-          </View>
-          <View className="flex-1 bg-slate-900 border-2 border-slate-800 rounded-3xl p-4 shadow-brutalist">
-            <Text className="text-slate-400 text-[8px] font-black uppercase tracking-widest mb-1">Marketing Debt</Text>
-            <Text className="text-xl font-black text-brand-green font-mono">
-              ${promos.reduce((sum, p) => sum + ((p.viewsCounter || 0) * (config?.promoCostPerCount || 0.05)), 0).toFixed(2)}
-            </Text>
-            <View className="flex-row items-center gap-1.5 mt-2">
-              <CreditCard size={10} color="#86B54F" />
-              <Text className="text-slate-400 text-[7px] font-bold uppercase tracking-tighter">Current billing</Text>
             </View>
           </View>
         </View>
@@ -343,16 +283,10 @@ export default function PromosScreen() {
                 </Text>
               </View>
 
-              <View className="flex-row gap-3 mb-4">
-                <View className="flex-1 bg-slate-950 p-3 rounded-2xl border border-slate-800 items-center">
+              <View className="mb-4">
+                <View className="bg-slate-950 p-3 rounded-2xl border border-slate-800 items-center">
                   <Text className="text-white text-base font-black font-mono">{promo.viewsCounter}</Text>
                   <Text className="text-slate-400 text-[8px] font-bold uppercase tracking-widest mt-1">Impressions</Text>
-                </View>
-                <View className="flex-1 bg-slate-950 p-3 rounded-2xl border border-slate-800 items-center">
-                  <Text className="text-brand-green text-base font-black font-mono">
-                    ${(promo.viewsCounter * (config?.promoCostPerCount || 0.05)).toFixed(2)}
-                  </Text>
-                  <Text className="text-slate-400 text-[8px] font-bold uppercase tracking-widest mt-1">Acct Debit</Text>
                 </View>
               </View>
 
@@ -439,14 +373,12 @@ export default function PromosScreen() {
 
       {/* Campaign Detail Modal */}
       {selectedPromo && (() => {
-        const rate = config?.promoCostPerCount || 0.05;
         const totalImpressions = selectedPromo.viewsCounter || 0;
         const startDate = selectedPromo.createdAt ? new Date(selectedPromo.createdAt) : new Date();
         const endDate = selectedPromo.isActive ? new Date() : new Date(selectedPromo.expirationDate);
         const daysRunning = Math.max(1, Math.floor((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24)));
         const dailyAvg = totalImpressions / daysRunning;
         const impressions = detailFilter === 'daily' ? Math.round(dailyAvg) : detailFilter === 'weekly' ? Math.round(dailyAvg * 7) : totalImpressions;
-        const charged = impressions * rate;
         const filterLabel = detailFilter === 'daily' ? 'avg / day' : detailFilter === 'weekly' ? 'avg / week' : 'campaign total';
         return (
           <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: '#020617', zIndex: 150 }}>
@@ -513,24 +445,11 @@ export default function PromosScreen() {
                     <Text className="text-slate-600 text-[7px] font-mono mt-0.5">{filterLabel}</Text>
                   </View>
                   <View className="flex-1 bg-slate-900 rounded-2xl p-4 border border-slate-800 items-center">
-                    <Text className="text-brand-green text-2xl font-black font-mono">${charged.toFixed(2)}</Text>
-                    <Text className="text-slate-400 text-[8px] font-bold uppercase tracking-widest mt-1">Charged</Text>
-                    <Text className="text-slate-600 text-[7px] font-mono mt-0.5">{filterLabel}</Text>
+                    <Text className="text-brand-green text-2xl font-black font-mono">{daysRunning}</Text>
+                    <Text className="text-slate-400 text-[8px] font-bold uppercase tracking-widest mt-1">Days {selectedPromo.isActive ? 'Running' : 'Ran'}</Text>
+                    <Text className="text-slate-600 text-[7px] font-mono mt-0.5">{totalImpressions.toLocaleString()} total served</Text>
                   </View>
                 </View>
-              </View>
-
-              {/* Billing Note */}
-              <View className="mx-5 mt-4 p-4 bg-slate-900 rounded-2xl border border-slate-800">
-                <View className="flex-row items-center gap-2 mb-2">
-                  <CreditCard size={12} color="#86B54F" />
-                  <Text className="text-slate-400 text-[9px] font-black uppercase tracking-widest">Billing Notes</Text>
-                </View>
-                <Text className="text-slate-500 text-[10px] leading-relaxed font-mono">
-                  • Charged at ${rate.toFixed(2)}/impression on each PromoInvoice cycle.{'\n'}
-                  • Final settlement billed when campaign ends based on total impressions served.{'\n'}
-                  • {daysRunning} day{daysRunning !== 1 ? 's' : ''} running · ${(totalImpressions * rate).toFixed(2)} total accrued
-                </Text>
               </View>
 
               {/* Offer Details */}
@@ -725,84 +644,12 @@ export default function PromosScreen() {
                 </View>
               </View>
 
-              <View className="bg-slate-900/50 p-5 rounded-[32px] border-2 border-black shadow-brutalist">
-                <View className="flex-row items-center gap-2 mb-4 border-b border-black/20 pb-2">
-                  <CreditCard size={18} color="#86B54F" />
-                  <Text className="text-white font-black text-xs uppercase">Billing Setup</Text>
-                </View>
-
-                {billingCardLast4 ? (
-                  <View className="flex-row items-center justify-between mb-3">
-                    <View className="flex-row items-center gap-3">
-                      <View className="bg-emerald-500/10 border border-emerald-500/30 p-2 rounded-xl">
-                        <CreditCard size={16} color="#10b981" />
-                      </View>
-                      <View>
-                        <Text className="text-white font-bold text-xs capitalize">{billingCardBrand} ••••{billingCardLast4}</Text>
-                        <Text className="text-emerald-400 text-[10px] font-black uppercase font-mono">Saved to Stripe</Text>
-                      </View>
-                    </View>
-                    <TouchableOpacity
-                      onPress={() => { setBillingCardLast4(''); setBillingCardBrand(''); }}
-                      className="bg-slate-800 border border-slate-700 px-3 py-1.5 rounded-xl"
-                    >
-                      <Text className="text-slate-300 font-bold text-[10px] uppercase">Change</Text>
-                    </TouchableOpacity>
-                  </View>
-                ) : (
-                  <>
-                    <TextInput
-                      value={promoCardName}
-                      onChangeText={setPromoCardName}
-                      placeholder="Name on Card"
-                      placeholderTextColor="#94a3b8"
-                      autoCapitalize="words"
-                      className="bg-slate-950 border border-slate-800 rounded-xl p-3 text-white text-xs font-bold mb-3"
-                    />
-                    {/* Wrap the native CardField in the same bordered box the other
-                        fields use so its border aligns with them (no double border —
-                        the field itself draws borderless inside the wrapper). */}
-                    <View className="bg-slate-950 border border-slate-800 rounded-xl px-3 justify-center" style={{ height: 54 }}>
-                      <CardField
-                        postalCodeEnabled={true}
-                        onCardChange={(details) => setCardComplete(details.complete)}
-                        style={{ width: '100%', height: 50 }}
-                        cardStyle={{
-                          backgroundColor: '#020617',
-                          textColor: '#ffffff',
-                          placeholderColor: '#94a3b8',
-                          borderWidth: 0,
-                          borderRadius: 8,
-                        }}
-                      />
-                    </View>
-                  </>
-                )}
-
-                {/* Clear vertical space above + below so the rate box never crowds the
-                    card field, and a matching border so all three boxes line up. */}
-                <View className="mt-4 mb-1 p-3 bg-slate-950 border border-slate-800 rounded-xl items-center flex-row justify-center gap-2">
-                  <Sparkles size={12} color="#86B54F" />
-                  <Text className="text-brand-green font-mono font-black text-[10px] uppercase">
-                    Rate: ${config?.promoCostPerCount || 0.05} / Impression
-                  </Text>
-                </View>
-              </View>
-
               <TouchableOpacity
                 onPress={handleCreatePromo}
                 activeOpacity={0.8}
-                disabled={isSavingBilling}
                 className="bg-brand-green p-5 rounded-3xl border-4 border-black shadow-brutalist my-6"
               >
-                {isSavingBilling ? (
-                  <View className="flex-row items-center justify-center gap-2">
-                    <ActivityIndicator size="small" color="black" />
-                    <Text className="text-black font-black uppercase text-base tracking-tight">Saving Card...</Text>
-                  </View>
-                ) : (
-                  <Text className="text-black font-black uppercase text-center text-base tracking-tight">Activate & Launch</Text>
-                )}
+                <Text className="text-black font-black uppercase text-center text-base tracking-tight">Activate & Launch</Text>
               </TouchableOpacity>
 
               <View className="h-10" />

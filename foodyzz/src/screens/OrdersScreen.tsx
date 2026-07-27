@@ -29,6 +29,87 @@ const OrderSteps = [
 const VERIFY_STEP = 1;
 const ID_PENDING_ORANGE = '#f97316';
 
+// The return leg gets its own flow. Delivery ends the first one (the bike is with the
+// customer — nothing about that journey is still moving); everything after it is about
+// getting the bike back, and it runs on its own clock: the due date, then the
+// collection visit, the check-in inspection, and finally the deposit settling.
+const ReturnSteps = [
+    { key: 'pickup', label: 'Pickup' },
+    { key: 'at_location', label: 'At Location' },
+    { key: 'inspection', label: 'Inspection' },
+    { key: 'done', label: 'Done' },
+];
+const RETURN_GREEN = '#16a34a';
+
+// The deposit is "performed" — the last thing that has to happen for a rental to be
+// finished. A charged deposit ends at 'refunded' (money back on the card), a legacy
+// held one at 'released', and a rental that never took one is settled the moment the
+// bike is checked in. A refund that errored is NOT settled: it needs a human.
+const isDepositSettled = (order: RentalOrder): boolean => {
+    if (order.depositError) return false;
+    const status = order.depositStatus;
+    if (!status || status === 'none') return order.status === 'completed';
+    return status === 'refunded' || status === 'released';
+};
+
+// The last COMPLETED step of the return leg. -1 = the due date is still ahead and no
+// collection run has been announced yet. Note the inspection only counts as complete
+// once its condition report is on the order — being mid-inspection is `returnActiveStep`.
+const returnStepIndex = (order: RentalOrder): number => {
+    if (isDepositSettled(order)) return 3;
+    if (order.conditionAtReturn) return 2;
+    if (order.returnStage === 'at_location' || order.returnStage === 'inspecting') return 1;
+    if (order.returnStage === 'ready_for_pickup') return 0;
+    return -1;
+};
+
+// The step being worked on right now, if any: staff have the check-in sheet open and
+// are going over the bike. -1 when nothing is mid-flight.
+const returnActiveStep = (order: RentalOrder): number =>
+    (order.returnStage === 'inspecting' && !order.conditionAtReturn ? 2 : -1);
+
+// A delivered plain rental is not history: the bike is still with the customer and the
+// whole return leg is ahead of them. A buy has no return leg, and a rent-to-buy is
+// tracked by its installment plan instead.
+const isRentalOut = (order: RentalOrder): boolean =>
+    order.status === 'delivered' && order.rentalType !== 'buy' && order.rentalType !== 'rentToBuy';
+
+// Finished: nothing about this order is still moving. A returned rental, a bought bike
+// and a cancellation all belong in history; a delivered rental does not — its bike is
+// still out (isRentalOut).
+const isFinishedOrder = (order: RentalOrder): boolean =>
+    order.status === 'cancelled' || order.status === 'completed' ||
+    (order.status === 'delivered' && !isRentalOut(order));
+
+// Whole days from today to a local YYYY-MM-DD rental day. Negative = overdue. Parsed
+// field-by-field because new Date('YYYY-MM-DD') is UTC midnight, which reads as the
+// previous day in every US timezone.
+const daysUntilDay = (day?: string | null): number | null => {
+    if (!day) return null;
+    const [y, m, d] = String(day).split('-').map(Number);
+    if (!y || !m || !d) return null;
+    const due = new Date(y, m - 1, d);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    return Math.round((due.getTime() - today.getTime()) / 86400000);
+};
+
+// "2026-07-30" → "Thu, Jul 30".
+const formatRentalDay = (day?: string | null): string => {
+    if (!day) return '—';
+    const [y, m, d] = String(day).split('-').map(Number);
+    if (!y || !m || !d) return String(day);
+    return new Date(y, m - 1, d).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+};
+
+// "2026-07-27T14:03:00.000Z" → "Jul 27, 2026".
+const formatReceiptDate = (iso?: string | null): string => {
+    if (!iso) return '';
+    const d = new Date(iso);
+    if (isNaN(d.getTime())) return '';
+    return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+};
+
 // Documents are "on file" once BOTH the licence (front + back) and the proof of
 // address have been uploaded. Verification is a separate, later stamp.
 //
@@ -48,7 +129,11 @@ const CANCELLABLE_STATUSES: string[] = [OrderStatus.REQUESTED, OrderStatus.CONFI
 
 // Step for an order. 'confirmed' means accepted by FoodyzzHQ, but the customer only
 // sees CONFIRMED once their ID is verified (docsVerifiedAt) — until then it sits on
-// VERIFYING. Delivery states all read as CONFIRMED; delivered = the bike is with them.
+// VERIFYING. Delivery states all read as CONFIRMED.
+//
+// Delivery COMPLETES this flow: the bike is in the customer's hands and nothing about
+// getting it there is still in motion. The return leg picks up from there in its own
+// flow (see ReturnSteps), so this one doesn't sit at 4/5 for the whole rental.
 const orderStepIndex = (order: RentalOrder): number => {
     switch (order.status) {
         case 'requested': return 0;
@@ -56,7 +141,7 @@ const orderStepIndex = (order: RentalOrder): number => {
         case 'ready_for_delivery':
         case 'en_route_delivery':
         case 'at_delivery': return 2;
-        case 'delivered': return 3;
+        case 'delivered':
         case 'completed': return 4;
         default: return 0;
     }
@@ -81,6 +166,9 @@ const formatNeedBy = (val?: string | null | undefined): string => {
 // (e.g. 'cancelled') fall through unchanged.
 const historyStatusLabel = (order: RentalOrder): string => {
     if (order.status === 'delivered' && (order as any).logisticsType === 'dropoff') return 'Self-Pickup';
+    // 'completed' is the end of the Rental Due flow — badge it with the same word that
+    // flow's last step uses, not the raw status.
+    if (order.status === 'completed') return 'Done';
     return order.status;
 };
 
@@ -176,9 +264,11 @@ export default function OrdersScreen() {
             if (!snapshot) return;
             const all = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as RentalOrder));
 
-            // Separate active vs history
-            setActiveOrders(all.filter(o => !['delivered', 'cancelled'].includes(o.status)));
-            setPastOrders(all.filter(o => ['delivered', 'cancelled'].includes(o.status)));
+            // Separate live vs finished. A delivered rental is still live — the bike is
+            // out and due back — so it stays on top with its Rental Due flow. A returned
+            // one is done and drops into history, along with buys and cancellations.
+            setActiveOrders(all.filter(o => !isFinishedOrder(o)));
+            setPastOrders(all.filter(isFinishedOrder));
             setLoading(false);
         }, (error) => {
             console.error("Firestore Listen Error:", error);
@@ -358,6 +448,118 @@ export default function OrdersScreen() {
         );
     };
 
+    // The return leg: how long the customer has left with the bike, and how far the
+    // collection has got once it starts. Shown from delivery onward — before that
+    // there's no bike out and nothing to bring back.
+    const renderReturnProgress = (order: RentalOrder) => {
+        if (order.status !== OrderStatus.DELIVERED && order.status !== OrderStatus.COMPLETED) return null;
+        if (order.rentalType === 'buy' || order.rentalType === 'rentToBuy') return null;
+
+        const currentIdx = returnStepIndex(order);
+        const activeIdx = returnActiveStep(order);
+        const days = daysUntilDay(order.expectedEndDate);
+        const done = currentIdx >= ReturnSteps.length - 1;
+        const overdue = days != null && days < 0 && !done;
+        // Counting down is only meaningful while the bike is still out. Once the
+        // collection is under way the visit itself is the news, not the date.
+        const countdown = done
+            ? 'Rental complete'
+            : days == null ? 'Due date to be confirmed'
+                : days < 0 ? `${Math.abs(days)} day${Math.abs(days) === 1 ? '' : 's'} overdue`
+                    : days === 0 ? 'Due back today'
+                        : days === 1 ? 'Due back tomorrow'
+                            : `Due back in ${days} days`;
+        const missed = Number(order.missedPickups ?? 0);
+
+        return (
+            <View
+                style={{ borderColor: overdue ? '#fecdd3' : '#e2e8f0', backgroundColor: overdue ? '#fff1f2' : '#f8fafc' }}
+                className="border rounded-[28px] p-4 mt-1 mb-3"
+            >
+                <View className="flex-row items-center justify-between">
+                    <Text className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Rental Due</Text>
+                    <Text className="text-[10px] font-black text-slate-500">{formatRentalDay(order.expectedEndDate)}</Text>
+                </View>
+
+                <View className="flex-row items-center gap-2 mt-1.5">
+                    <Calendar size={14} color={done ? RETURN_GREEN : overdue ? '#e11d48' : '#475569'} />
+                    <Text
+                        style={{ color: done ? RETURN_GREEN : overdue ? '#e11d48' : '#0f172a' }}
+                        className="text-sm font-black uppercase tracking-tight"
+                    >
+                        {countdown}
+                    </Text>
+                </View>
+
+                {/* A missed collection renewed the rental and moved the date out — say so,
+                    otherwise the new due date looks like it changed by itself. */}
+                {missed > 0 && !done && (
+                    <Text className="text-[10px] font-bold text-amber-700 mt-1.5 leading-relaxed">
+                        {missed} missed collection{missed === 1 ? '' : 's'} · rental extended
+                        {Number(order.renewalChargedTotal ?? 0) > 0
+                            ? ` · $${Number(order.renewalChargedTotal).toFixed(2)} charged`
+                            : ''}
+                    </Text>
+                )}
+
+                <View className="mt-4">
+                    <View className="flex-row justify-between relative">
+                        <View className="absolute top-3.5 left-0 right-0 h-1 bg-slate-200" />
+                        <View
+                            style={{
+                                width: `${(Math.max(0, currentIdx) / (ReturnSteps.length - 1)) * 100}%`,
+                                backgroundColor: RETURN_GREEN,
+                                opacity: currentIdx < 0 ? 0 : 1,
+                            }}
+                            className="absolute top-3.5 left-0 h-1"
+                        />
+                        {ReturnSteps.map((step, i) => {
+                            const isDone = i <= currentIdx;
+                            // Under way but not finished — the inspection, while staff are
+                            // still going over the bike. Outlined rather than filled, so
+                            // "happening now" never reads as "already done".
+                            const isActive = i === activeIdx;
+                            const isCurrent = i === currentIdx;
+                            return (
+                                <View key={step.key} className="items-center z-10 w-1/4">
+                                    <View
+                                        style={{
+                                            backgroundColor: isDone ? RETURN_GREEN : '#ffffff',
+                                            borderColor: isActive || isCurrent ? '#000000' : isDone ? RETURN_GREEN : '#e2e8f0',
+                                        }}
+                                        className="w-8 h-8 rounded-full items-center justify-center border-2"
+                                    >
+                                        {isDone
+                                            ? <CheckCircle size={14} color="#ffffff" />
+                                            : <Text className={`text-[10px] font-black ${isActive ? 'text-black' : 'text-slate-300'}`}>{i + 1}</Text>}
+                                    </View>
+                                    <Text
+                                        style={{ color: isDone ? RETURN_GREEN : isActive ? '#0f172a' : '#94a3b8' }}
+                                        className="text-[8px] font-black uppercase mt-2 tracking-tighter"
+                                    >
+                                        {step.label}
+                                    </Text>
+                                </View>
+                            );
+                        })}
+                    </View>
+                </View>
+
+                {/* What the current step means, in the customer's terms. */}
+                <Text className="text-[10px] font-bold text-slate-500 mt-3 leading-relaxed">
+                    {activeIdx === 2
+                        ? 'We\'re checking the bike in with you now.'
+                        : currentIdx === -1
+                            ? 'We\'ll message you before we come to collect the bike.'
+                            : currentIdx === 0 ? 'We\'re on the way to collect your bike — please be home.'
+                                : currentIdx === 1 ? 'We\'re outside. Come and meet us to hand the bike over.'
+                                    : currentIdx === 2 ? 'Bike checked in — we\'re settling your deposit.'
+                                        : 'Bike returned and deposit settled. Thanks for riding with Foodyzz.'}
+                </Text>
+            </View>
+        );
+    };
+
     if (loading) {
         return (
             <View className="flex-1 justify-center items-center bg-white">
@@ -439,6 +641,9 @@ export default function OrdersScreen() {
                             </View>
 
                             {renderStatusProgress(order)}
+
+                            {/* Delivery is done; the bike still has to come back. */}
+                            {renderReturnProgress(order)}
 
                             {/* Sits between the stepper and the chat button, and ONLY while
                                 the order is parked on the ID-Pending step — it's the single
@@ -701,6 +906,10 @@ export default function OrdersScreen() {
                                 </View>
                             )}
 
+                            {/* Return leg — the same countdown/flow the order card carries,
+                                so a rental opened from history still shows how it ended. */}
+                            {selectedOrder && renderReturnProgress(selectedOrder)}
+
                             <View className="bg-slate-50 p-4 rounded-3xl border border-slate-100">
                                 <Text className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3">Rental Breakdown</Text>
                                 <View className="flex-row justify-between mb-2">
@@ -840,6 +1049,69 @@ export default function OrdersScreen() {
                                 </View>
 
                             </View>
+
+                            {/* Receipts for payments taken AFTER delivery. The card above is
+                                the original charge (it's rendered from the order's own pricing
+                                fields); a renewal from a missed collection is a separate
+                                payment, so it gets its own receipt in the same shape. */}
+                            {(selectedOrder?.receipts ?? []).map((receipt) => (
+                                <View key={receipt.id} className="bg-white border-2 border-black rounded-[28px] overflow-hidden">
+                                    <View className="px-4 pt-4 pb-3">
+                                        <View className="flex-row justify-between items-start mb-1">
+                                            <Text className="text-[9px] font-black text-slate-400 uppercase tracking-widest flex-1 pr-2">
+                                                {receipt.title}
+                                            </Text>
+                                            <View className={`px-1.5 py-0.5 rounded ${receipt.paid ? 'bg-emerald-100' : 'bg-rose-100'}`}>
+                                                <Text
+                                                    style={{ color: receipt.paid ? '#059669' : '#e11d48' }}
+                                                    className="text-[8px] font-black uppercase"
+                                                >
+                                                    {receipt.paid ? 'Charged' : 'Payment failed'}
+                                                </Text>
+                                            </View>
+                                        </View>
+                                        <Text className="text-[10px] font-bold text-slate-400 mb-3">
+                                            {[formatReceiptDate(receipt.issuedAt), receipt.subtitle].filter(Boolean).join(' · ')}
+                                        </Text>
+
+                                        {receipt.lines.map((line, i) => (
+                                            <View key={`${receipt.id}-line-${i}`} className="flex-row justify-between mb-2">
+                                                <Text className="text-xs text-slate-500 font-bold flex-1 pr-3">{line.label}</Text>
+                                                <Text className="text-xs font-black text-slate-800">${line.amount.toFixed(2)}</Text>
+                                            </View>
+                                        ))}
+                                        <View className="flex-row justify-between mb-2 pt-2 border-t border-slate-100">
+                                            <Text className="text-xs text-slate-500 font-bold">Subtotal</Text>
+                                            <Text className="text-xs font-black text-slate-800">${receipt.subtotal.toFixed(2)}</Text>
+                                        </View>
+                                        {receipt.taxesAndFees > 0 && (
+                                            <View className="flex-row justify-between mb-2">
+                                                <Text className="text-xs text-slate-500 font-bold">Taxes and fees</Text>
+                                                <Text className="text-xs font-black text-slate-800">${receipt.taxesAndFees.toFixed(2)}</Text>
+                                            </View>
+                                        )}
+                                        {(receipt.extraLines ?? []).map((line, i) => (
+                                            <View key={`${receipt.id}-extra-${i}`} className="flex-row justify-between mb-2">
+                                                <Text className="text-xs text-slate-500 font-bold flex-1 pr-3">{line.label}</Text>
+                                                <Text className="text-xs font-black text-slate-800">${line.amount.toFixed(2)}</Text>
+                                            </View>
+                                        ))}
+                                        <View className="flex-row justify-between pt-2 border-t border-slate-100">
+                                            <Text className={`text-xs font-bold ${receipt.paid ? 'text-emerald-600' : 'text-rose-600'}`}>
+                                                {receipt.paid ? 'Total Charged' : 'Amount Due'}
+                                            </Text>
+                                            <Text className={`text-xs font-black ${receipt.paid ? 'text-emerald-700' : 'text-rose-700'}`}>
+                                                ${receipt.total.toFixed(2)}
+                                            </Text>
+                                        </View>
+                                        {!receipt.paid && (
+                                            <Text className="text-[10px] font-bold text-rose-600 mt-2 leading-relaxed">
+                                                We couldn't take this from your saved card — our team will be in touch to settle it.
+                                            </Text>
+                                        )}
+                                    </View>
+                                </View>
+                            ))}
 
                             {/* Rate + tip, once the rental is complete. The provider
                                 price-adjustment approval flow that used to sit here is

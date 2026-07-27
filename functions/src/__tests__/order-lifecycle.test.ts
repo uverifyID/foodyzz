@@ -1,6 +1,6 @@
 import {
   callable, fns, phoneAuth, seedConfig, seedProvider, seedUser, seedOrder,
-  seedLogistics, getDoc, clearFirestore, spyExpo,
+  seedLogistics, getDoc, clearFirestore, spyExpo, runCron,
 } from './helpers';
 
 const PROVIDER_ID = '14025551111_11743';
@@ -200,6 +200,33 @@ describe('collection run (Rental Due → bike check-in)', () => {
     expect(res.renewedTo).toBe(day(28));
   });
 
+  // A renewal is a second payment on the order, so the customer gets a second
+  // receipt for it — the delivery charge is described by the order's own pricing
+  // fields and would otherwise be the only receipt they ever see.
+  test('not present → a renewal receipt is filed with the payment', async () => {
+    await seedLogistics();
+    await seedUser(CUSTOMER_PHONE);
+    await seedRunningRental('p7', { returnStage: 'at_location' });
+
+    const res: any = await callable(fns.recordRentalPickupFailed, { orderId: 'p7' }, phoneAuth(PROVIDER_PHONE));
+
+    const o = await getDoc('orders/p7');
+    expect(o.receipts).toHaveLength(1);
+    const r = o.receipts[0];
+    expect(r.id).toBe('renewal-1');
+    expect(r.kind).toBe('renewal');
+    expect(r.periodTo).toBe(day(38));
+    // Pre-tax lines add up to the subtotal; the untaxed admin fee sits outside it.
+    const lineSum = r.lines.reduce((s: number, l: any) => s + l.amount, 0);
+    expect(Math.round(lineSum * 100) / 100).toBe(r.subtotal);
+    expect(r.extraLines[0].amount).toBe(25);
+    // Every receipt's total is exactly what the card was asked for.
+    expect(r.total).toBe(res.rentalCharge + res.adminFee);
+    // No card on file here, so the term renewed but nothing was collected.
+    expect(r.paid).toBe(false);
+    expect(r.error).toMatch(/no saved card/i);
+  });
+
   test('rent-to-buy and not-yet-delivered orders have no collection run', async () => {
     await seedLogistics();
     await seedOrder('p5', { status: 'delivered', rentalType: 'rentToBuy', bikeModel: 1 });
@@ -209,6 +236,95 @@ describe('collection run (Rental Due → bike check-in)', () => {
       .rejects.toThrow(/plain rental/i);
     await expect(callable(fns.startRentalPickup, { orderId: 'p6' }, phoneAuth(PROVIDER_PHONE)))
       .rejects.toThrow(/out with a customer/i);
+  });
+});
+
+// A missed collection renews the rental and bills for it, so the due date must never
+// arrive unannounced: two days out, the customer is reminded that we're coming.
+describe('rental due reminders', () => {
+  const day = (offsetDays: number) => {
+    const d = new Date();
+    d.setDate(d.getDate() + offsetDays);
+    const p = (n: number) => String(n).padStart(2, '0');
+    return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+  };
+
+  const seedDueRental = (id: string, dueIn: number, extra: any = {}) => seedOrder(id, {
+    providerId: PROVIDER_ID, providerName: 'Test Co', status: 'delivered',
+    customerPhone: CUSTOMER_PHONE, rentalType: 'rent', bikeModel: 1,
+    durationValue: 4, durationUnit: 'weeks', expectedEndDate: day(dueIn), ...extra,
+  });
+
+  test('a rental due in two days is reminded exactly once', async () => {
+    const expo = spyExpo();
+    await seedUser(CUSTOMER_PHONE, { fcmToken: 'ExponentPushToken[cust]' });
+    await seedDueRental('d1', 2);
+
+    await runCron(fns.rentalDueReminders);
+
+    const o = await getDoc('orders/d1');
+    expect(o.dueReminderSentFor).toBe(day(2));
+    expect(o.dueReminderSentAt).toBeTruthy();
+    const msg = expo.messages().find((m: any) => m.data?.type === 'RENTAL_DUE_SOON');
+    expect(msg).toBeDefined();
+    expect(msg.body).toMatch(/due back/i);
+
+    // A same-day re-run of the cron must not message the customer twice.
+    await runCron(fns.rentalDueReminders);
+    const again = expo.messages().filter((m: any) => m.data?.type === 'RENTAL_DUE_SOON');
+    expo.restore();
+    expect(again).toHaveLength(1);
+  });
+
+  test('rentals due on any other day, and plans with no return leg, are left alone', async () => {
+    const expo = spyExpo();
+    await seedUser(CUSTOMER_PHONE, { fcmToken: 'ExponentPushToken[cust]' });
+    await seedDueRental('d2', 5);                                  // too far out
+    await seedDueRental('d3', 0);                                  // due today — too late to warn
+    await seedDueRental('d4', 2, { rentalType: 'rentToBuy' });     // billed by installments
+    await seedDueRental('d5', 2, { rentalType: 'buy' });           // never comes back
+    await seedDueRental('d6', 2, { status: 'completed' });         // already returned
+
+    await runCron(fns.rentalDueReminders);
+
+    const msgs = expo.messages().filter((m: any) => m.data?.type === 'RENTAL_DUE_SOON');
+    expo.restore();
+    expect(msgs).toHaveLength(0);
+    for (const id of ['d2', 'd3', 'd4', 'd5', 'd6']) {
+      expect((await getDoc(`orders/${id}`)).dueReminderSentFor).toBeUndefined();
+    }
+  });
+
+  // The batch is worked by a small pool of concurrent senders rather than one
+  // sequential loop (an SMTP send is ~1s of waiting, and a full batch would run past
+  // the function timeout). Every order in the batch must still be reminded exactly once.
+  test('a full batch is worked through the send pool without dropping anyone', async () => {
+    const expo = spyExpo();
+    await seedUser(CUSTOMER_PHONE, { fcmToken: 'ExponentPushToken[cust]' });
+    const ids = Array.from({ length: 20 }, (_, i) => `b${i}`);
+    await Promise.all(ids.map(id => seedDueRental(id, 2)));
+
+    await runCron(fns.rentalDueReminders);
+
+    const msgs = expo.messages().filter((m: any) => m.data?.type === 'RENTAL_DUE_SOON');
+    expo.restore();
+    expect(msgs).toHaveLength(ids.length);
+    for (const id of ids) {
+      expect((await getDoc(`orders/${id}`)).dueReminderSentFor).toBe(day(2));
+    }
+  });
+
+  // The renewal moves the due date out; the new date is a new obligation and earns
+  // its own reminder, even though this order has already been reminded once.
+  test('a renewed rental is reminded again for its new due date', async () => {
+    const expo = spyExpo();
+    await seedUser(CUSTOMER_PHONE, { fcmToken: 'ExponentPushToken[cust]' });
+    await seedDueRental('d7', 2, { dueReminderSentFor: day(-26) });
+
+    await runCron(fns.rentalDueReminders);
+
+    expo.restore();
+    expect((await getDoc('orders/d7')).dueReminderSentFor).toBe(day(2));
   });
 });
 

@@ -64,9 +64,9 @@ const STEP_TITLES = [
   '',   // (removed) per-unit pricing step
   'Pickup & Dropoff',
   '',   // (removed) dry cleaning
-  '',   // (removed) provider payout cadence
+  '',   // (removed) provider payment cadence
   'Sales Tax',
-  '',   // (removed) Stripe Connect bank setup
+  '',   // (removed) bank setup
   "You're Live!",
 ];
 
@@ -243,18 +243,12 @@ export default function ProviderOnboardingWizard({
   const [salesTaxRate, setSalesTaxRate] = useState(''); // percent, e.g. "8.625"
   const [taxResponsibilityAccepted, setTaxResponsibilityAccepted] = useState(false);
 
-  // ── Step 8: Payouts ──
-  const [dailyPayoutFee, setDailyPayoutFee] = useState(0.99);
   // Platform's reference "1 load" weight, so providers price a load against the same
   // basis customers see when estimating loads in the request flow (apiConfig/global.avgLoadlbs).
   const [avgLoadLbs, setAvgLoadLbs] = useState<number>(15);
   // The provider doc is created (onboarded:false) when the user leaves the tax step,
-  // so Stripe Connect has a real providerId to attach the payout account to. It flips
-  // to onboarded:true at go-live. Until the doc exists, PayoutSetup stays disabled.
+  // then flips to onboarded:true at go-live.
   const [providerId, setProviderId] = useState<string | null>(null);
-  // Whether Stripe reports the bank/payout account is fully enabled. Connecting a
-  // payout account is REQUIRED before going live, so this gates the payout step.
-  // Memoized so PayoutSetup's internal refresh effect doesn't re-fire on every render.
 
   // ─── Scroll to top on step change ────────────────────────────────────────
 
@@ -289,8 +283,6 @@ export default function ProviderOnboardingWizard({
         if (k) setGoogleApiKey(k);
         const df = snap.data()?.deliveryFee?.pickupDelivery;
         if (typeof df === 'number') setDeliveryFee(df);
-        const dpf = snap.data()?.stripe?.dailyPayoutFee;
-        if (typeof dpf === 'number') setDailyPayoutFee(dpf);
         const all = snap.data()?.avgLoadlbs;
         if (typeof all === 'number') setAvgLoadLbs(all);
       })
@@ -390,10 +382,10 @@ export default function ProviderOnboardingWizard({
   const handleNext = async () => {
     const error = validateCurrentStep();
     if (error) { Alert.alert('Required', error); return; }
-    // Leaving the tax step, create the provider doc (onboarded:false) so the payout
-    // step can attach a Stripe Connect account to a real providerId. Block advancing
-    // if the doc can't be written (e.g. address can't be geocoded) — the same gate
-    // that used to live only in the final save now happens here, earlier.
+    // Leaving the tax step, create the provider doc (onboarded:false) so the store
+    // exists under a real providerId before go-live. Block advancing if the doc can't
+    // be written (e.g. address can't be geocoded) — the same gate that used to live
+    // only in the final save now happens here, earlier.
     if (step === 7) {
       setSaving(true);
       const ok = await persistProvider(false);
@@ -411,10 +403,10 @@ export default function ProviderOnboardingWizard({
 
   // ─── Provider doc save ──────────────────────────────────────────────────────
 
-  // Write the provider doc from current form state. Shared by the pre-payout save
-  // (onboarded:false — so Stripe Connect can attach to a real providerId) and the
-  // final go-live save (onboarded:true). Returns true on success; surfaces any
-  // validation/network failure via Alert and returns false. Callers own `saving`.
+  // Write the provider doc from current form state. Shared by the post-tax-step save
+  // (onboarded:false) and the final go-live save (onboarded:true). Returns true on
+  // success; surfaces any validation/network failure via Alert and returns false.
+  // Callers own `saving`.
   const persistProvider = async (onboarded: boolean): Promise<boolean> => {
     try {
       const cleanPhone = user.phoneNumber?.replace(/\D/g, '') || user.email?.split('@')[0] || '';
@@ -470,12 +462,10 @@ export default function ProviderOnboardingWizard({
         // Sales tax the provider collects & remits; stored as a decimal rate.
         chargesSalesTax: chargesSalesTax === true,
         salesTaxRate: chargesSalesTax === true ? parseFloat(salesTaxRate) / 100 : 0,
-        // Bank is connected directly to Stripe (PayoutSetup → Connect); we only persist
-        // the payout cadence preference here (no bank/routing numbers stored). The
-        // merge write never touches stripeAccountId, so it survives re-saves.
+        // No bank or routing numbers are ever stored on the provider doc.
         slotCapacity: 5,
         // onboarded gates ALL order distribution + customer discovery, so the doc is
-        // invisible to customers until go-live even though it exists for Stripe.
+        // invisible to customers until go-live even though it already exists.
         onboarded,
         ...(onboarded ? { onboardedAt: new Date().toISOString() } : {}),
       }, { merge: true });
@@ -788,7 +778,7 @@ export default function ProviderOnboardingWizard({
 
             <Text className="text-slate-400 text-xs font-bold leading-relaxed mb-4">
               Do you charge sales tax on your services? If so, we'll add it to each
-              customer's order and pass it through to you in your payout.
+              customer's order and collect it on your behalf.
             </Text>
 
             {/* Yes / No toggle */}
@@ -865,10 +855,9 @@ export default function ProviderOnboardingWizard({
           </View>
         );
 
-      // ── Step 8: Payouts ──────────────────────────────────────────────────
-      // The provider doc was created (onboarded:false) when leaving the tax step,
-      // so PayoutSetup can attach a Stripe Connect account here — same flow the
-      // Account tab uses. We also capture the payout cadence preference.
+      // ── Final step: go live ──────────────────────────────────────────────
+      // The provider doc was created (onboarded:false) when leaving the tax step;
+      // handleFinish flips it to onboarded:true.
       case 9:
         return (
           <View className="items-center">

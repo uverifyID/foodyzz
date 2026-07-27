@@ -47,8 +47,6 @@ export interface ProviderProfile {
   address: string;
   onboarded: boolean;
   isBlocked?: boolean;
-  stripeAccountId?: string;
-  payoutCadence?: 'standard' | 'daily';
   fcmToken?: string;
   slotCapacity?: number;
   // Master availability. Undefined/true = active; false = paused.
@@ -140,7 +138,7 @@ export interface RentalOrder {
   couponCode?: string | null;
   couponDiscount?: number | null;
   // Persisted pricing breakdown (commission-inclusive subtotal; taxRate is the
-  // provider's rate actually applied). Used to reconcile the provider payout.
+  // provider's rate actually applied).
   orderSubtotal?: number;
   adjustedSubtotal?: number;
   platformFee?: number | null;
@@ -150,18 +148,14 @@ export interface RentalOrder {
   ccProcessingFee?: number;
   authorizedCeiling?: number;
 
-  // ── Payout state machine + money audit trail (see functions/src/types.ts) ──
-  payoutStatus?: 'unpaid' | 'paid';
+  // ── Money audit trail (see functions/src/types.ts) ──
   chargeAvailableOn?: string;     // settlement date (~3 days after capture)
-  payoutId?: string;
-  depositedAt?: string;
   authorizedAmount?: number;
   authorizedAt?: string;
   chargedAmount?: number;
   chargedAt?: string;
   // ISO timestamp written when the rental is marked delivered/completed.
   completedAt?: string;
-  depositedAmount?: number;
   adjustments?: AdjustmentEntry[];
 }
 
@@ -210,37 +204,6 @@ export interface SupportMessage {
   text: string;
   timestamp: string;
   isReadByAdmin: boolean;
-}
-
-export interface Payout {
-  id: string;
-  providerId: string;
-  providerName: string;
-  amount: number;
-  currency: string;
-  transferId: string;
-  status: 'pending' | 'paid' | 'failed';
-  periodStart: string;
-  periodEnd: string;
-  createdAt: string;
-  ordersIncluded: string[];
-  cadence?: 'standard' | 'daily' | 'admin';
-  fee?: number;
-}
-
-// bankPayouts/{id} — leg-2 ledger: connected-account balance → provider bank (mirrors
-// functions/src/types.ts). Distinct from Payout (leg 1: platform → connected account).
-export interface BankPayout {
-  id: string;
-  providerId: string;
-  providerName: string;
-  amount: number;
-  currency: string;
-  stripePayoutId: string;
-  status: 'paid' | 'failed';
-  triggeredBy: 'cron' | 'admin';
-  createdAt: string;
-  error?: string;
 }
 
 export interface MarketingInvoice {

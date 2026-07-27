@@ -345,7 +345,6 @@ export default function OrderWizard() {
 
         notes,
         status: 'requested',
-        payoutStatus: 'unpaid',
         paymentIntentId,
         // Nothing is charged until the bike is actually delivered.
         paymentCaptured: false,

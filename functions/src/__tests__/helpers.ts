@@ -23,6 +23,12 @@ export async function callable(fn: any, data: any, auth?: any) {
   return wrapped({ data, auth });
 }
 
+// Run an onSchedule job the way Cloud Scheduler would (empty event payload).
+export async function runCron(fn: any) {
+  const wrapped: any = test.wrap(fn);
+  return wrapped({});
+}
+
 // Invoke a v2 onDocumentCreated trigger for a freshly-created doc.
 export async function triggerCreated(fn: any, refPath: string, data: any, params: Record<string, string>) {
   const wrapped: any = test.wrap(fn);

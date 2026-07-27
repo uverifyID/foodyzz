@@ -3,7 +3,7 @@ import { View, Text, ScrollView, FlatList, TouchableOpacity, ActivityIndicator, 
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
-import { Truck, Clock, MessageSquare, Bell, MapPin, CheckCircle, RefreshCcw, Package, Phone, Search, X, Bike, QrCode, CreditCard, CalendarClock, User, UserX, AlertTriangle } from 'lucide-react-native';
+import { Truck, Clock, MessageSquare, Bell, MapPin, CheckCircle, RefreshCcw, Package, Phone, Search, X, Bike, QrCode, CreditCard, CalendarClock, User, UserX, AlertTriangle, ClipboardCheck } from 'lucide-react-native';
 import { COLORS } from '../theme';
 import { db } from '../services/firebase';
 import { useActiveProvider, useGlobalConfig, useLogisticsConfig, useProviderOrders } from '../hooks';
@@ -229,6 +229,9 @@ export default function LogisticsScreen() {
   const [handoverOrder, setHandoverOrder] = useState<any | null>(null);
   // Order being checked back in — same sheet, return mode.
   const [returnOrder, setReturnOrder] = useState<any | null>(null);
+  // Set the moment a check-in succeeds, so closing the sheet afterwards doesn't try to
+  // rewind the run's stage on an order the server has already completed.
+  const returnCompletedRef = useRef<string | null>(null);
   const [scannedOrder, setScannedOrder] = useState<any | null>(null);
 
   const [qrNotFound, setQrNotFound] = useState(false);
@@ -380,7 +383,7 @@ export default function LogisticsScreen() {
   };
 
   // Foodyzz owns the fleet, so this is the rental total, not a provider cut.
-  const getPayout = (order: any) =>
+  const getOrderTotal = (order: any) =>
     Number(order.chargedAmount ?? order.estimatedPrice ?? 0).toFixed(2);
 
   const getStatusLabel = (status: string, _isPickupOrder: boolean): string => {
@@ -500,6 +503,40 @@ export default function LogisticsScreen() {
     } finally {
       if (mountedRef.current) setProcessingOrderId(null);
     }
+  };
+
+  // Opening the check-in sheet IS the inspection: staff are going over the bike with
+  // the customer standing there. Stamping it moves the customer's Rental Due flow onto
+  // its Inspection step, so the last thing they see isn't "we're outside" while the
+  // check-in and the deposit are being worked out.
+  //
+  // Best-effort on purpose: the inspection itself must never be blocked by a failed
+  // write, and the stage is only a display hint — markRentalReturned clears it either
+  // way. A walk-in (QR scan, no collection run) has no stage to advance.
+  const openReturnSheet = (order: any) => {
+    setReturnOrder(order);
+    if (order.returnStage !== 'at_location') return;
+    applyOptimistic(order.id, { returnStage: 'inspecting' });
+    db.collection('orders').doc(order.id)
+      .update({ returnStage: 'inspecting', returnStageAt: new Date().toISOString() })
+      .catch(() => clearOptimistic(order.id));
+  };
+
+  // Backing out of the sheet without checking the bike in — staff are still on site, so
+  // the run rewinds to where it was. Read the LIVE order rather than the snapshot the
+  // sheet was opened with: a check-in that completed has already cleared the stage
+  // server-side, and rewinding it would resurrect a run on a finished rental.
+  const closeReturnSheet = () => {
+    const id = returnOrder?.id;
+    setReturnOrder(null);
+    if (!id) return;
+    if (returnCompletedRef.current === id) { returnCompletedRef.current = null; return; }
+    const live = orders.find(o => o.id === id);
+    if (!live || live.returnStage !== 'inspecting' || live.status !== OrderStatus.DELIVERED) return;
+    applyOptimistic(id, { returnStage: 'at_location' });
+    db.collection('orders').doc(id)
+      .update({ returnStage: 'at_location', returnStageAt: new Date().toISOString() })
+      .catch(() => clearOptimistic(id));
   };
 
   // Nobody home. The customer keeps the bike, so the rental renews for another
@@ -668,8 +705,12 @@ export default function LogisticsScreen() {
     // Staff are outside the customer's door: the trip either succeeded or nobody
     // was home. Hoisted because both outcome buttons test it, and they have to be
     // separate siblings of the gap-2 row rather than share a Fragment.
-    const atLocation = order.status === OrderStatus.DELIVERED
-      && !isPaymentDue && !walkIn && returnStage === 'at_location';
+    //
+    // 'inspecting' counts as on site too: it is stamped while the check-in sheet is
+    // open, and if that sheet never closes cleanly (app killed mid-inspection) the
+    // stage would otherwise strand the run with no button to finish or abandon it.
+    const atLocation = order.status === OrderStatus.DELIVERED && !isPaymentDue && !walkIn
+      && (returnStage === 'at_location' || returnStage === 'inspecting');
 
     return (
       <View
@@ -723,7 +764,7 @@ export default function LogisticsScreen() {
 
           </View>
           <View className="items-end">
-            <Text className="text-brand-green-dark font-mono font-black text-sm tracking-tight">${getPayout(order)}</Text>
+            <Text className="text-brand-green-dark font-mono font-black text-sm tracking-tight">${getOrderTotal(order)}</Text>
             <Text className="text-[7px] font-black uppercase tracking-widest text-slate-400">
               {order.status === 'delivered' || order.status === 'completed' ? 'Charged' : 'To capture'}
             </Text>
@@ -827,11 +868,17 @@ export default function LogisticsScreen() {
             )}
             {!walkIn && !!returnStage && (
               <View className="flex-row items-center gap-2 bg-amber-50 border border-amber-200 rounded-2xl px-3 py-2">
-                {returnStage === 'at_location' ? <MapPin size={12} color="#b45309" /> : <Truck size={12} color="#b45309" />}
+                {returnStage === 'inspecting'
+                  ? <ClipboardCheck size={12} color="#b45309" />
+                  : returnStage === 'at_location'
+                    ? <MapPin size={12} color="#b45309" />
+                    : <Truck size={12} color="#b45309" />}
                 <Text className="text-amber-800 font-black text-[9px] uppercase tracking-widest flex-1">
-                  {returnStage === 'at_location'
-                    ? 'On site · customer notified'
-                    : 'Pickup announced · customer asked to be home'}
+                  {returnStage === 'inspecting'
+                    ? 'Checking the bike in · inspection open'
+                    : returnStage === 'at_location'
+                      ? 'On site · customer notified'
+                      : 'Pickup announced · customer asked to be home'}
                 </Text>
               </View>
             )}
@@ -900,7 +947,7 @@ export default function LogisticsScreen() {
               rather than stacking on top of it. */}
           {order.status === OrderStatus.DELIVERED && !isPaymentDue && walkIn && (
             <TouchableOpacity
-              onPress={() => { setScannedOrder(null); setReturnOrder(order); }}
+              onPress={() => { setScannedOrder(null); openReturnSheet(order); }}
               disabled={busy}
               activeOpacity={busy ? 1 : 0.8}
               style={{ opacity: busy ? 0.6 : 1 }}
@@ -965,7 +1012,7 @@ export default function LogisticsScreen() {
           )}
           {atLocation && (
             <TouchableOpacity
-              onPress={() => setReturnOrder(order)}
+              onPress={() => openReturnSheet(order)}
               disabled={busy}
               activeOpacity={busy ? 1 : 0.8}
               style={{ opacity: busy ? 0.6 : 1 }}
@@ -1328,7 +1375,12 @@ export default function LogisticsScreen() {
 
       {/* Adjust Price Modal (shared with the Dispatch screen) */}
       <HandoverSheet order={handoverOrder} onClose={() => setHandoverOrder(null)} />
-      <HandoverSheet order={returnOrder} mode="return" onClose={() => setReturnOrder(null)} />
+      <HandoverSheet
+        order={returnOrder}
+        mode="return"
+        onDelivered={() => { returnCompletedRef.current = returnOrder?.id ?? null; }}
+        onClose={closeReturnSheet}
+      />
     </View>
   );
 }

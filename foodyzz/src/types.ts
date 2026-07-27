@@ -63,7 +63,6 @@ export interface ProviderProfile {
   chargesSalesTax?: boolean;
   salesTaxRate?: number;
   isBlocked?: boolean;
-  stripeAccountId?: string;
   fcmToken?: string;
   slotCapacity?: number;
   pickupEnabled?: boolean;
@@ -100,6 +99,27 @@ export interface BillingSchedule {
   lastPaymentIntentId?: string;
 }
 
+// A receipt for one payment taken after checkout (see functions/src/types.ts). Line
+// items are pre-tax and sum to `subtotal`; `extraLines` are untaxed flat charges added
+// after tax (the missed-collection admin fee).
+export interface OrderReceipt {
+  id: string;
+  kind: 'renewal';
+  issuedAt: string;
+  title: string;
+  subtitle?: string;
+  periodFrom?: string | null;
+  periodTo?: string | null;
+  lines: { label: string; amount: number }[];
+  subtotal: number;
+  taxesAndFees: number;
+  extraLines?: { label: string; amount: number }[];
+  total: number;
+  paid: boolean;
+  paymentIntentId?: string | null;
+  error?: string | null;
+}
+
 export interface RentalOrder {
   id: string;
   // ── Bike rental (Foodyzz) ────────────────────────────────────────────────
@@ -123,7 +143,7 @@ export interface RentalOrder {
   // expectedEndDate + 3 days; Complete releases the obligation.
   depositAmount?: number;
   depositHoldUntil?: string;
-  depositStatus?: 'none' | 'secured' | 'charged' | 'released';
+  depositStatus?: 'none' | 'secured' | 'charged' | 'released' | 'refunded';
   depositPaymentMethodId?: string;
   depositPaymentIntentId?: string;
   depositChargedAmount?: number;
@@ -140,6 +160,33 @@ export interface RentalOrder {
   billingSchedule?: BillingSchedule;
   rentToBuyOwned?: boolean;
   rentToBuyOwnedAt?: string;
+  depositRefundedAmount?: number;
+  depositAdjustments?: { note: string; amount: number }[];
+  depositAdjustmentTotal?: number;
+  depositRefundedAt?: string;
+  // ── Return pickup run ────────────────────────────────────────────────────
+  // Collecting the bike is a visit, not an instant event, and the order stays
+  // DELIVERED for the whole of it (the rental is still running). These drive the
+  // customer's "Rental Due" progress: announced → on site → checked in → deposit settled.
+  returnStage?: 'ready_for_pickup' | 'at_location' | 'inspecting' | null;
+  returnStageAt?: string | null;
+  // One entry per collection that found nobody home; each renewed the rental.
+  pickupAttempts?: {
+    at: string;
+    renewedFrom?: string | null;
+    renewedTo?: string | null;
+    periods?: number;
+    unit?: 'weeks' | 'months';
+    rentalCharge: number;
+    adminFee: number;
+    total: number;
+    error?: string | null;
+  }[];
+  missedPickups?: number;
+  renewalChargedTotal?: number;
+  // Receipts for payments taken AFTER the delivery charge (currently renewals). The
+  // original charge is rendered from the order's own pricing fields.
+  receipts?: OrderReceipt[];
   // Condition recorded when the bike comes back, to compare against handover.
   conditionAtReturn?: BikeConditionReport;
   // Bike condition recorded at handover — notes + photos, visible to both sides.
@@ -173,15 +220,11 @@ export interface RentalOrder {
   feedback?: string;
   ratedAt?: string;  // ISO timestamp when the customer submitted their rating
   // Post-delivery tip — charged on a separate payment intent after delivery; flat,
-  // untaxed, commission-free, 100% provider-kept. Paid out independently of the
-  // base order (see tipPayoutStatus) so a late tip is never double-paid.
+  // untaxed and commission-free.
   tip?: number;
   tipPaymentIntentId?: string;
   tipChargedAt?: string;
   tipChargeAvailableOn?: string;
-  tipPayoutStatus?: 'unpaid' | 'paid';
-  tipPayoutId?: string;
-  tipDepositedAt?: string;
   // Two-part scheduling. handoff* = when the customer drops off / the provider picks
   // up; needBy* = when the customer needs it back. *Day is local YYYY-MM-DD, *Time is
   // a single label like "10:00 AM" (or a custom time). pickupDay/pickupTimeWindow are
@@ -198,16 +241,12 @@ export interface RentalOrder {
   paymentCaptured?: boolean;
   providerLocation?: { lat: number; lng: number; timestamp: string; };
   providerCurrentStatus?: string;
-  // Provider-payout lifecycle + money-audit fields (see functions/src/types.ts).
-  payoutStatus?: 'unpaid' | 'paid';
+  // Money-audit fields (see functions/src/types.ts).
   chargeAvailableOn?: string;
   authorizedAmount?: number;
   authorizedAt?: string;
   chargedAmount?: number;
   chargedAt?: string;
-  depositedAmount?: number;
-  depositedAt?: string;
-  payoutId?: string;
   // Original estimate line items
   orderSubtotal?: number;
   deliveryFee?: number | null;
@@ -297,20 +336,6 @@ export interface SupportMessage {
   text: string;
   timestamp: string;
   isReadByAdmin: boolean;
-}
-
-export interface Payout {
-  id: string;
-  providerId: string;
-  providerName: string;
-  amount: number;
-  currency: string;
-  transferId: string;
-  status: 'pending' | 'paid' | 'failed';
-  periodStart: string;
-  periodEnd: string;
-  createdAt: string;
-  ordersIncluded: string[];
 }
 
 export interface MarketingInvoice {

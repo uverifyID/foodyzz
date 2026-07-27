@@ -389,11 +389,8 @@ export default function HomeScreen() {
           <Text className="text-[10px] uppercase font-bold text-indigo-100 tracking-wider">
             Welcome Back, {userName}!
           </Text>
-          <Text className="text-xl font-extrabold text-white tracking-tight leading-tight mt-1">
+          <Text className="text-xl font-extrabold text-white tracking-tight leading-tight mt-1 mb-4">
             Need a bike for deliveries?
-          </Text>
-          <Text className="text-[11px] text-indigo-100 mt-2 mb-4 font-medium leading-relaxed">
-            Create a load-estimated rental request and match with premium nearby providers.
           </Text>
           <StyledTouchableOpacity
             className="bg-white px-5 py-3 rounded-xl self-start flex-row items-center"

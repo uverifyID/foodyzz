@@ -13,6 +13,7 @@ import {
   RentToBuyPlan,
   BillingSchedule,
   PickupAttempt,
+  OrderReceipt,
 } from "./types";
 import {randomInt} from "crypto";
 import Stripe from "stripe";
@@ -884,9 +885,6 @@ export const stripeWebhook = onRequest(async (req, res) => {
     // `succeeded` fires only once funds are actually CAPTURED — for manual
     // capture this is after capturePaymentIntent runs (at rental start), not
     // at authorization. So paymentCaptured is always true here.
-    // NOTE: this must NOT touch payoutStatus — that is the PROVIDER-payout
-    // lifecycle (set only when a Connect transfer completes), a different concern
-    // from the customer charge. (The old code wrongly wrote depositStatus here.)
     const upd: Record<string, any> = {paymentCaptured: true, updatedAt: new Date().toISOString()};
     // Backstop the settlement date + charged amount from the charge's balance
     // transaction (capturePaymentIntent already stamps these; only fill, don't clobber).
@@ -993,8 +991,8 @@ export const capturePaymentIntent = onCall(async (request) => {
     if (order.paymentCaptured) return {success: true};
 
     // Settlement: when the captured funds become available in the platform's Stripe
-    // balance (~3 days). Read from the charge's balance transaction so payouts only
-    // include settled money. Captured amount comes from the charge too (source of truth).
+    // balance (~3 days). Read from the charge's balance transaction. Captured amount
+    // comes from the charge too (source of truth).
     let chargeAvailableOn: string | undefined;
     let capturedCents: number | undefined;
 
@@ -1308,8 +1306,8 @@ export const submitOrderRating = onCall(async (request) => {
 
 // Records a successfully-captured tip on the order and notifies the provider. Used by
 // both the off-session path (createTipPaymentIntent) and the payment-sheet path
-// (stripeWebhook). Stamps the tip's OWN settlement date so it is paid out independently
-// of the base order (tipPayoutRelease).
+// (stripeWebhook). Stamps the tip's OWN settlement date, since the tip is charged on
+// its own payment intent after the base order was already captured.
 async function recordTipPaid(orderRef: DocumentReference, order: RentalOrder, pi: Stripe.PaymentIntent, tip: number) {
   const charge = pi.latest_charge && typeof pi.latest_charge !== "string" ? pi.latest_charge as Stripe.Charge : null;
   const bt = charge && charge.balance_transaction && typeof charge.balance_transaction !== "string" ?
@@ -1323,7 +1321,6 @@ async function recordTipPaid(orderRef: DocumentReference, order: RentalOrder, pi
     tipPaymentIntentId: pi.id,
     tipChargedAt: nowIso,
     tipChargeAvailableOn,
-    tipPayoutStatus: "unpaid",
     updatedAt: nowIso,
   });
   if (order.providerId && order.providerId !== "broadcast") {
@@ -2061,8 +2058,8 @@ function deliveryReceiptHtml(order: any): string {
        <td style="padding:6px 0;text-align:right;color:#0f172a;font-size:14px${strong ? ";font-weight:bold" : ""}">${value}</td>
      </tr>`;
 
-  // Bike rental line shows the rate × term only — the fee bundle is itemised
-  // separately below so the numbers reconcile (rental + fees = subtotal).
+  // The bike line shows the rate × term only — the fee bundle is itemised
+  // separately below so the numbers reconcile (bike + fees = subtotal).
   const periods = Number(order.durationValue) || 1;
   const unitWord = order.durationUnit === "months" ? "month" : "week";
   const baseRate = Number(order.baseRate || 0);
@@ -2075,7 +2072,10 @@ function deliveryReceiptHtml(order: any): string {
   const termDesc = isBuy ?
     "" :
     `${periods} ${unitWord}${periods === 1 ? "" : "s"} · ${money(baseRate)}/${unitWord === "month" ? "mo" : "wk"}`;
-  rows.push(row(`Bike rental${termDesc ? ` (${termDesc})` : ""}`, money(rentalOnly)));
+  // A purchase isn't a rental — an outright buy is billed for the bike itself, so
+  // the line reads "Bike" rather than "Bike rental".
+  const bikeLabel = isBuy ? "Bike" : "Bike rental";
+  rows.push(row(`${bikeLabel}${termDesc ? ` (${termDesc})` : ""}`, money(rentalOnly)));
 
   // Accepted, non-deposit fees, itemised once per rental period.
   for (const f of Array.isArray(order.fees) ? order.fees : []) {
@@ -2114,6 +2114,28 @@ function deliveryReceiptHtml(order: any): string {
     </table>
     ${depositNote}
     ${notesBlock}`;
+}
+
+// Emails the same breakdown the app shows for a stored OrderReceipt, so the two can
+// never drift: one receipt object, rendered in HTML here and in RN in My Rentals.
+function receiptTableHtml(receipt: OrderReceipt): string {
+  const money = (n: any) => `$${Number(n || 0).toFixed(2)}`;
+  const row = (label: string, value: string, strong = false) =>
+    `<tr>
+       <td style="padding:6px 0;color:#475569;font-size:14px${strong ? ";font-weight:bold;color:#0f172a" : ""}">${escapeHtml(label)}</td>
+       <td style="padding:6px 0;text-align:right;color:#0f172a;font-size:14px${strong ? ";font-weight:bold" : ""}">${value}</td>
+     </tr>`;
+
+  const rows = receipt.lines.map((l) => row(l.label, money(l.amount)));
+  rows.push(row("Subtotal", money(receipt.subtotal), true));
+  if (receipt.taxesAndFees > 0) rows.push(row("Taxes and fees", money(receipt.taxesAndFees)));
+  for (const l of receipt.extraLines || []) rows.push(row(l.label, money(l.amount)));
+  rows.push(row(receipt.paid ? "Charged to your card" : "Amount due", money(receipt.total), true));
+
+  return `
+    <table style="width:100%;border-collapse:collapse;border-top:1px solid #e2e8f0;border-bottom:1px solid #e2e8f0;margin:8px 0">
+      ${rows.join("")}
+    </table>`;
 }
 
 // Minimal HTML-escape for customer-entered condition notes in an email body.
@@ -2606,6 +2628,16 @@ const extendRentalDay = (day: string, periods: number, unit: "weeks" | "months")
   return formatRentalDay(d);
 };
 
+// N calendar days past `day` (used for the due-back reminder lead time).
+const extendRentalDayByDays = (day: string, days: number): string => {
+  const d = parseRentalDay(day);
+  d.setDate(d.getDate() + days);
+  return formatRentalDay(d);
+};
+// "2026-07-30" → "Thu, Jul 30" for customer-facing copy.
+const formatRentalDayLong = (day: string): string =>
+  parseRentalDay(day).toLocaleDateString("en-US", {weekday: "short", month: "short", day: "numeric"});
+
 // The card the customer's off-session charges run against: the one the deposit was
 // taken with at delivery, falling back to whatever their profile has saved.
 async function resolveOffSessionCard(
@@ -2627,6 +2659,12 @@ async function resolveOffSessionCard(
 function quoteRentalRenewal(order: any, logistics: LogisticsDoc, config: GlobalConfig): {
   periods: number;
   unit: "weeks" | "months";
+  baseRate: number;
+  // The renewed term itemised the way the delivery receipt itemises the original:
+  // the bike line, then each recurring fee. One-time fees are absent by design.
+  lines: { label: string; amount: number }[];
+  subtotal: number;
+  taxesAndFees: number;
   rentalCharge: number;
   adminFee: number;
   total: number;
@@ -2641,9 +2679,28 @@ function quoteRentalRenewal(order: any, logistics: LogisticsDoc, config: GlobalC
   const renewalSubtotal = round2(quote.subtotal - quote.oneTimeFees);
   const pricing = computePricing(renewalSubtotal, Number(order.taxRate) || 0, config);
   const adminFee = Math.max(0, Number(logistics.pickupFee) || 0);
+
+  // Itemise from the SAME source the subtotal was computed from (the logistics config,
+  // not the order's stored fee snapshot) so the lines always add up to the subtotal.
+  const unitWord = quote.unit === "months" ? "month" : "week";
+  const lines: { label: string; amount: number }[] = [{
+    label: `Bike rental (${quote.periods} ${unitWord}${quote.periods === 1 ? "" : "s"} · ` +
+      `$${quote.baseRate.toFixed(2)}/${unitWord === "month" ? "mo" : "wk"})`,
+    amount: round2(quote.baseRate * quote.periods),
+  }];
+  for (const f of logistics.fees || []) {
+    if (f.isDeposit || f.cadence === "once") continue;
+    if (!f.required && !acceptedFeeKeys.includes(f.key)) continue;
+    lines.push({label: String(f.label || "Fee"), amount: round2(f.amount)});
+  }
+
   return {
     periods: quote.periods,
     unit: quote.unit,
+    baseRate: quote.baseRate,
+    lines,
+    subtotal: renewalSubtotal,
+    taxesAndFees: round2(pricing.tax + pricing.ccFee),
     rentalCharge: round2(pricing.total),
     adminFee: round2(adminFee),
     total: round2(pricing.total + adminFee),
@@ -2828,6 +2885,29 @@ export const recordRentalPickupFailed = onCall(async (request) => {
     console.error(`recordRentalPickupFailed: renewal charge failed for ${orderId}`, chargeError);
   }
 
+  // The receipt for this payment. The original charge is described by the order's own
+  // pricing fields; a renewal is a second, later payment, so it gets its own receipt —
+  // same lines, same shape — for My Rentals and for the email below. The id is keyed on
+  // the attempt number, so the arrayUnion below can't append a duplicate on a retry.
+  const unitWordForReceipt = unit === "months" ? "month" : "week";
+  const receipt: OrderReceipt = {
+    id: `renewal-${attemptNo}`,
+    kind: "renewal",
+    issuedAt: nowIso,
+    title: "Rental renewed — missed collection",
+    subtitle: `${periods} more ${unitWordForReceipt}${periods === 1 ? "" : "s"}, through ${renewedTo}`,
+    periodFrom: renewFrom,
+    periodTo: renewedTo,
+    lines: quote.lines,
+    subtotal: quote.subtotal,
+    taxesAndFees: quote.taxesAndFees,
+    extraLines: quote.adminFee > 0 ? [{label: "Missed collection admin fee", amount: quote.adminFee}] : [],
+    total: quote.total,
+    paid: !chargeError,
+    paymentIntentId,
+    error: chargeError,
+  };
+
   const attempt: PickupAttempt = {
     at: nowIso,
     recordedBy: order.providerId ?? null,
@@ -2850,6 +2930,7 @@ export const recordRentalPickupFailed = onCall(async (request) => {
     providerCurrentStatus: "idle",
     expectedEndDate: renewedTo,
     pickupAttempts: FieldValue.arrayUnion(attempt),
+    receipts: FieldValue.arrayUnion(receipt),
     missedPickups: FieldValue.increment(1),
     renewalChargedTotal: FieldValue.increment(chargeError ? 0 : quote.total),
     ...(chargeError ? {renewalPaymentError: chargeError} : {renewalPaymentError: FieldValue.delete()}),
@@ -2874,27 +2955,12 @@ export const recordRentalPickupFailed = onCall(async (request) => {
       (chargeError ? " We'll be in touch about payment." : ` $${quote.total.toFixed(2)} charged.`),
     "PICKUP_MISSED",
   ).catch(() => {});
-  const money = (n: number) => `$${Number(n || 0).toFixed(2)}`;
-  await emailCustomer(order, `Your Foodyzz rental ${String(orderId).replace("order_", "#")} has been extended`, {
-    title: "We missed you",
+  await emailCustomer(order, `Your Foodyzz rental receipt ${String(orderId).replace("order_", "#")} — rental extended`, {
+    title: "We missed you — here's your receipt",
     intro: `Hi ${name} — we came to collect your bike but nobody was there to hand it over. ` +
       `Because the bike is still with you, your rental continues for another ${periods} ` +
       `${unitWord}${periods === 1 ? "" : "s"}, through ${renewedTo}.`,
-    bodyHtml: `
-      <table style="width:100%;border-collapse:collapse;border-top:1px solid #e2e8f0;border-bottom:1px solid #e2e8f0;margin:8px 0">
-        <tr>
-          <td style="padding:6px 0;color:#475569;font-size:14px">Rental — ${periods} ${unitWord}${periods === 1 ? "" : "s"}</td>
-          <td style="padding:6px 0;text-align:right;color:#0f172a;font-size:14px">${money(quote.rentalCharge)}</td>
-        </tr>
-        ${quote.adminFee > 0 ? `<tr>
-          <td style="padding:6px 0;color:#475569;font-size:14px">Missed collection admin fee</td>
-          <td style="padding:6px 0;text-align:right;color:#0f172a;font-size:14px">${money(quote.adminFee)}</td>
-        </tr>` : ""}
-        <tr>
-          <td style="padding:8px 0;color:#0f172a;font-size:15px;font-weight:bold;border-top:1px solid #e2e8f0">${chargeError ? "Amount due" : "Charged to your card"}</td>
-          <td style="padding:8px 0;text-align:right;color:#0f172a;font-size:15px;font-weight:bold;border-top:1px solid #e2e8f0">${money(quote.total)}</td>
-        </tr>
-      </table>
+    bodyHtml: `${receiptTableHtml(receipt)}
       <p style="margin:12px 0 0;color:#475569;font-size:13px;line-height:1.6">${
   chargeError ?
     "We couldn't take payment from your saved card — our team will be in touch to settle it." :
@@ -2913,6 +2979,100 @@ export const recordRentalPickupFailed = onCall(async (request) => {
     error: chargeError,
   };
 });
+
+// How many days ahead of the due-back date the customer is reminded.
+const RENTAL_DUE_REMINDER_DAYS = 2;
+
+/**
+ * "Your rental ends in 2 days." A missed collection renews the rental and bills for it,
+ * so the customer must never be surprised by the due date — this is the heads-up that
+ * makes the collection visit expected.
+ *
+ * Runs once a day at 15:00 UTC. Rental days are local YYYY-MM-DD strings and the server
+ * runs in UTC; at that hour the UTC date matches the US date everywhere, so "today + 2"
+ * computed here is the same day the store and the customer see.
+ *
+ * Keyed on the due date itself (`dueReminderSentFor`), not a boolean: a renewal moves
+ * expectedEndDate out, and the new date earns its own reminder — while a same-day re-run
+ * of the cron sends nothing.
+ */
+export const rentalDueReminders = onSchedule(
+  {schedule: "0 15 * * *", memory: "512MiB", timeoutSeconds: 540},
+  async () => {
+    const targetDay = extendRentalDayByDays(formatRentalDay(new Date()), RENTAL_DUE_REMINDER_DAYS);
+
+    const due = await db.collection("orders")
+      .where("status", "==", OrderStatus.DELIVERED)
+      .where("expectedEndDate", "==", targetDay)
+      .limit(300)
+      .get();
+    if (due.empty) return;
+
+    // Only a plain rental comes back. A buy is the customer's, and a rent-to-buy is
+    // settled by installments — neither has a due-back date to remind about.
+    const pending = due.docs.filter((doc) => {
+      const o = doc.data() as any;
+      return o.rentalType !== "buy" && o.rentalType !== "rentToBuy" && o.dueReminderSentFor !== targetDay;
+    });
+    if (!pending.length) return;
+
+    let sent = 0;
+    let cursor = 0;
+    // An SMTP send is ~1s of mostly-waiting, so a strictly sequential loop over a full
+    // batch would run past the 540s timeout and silently drop the tail. A small pool
+    // keeps the whole batch well inside it without stampeding the mail server; the
+    // transporter is connection-pooled and shared, so this adds no sockets per send.
+    const REMINDER_CONCURRENCY = 8;
+    const worker = async (): Promise<void> => {
+      while (cursor < pending.length) {
+        const doc = pending[cursor++];
+        const order = doc.data() as any;
+        const orderId = doc.id;
+        const ref = orderId.replace("order_", "#");
+        const store = order.providerName || "FoodyzzHQ";
+        const name = String(order.customerName || "there").split(" ")[0];
+        const dayLabel = formatRentalDayLong(targetDay);
+
+        try {
+          // Stamp BEFORE messaging: a duplicate reminder is worse than a missed one,
+          // and this is the only guard against a retry re-sending the whole batch.
+          await doc.ref.update({
+            dueReminderSentFor: targetDay,
+            dueReminderSentAt: new Date().toISOString(),
+          });
+
+          await notifyCustomer(
+            order.customerPhone, orderId,
+            `Your rental ends in ${RENTAL_DUE_REMINDER_DAYS} days`,
+            `Your bike is due back on ${dayLabel}. ${store} will come to collect it — please be home.`,
+            "RENTAL_DUE_SOON",
+          ).catch(() => {});
+
+          await emailCustomer(order, `Your Foodyzz bike ${ref} is due back on ${dayLabel}`, {
+            title: `Your rental ends in ${RENTAL_DUE_REMINDER_DAYS} days`,
+            intro: `Hi ${name} — your bike is due back on ${dayLabel}. ${store} will be in touch to ` +
+              "arrange the collection visit.",
+            bodyHtml: `
+              <p style="margin:0;color:#475569;font-size:14px;line-height:1.6">
+                Please be home when we arrive so we can check the bike in with you and settle your deposit.
+                If nobody is there to hand the bike over, the rental continues for another term and your
+                saved card is charged for it, plus an admin fee for the missed trip.
+              </p>
+              <p style="margin:12px 0 0;color:#475569;font-size:14px;line-height:1.6">
+                Need longer, or want us sooner? Message us in the app and we'll sort it out.
+              </p>`,
+          }).catch((e) => console.warn(`rentalDueReminders: email failed for ${orderId}`, e));
+          sent++;
+        } catch (err) {
+          console.error(`rentalDueReminders: failed for ${orderId}`, err);
+        }
+      }
+    };
+    await Promise.all(
+      Array.from({length: Math.min(REMINDER_CONCURRENCY, pending.length)}, () => worker()),
+    );
+    console.log(`rentalDueReminders: ${sent} reminder(s) for ${targetDay}`);
+  });
 
 /**
  * Bike returned. Completes the rental, settles the deposit, and emails the customer.
@@ -3732,8 +3892,7 @@ export const autoSupportResponder = onDocumentCreated("supportMessages/{messageI
   if (!msg || msg.senderPhone === "admin" || msg.senderPhone === "system") return;
   const text = msg.text.toLowerCase();
   let res = "";
-  if (text.includes("payout") || text.includes("earnings")) res = "Hi! Payouts are processed on the 1st and 15th.";
-  else if (text.includes("cancel") || text.includes("refund")) res = "Orders can be cancelled in the 'My Rentals' screen.";
+  if (text.includes("cancel") || text.includes("refund")) res = "Orders can be cancelled in the 'My Rentals' screen.";
   else if (text.includes("price") || text.includes("charge")) res = "Pricing is based on estimates. Final adjustments occur at pickup.";
   if (res) {
     const auto: SupportMessage = {userPhone: msg.userPhone, userName: msg.userName, userRole: msg.userRole, senderPhone: "system", senderName: "Foodyzz Bot", text: res, timestamp: new Date().toISOString(), isReadByAdmin: true};
@@ -4137,7 +4296,7 @@ export const onProviderCreatedLifecycleEmails = onDocumentCreated("providers/{pr
           brand: "FoodyzzHQ",
           accent: "#f472b6",
           title: `Welcome aboard${prov.businessName ? `, ${prov.businessName}` : ""}!`,
-          intro: "Your FoodyzzHQ provider account is live. You can now receive orders, manage dispatch and logistics, set your pricing, and track your earnings and payouts.",
+          intro: "Your FoodyzzHQ provider account is live. You can now receive orders, manage dispatch and logistics, set your pricing, and track your earnings.",
           bodyHtml: "<p style=\"margin:0 0 16px;color:#475569;font-size:14px;line-height:1.6\">Head to the Dispatch tab to start claiming orders. Make sure your service area and pricing are set so customers can find you.</p>",
         }),
       );
