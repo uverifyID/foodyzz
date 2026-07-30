@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, TextInput, TouchableOpacity, Alert, ActivityIndicator, Image, Linking, KeyboardAvoidingView, Platform, ScrollView } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, Alert, ActivityIndicator, Image, Linking, KeyboardAvoidingView, ScrollView } from 'react-native';
 import {
   db,
   subscribeToGlobalConfig,
@@ -230,8 +230,13 @@ export default function AuthScreen({ onAuthenticated }: { onAuthenticated: (user
   };
 
   return (
+    // `padding` on Android too. This used to be undefined there, on the assumption
+    // that adjustResize in the manifest would resize the window — but the app is
+    // edge-to-edge (targetSdk 36), and enforced edge-to-edge stops that resize
+    // happening, so Android had no keyboard avoidance at all and the keyboard sat
+    // over the T&C checkbox at the bottom of the form.
     <KeyboardAvoidingView
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      behavior="padding"
       className="flex-1 bg-[#020617]"
     >
       <ScrollView

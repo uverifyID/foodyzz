@@ -2,7 +2,7 @@
 // admin-editable document holding the appendix tables) and out of the live `bikes`
 // collection. Kept in one place so the customer wizard, the provider app and the
 // Cloud Functions all quote the same dates, availability and prices.
-import { db } from './firebase';
+import { db, getFunctionsInstance } from './firebase';
 import type {
   Bike,
   BikeCondition,
@@ -141,6 +141,19 @@ export const fetchBikes = async (): Promise<Bike[]> => {
   return snap.docs.map((d) => ({ id: d.id, ...(d.data() as any) })) as Bike[];
 };
 
+/**
+ * Orders that are placed but have no bike assigned yet, keyed by model as a string.
+ * Counted server-side by the `getModelDemand` callable — a customer can only read
+ * their own orders, so this cannot be derived on the device.
+ */
+export type PendingDemand = Record<string, number>;
+
+export const fetchModelDemand = async (): Promise<PendingDemand> => {
+  const call = getFunctionsInstance().httpsCallable('getModelDemand');
+  const res: any = await call({});
+  return (res?.data?.pendingByModel ?? {}) as PendingDemand;
+};
+
 export interface ModelAvailability {
   model: number;
   available: number;
@@ -149,6 +162,12 @@ export interface ModelAvailability {
   // Only set when `available` is 0: the soonest day a bike of this model can go
   // out again = earliest expected end date + restockDays.
   nextAvailableDate?: string;
+  // `available` minus orders already queued for this model with no bike assigned.
+  // Floors at 0 — how far demand overshoots doesn't change what we show.
+  effectiveAvailable: number;
+  // Stock exists on paper but every unit is already spoken for by an earlier order.
+  // The card offers a waitlist here instead of a sale it may not be able to honour.
+  waitlist: boolean;
 }
 
 /**
@@ -158,6 +177,18 @@ export interface ModelAvailability {
  * restockDays ≤ startDate). When nothing qualifies, the soonest such date is
  * returned so the wizard can show an "Expected availability" line instead of a
  * dead end.
+ *
+ * `pending` is the number of orders already queued against this model with no bike
+ * assigned. It is subtracted from the pool to get `effectiveAvailable`, because a
+ * bike is not marked `reserved` until HQ assigns it at Ready for Delivery — without
+ * this, the last two bikes read as in stock to every customer who arrives after the
+ * two who already bought them.
+ *
+ * Pending orders are counted against the model as a whole rather than per condition.
+ * A rent order may take new or used stock while rent-to-buy and buy need new, so
+ * splitting the count would require guessing which unit each queued order will get;
+ * charging the whole queue against the pool can only ever understate availability,
+ * which fails towards the waitlist rather than towards an unfillable sale.
  */
 export const modelAvailability = (
   bikes: Bike[],
@@ -165,6 +196,7 @@ export const modelAvailability = (
   model: number,
   rentalType: RentalType,
   startDate: string,
+  pending = 0,
 ): ModelAvailability => {
   const restock = config.restockDays ?? 2;
   const conditions = allowedConditions(rentalType);
@@ -187,11 +219,16 @@ export const modelAvailability = (
   }
 
   const available = byCondition.new + byCondition.used;
+  const effectiveAvailable = Math.max(0, available - Math.max(0, pending));
   return {
     model,
     available,
     byCondition,
     nextAvailableDate: available === 0 ? readyDates.sort()[0] : undefined,
+    effectiveAvailable,
+    // Nothing physically free is still Sold Out, not a waitlist: there is no unit to
+    // queue behind and no date to promise. Only an oversubscribed pool waitlists.
+    waitlist: available > 0 && effectiveAvailable === 0,
   };
 };
 

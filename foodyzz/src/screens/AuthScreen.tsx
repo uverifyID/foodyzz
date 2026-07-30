@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, TextInput, TouchableOpacity, ActivityIndicator, Alert, KeyboardAvoidingView, Platform, Image, Linking } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, ActivityIndicator, Alert, KeyboardAvoidingView, ScrollView, Image, Linking } from 'react-native';
 import { db, subscribeToGlobalConfig, runWithRetry } from '../services/firebase';
 import { friendlyError, logHandledError } from '../services/errors';
 import authNative from '@react-native-firebase/auth';
@@ -104,14 +104,29 @@ export default function AuthScreen({ onAuthenticated }: { onAuthenticated: (user
   };
 
   return (
+    // `padding` on Android too. The app is edge-to-edge (targetSdk 36), and under
+    // enforced edge-to-edge the window is no longer resized for the keyboard — so
+    // `height`, which assumed a resized frame, left the last row under the keyboard
+    // with no way to reach it.
     <KeyboardAvoidingView
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-      className="flex-1 bg-white justify-center px-6"
-      // Rendered outside the navigator, so nothing above it applies the insets.
-      // The content is centred and clears the bars on its own until the keyboard
-      // is up and squeezes it — these keep it off them in that state too.
-      style={{ paddingTop: insets.top, paddingBottom: insets.bottom }}
+      behavior="padding"
+      className="flex-1 bg-white"
     >
+      {/* Scrollable so nothing can become unreachable. Centred while it fits
+          (flexGrow + justifyContent), scrolls once the keyboard squeezes it — the
+          T&C checkbox is the last row and was the first thing to be pushed off.
+          Rendered outside the navigator, so nothing above applies the insets. */}
+      <ScrollView
+        contentContainerStyle={{
+          flexGrow: 1,
+          justifyContent: 'center',
+          paddingHorizontal: 24,
+          paddingTop: insets.top + 16,
+          paddingBottom: insets.bottom + 16,
+        }}
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
+      >
       <View className="items-center mb-10">
         <Image
           source={require('../../assets/images/logo/mainpage/splashscreen.png')}
@@ -183,6 +198,7 @@ export default function AuthScreen({ onAuthenticated }: { onAuthenticated: (user
           </TouchableOpacity>
         </View>
       )}
+      </ScrollView>
     </KeyboardAvoidingView>
   );
 }

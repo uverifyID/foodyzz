@@ -124,6 +124,9 @@ export interface RentalOrder {
   rentalType?: RentalType;
   bikeModel?: number;
   bikeId?: string | null;            // assigned at delivery, not at order time
+  // Placed while every free bike of this model was already claimed by an earlier
+  // order. HQ must confirm it can be fulfilled before assigning a bike.
+  waitlisted?: boolean;
   bikeNo?: number | null;
   bikeCondition?: BikeCondition;
   startDate?: string;                // YYYY-MM-DD, defaults to tomorrow

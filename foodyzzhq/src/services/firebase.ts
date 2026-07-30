@@ -172,8 +172,20 @@ export const syncAdminClaim = async (force = false): Promise<boolean> => {
     // before the grant. Keying the refresh off `changed` alone left that device
     // sending a claim-less token until it expired on its own (~1h), which reads as
     // "no access — staff permissions" long after enrolment succeeded.
-    const tokenHasAdmin = ((await user.getIdTokenResult()).claims as any)?.admin === true;
-    if (force || res?.data?.changed || tokenHasAdmin !== shouldBeAdmin) {
+    //
+    // Reconcile hqStaff as well as admin. Both claims are compared because they are
+    // granted independently — hqStaff comes from store membership, admin from the
+    // staff/{phone} allowlist — so a store member who is not an admin agrees with the
+    // server on `admin` and would skip the refresh while still holding a token with no
+    // hqStaff on it. That claim now gates every order write this app makes
+    // (firestore.rules), so a device in that state can read the dispatch feed but has
+    // every status advance denied.
+    const claims = (await user.getIdTokenResult()).claims as any;
+    const tokenHasAdmin = claims?.admin === true;
+    const tokenHasHqStaff = claims?.hqStaff === true;
+    const shouldBeHqStaff = res?.data?.hqStaff === true;
+    if (force || res?.data?.changed ||
+        tokenHasAdmin !== shouldBeAdmin || tokenHasHqStaff !== shouldBeHqStaff) {
       await user.getIdToken(true);
     }
 

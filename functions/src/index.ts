@@ -1798,6 +1798,106 @@ export const saveCustomerBillingCard = onCall(async (request) => {
   }
 });
 
+// An order stops laying claim to the saved card only once it is finished or called
+// off. Everything before that can still charge it.
+const CARD_FREEING_ORDER_STATUSES: string[] = [OrderStatus.COMPLETED, OrderStatus.CANCELLED];
+
+// Bounded read. A single customer's order history is small; the cap only stops a
+// pathological account from turning this into an unbounded scan, and erring on the
+// side of "blocked" is the safe direction for a card removal.
+const CARD_OBLIGATION_SCAN_LIMIT = 200;
+
+/**
+ * Remove the customer's saved card — the counterpart to saveCustomerBillingCard.
+ *
+ * Refused while the card is still spoken for. The card is not just a checkout
+ * convenience: the deposit hold at delivery, the deposit charge, and the rent-to-buy
+ * installment cron all fall back to `users/{phone}.billingPaymentMethodId`, so
+ * detaching it mid-rental would break charges the customer already agreed to and
+ * leave the platform unable to collect. Changing the card stays available in that
+ * state — it re-points those same fallbacks at a live card instead of emptying them.
+ *
+ * The obligation check reads the customer's orders rather than a flag on the profile:
+ * a flag would have to be maintained everywhere an obligation opens or closes, and one
+ * missed clear would strand the card as unremovable forever.
+ *
+ * An in-flight authorization is deliberately NOT a blocker — capture acts on the
+ * PaymentIntent, which already holds the authorization, and is unaffected by detaching
+ * the payment method.
+ */
+export const removeCustomerBillingCard = onCall(async (request) => {
+  if (!request.auth) throw new HttpsError("unauthenticated", "Authentication required.");
+  const {customerPhone} = request.data;
+  if (!customerPhone) throw new HttpsError("invalid-argument", "Missing customerPhone.");
+
+  // Same digits-only comparison as saveCustomerBillingCard: "+14026061003" and
+  // "14026061003" are the same account. Phone numbers stay out of the error text.
+  const authPhone = (request.auth.token.phone_number as string | undefined) || "";
+  const digits = (s: string) => s.replace(/\D/g, "");
+  if (authPhone && digits(authPhone) !== digits(customerPhone)) {
+    throw new HttpsError("permission-denied", "You can only remove a card from your own account.");
+  }
+
+  const userRef = db.collection("users").doc(String(customerPhone));
+  const userSnap = await userRef.get();
+  const user = userSnap.data() || {};
+  const paymentMethodId: string = user.billingPaymentMethodId || "";
+  if (!paymentMethodId && !user.billingCardLast4) return {removed: false, reason: "no-card"};
+
+  const orders = await db.collection("orders")
+    .where("customerPhone", "==", customerPhone)
+    .select("status", "depositStatus", "billingSchedule")
+    .limit(CARD_OBLIGATION_SCAN_LIMIT)
+    .get();
+
+  for (const doc of orders.docs) {
+    const o = doc.data() as any;
+    const sched = o.billingSchedule?.status;
+    // The schedule and deposit checks are not redundant with the status check: a
+    // rent-to-buy can still owe installments, and a deposit can still be held,
+    // after the rental itself has moved on.
+    if (!CARD_FREEING_ORDER_STATUSES.includes(o.status) ||
+        sched === "active" || sched === "past_due" ||
+        o.depositStatus === "secured") {
+      throw new HttpsError(
+        "failed-precondition",
+        "This card is still needed for an active rental or an outstanding balance. " +
+        "You can change it to a different card instead.",
+      );
+    }
+  }
+
+  // Clear the profile BEFORE touching Stripe. If this write fails, nothing has changed
+  // on either side and the customer can retry cleanly. The reverse order risks
+  // detaching a card the app still advertises as saved and chargeable.
+  await userRef.set({
+    billingPaymentMethodId: FieldValue.delete(),
+    billingCardLast4: FieldValue.delete(),
+    billingCardBrand: FieldValue.delete(),
+    billingCardExpMonth: FieldValue.delete(),
+    billingCardExpYear: FieldValue.delete(),
+    billingCardName: FieldValue.delete(),
+    billingSetupAt: FieldValue.delete(),
+  }, {merge: true});
+
+  // Best-effort: the card is already gone from the customer's account, so a detach
+  // failure (already detached, unknown id, Stripe blip) must not surface as a failed
+  // removal. It leaves an orphaned payment method nothing references.
+  // stripeCustomerId is deliberately kept — it ties the customer to their Stripe
+  // history and is reused if they add a card again.
+  if (paymentMethodId) {
+    try {
+      const config = await getConfig();
+      const stripe = getStripe(config.stripe.secretKey);
+      await stripe.paymentMethods.detach(paymentMethodId);
+    } catch (e: any) {
+      console.warn(`[removeCustomerBillingCard] detach failed (non-fatal): ${e?.message || e}`);
+    }
+  }
+
+  return {removed: true};
+});
+
 // Verifies the caller is the provider assigned to `orderId` (boundary-safe phone
 // match against the `${phone}_${zip}` provider id). Returns the order data.
 async function assertCallerOwnsOrder(orderId: unknown, request: any): Promise<any> {
@@ -2954,6 +3054,64 @@ async function refundChargedDeposit(
 // only a plain rent may take a used bike; rent-to-buy and buy start from NEW stock.
 const bikeConditionsFor = (rentalType: string): string[] =>
   rentalType === "rent" ? ["new", "used"] : ["new"];
+
+// Order states that hold a claim on a bike without one being reserved yet. A bike is
+// only flipped to `reserved` when HQ assigns it (assignBikeToOrder), which happens at
+// Ready for Delivery — so every order from `requested` up to that point is unmet demand
+// that the `bikes` collection cannot see.
+const UNMET_DEMAND_STATUSES = [
+  OrderStatus.REQUESTED,
+  OrderStatus.CONFIRMED,
+  OrderStatus.READY_FOR_DELIVERY,
+];
+
+// Defensive read bound. The open pipeline is a small working set — orders leave these
+// states at delivery — so this should never bind. If it ever does, demand is
+// under-counted and the wizard degrades to today's behaviour (stock reads as free);
+// `truncated` is returned and logged so that shows up before customers feel it.
+const DEMAND_SCAN_LIMIT = 500;
+
+/**
+ * Per-model count of orders that are already placed but have no physical bike yet.
+ *
+ * `bikes` alone overstates what can actually be sold: a bike stays `available` until HQ
+ * assigns it at Ready for Delivery, so with two free bikes a third, fourth and fifth
+ * customer all see stock and all check out. The wizard subtracts this count from the
+ * available pool so it can offer a waitlist instead of a promise it cannot keep.
+ *
+ * Customers can only read their OWN orders (firestore.rules), so this cannot be counted
+ * client-side — hence a callable. It is computed live rather than kept as a counter:
+ * a counter would have to be decremented at four separate mutation sites (assign,
+ * cancel, reject, expire) and any missed decrement silently turns real stock into a
+ * permanent phantom waitlist. Cost is one indexed query per wizard open, projected down
+ * to two fields; `status` is covered by Firestore's automatic single-field index.
+ */
+export const getModelDemand = onCall(async (request) => {
+  if (!request.auth) throw new HttpsError("unauthenticated", "Authentication required.");
+
+  const snap = await db.collection("orders")
+    .where("status", "in", UNMET_DEMAND_STATUSES)
+    .select("bikeModel", "bikeId")
+    .limit(DEMAND_SCAN_LIMIT)
+    .get();
+
+  const pendingByModel: Record<string, number> = {};
+  for (const doc of snap.docs) {
+    const d = doc.data();
+    // An assigned order already holds a `reserved` bike, so it is subtracted from the
+    // available pool by modelAvailability and must not be counted a second time here.
+    if (d.bikeId) continue;
+    const model = d.bikeModel;
+    if (typeof model !== "number") continue;
+    pendingByModel[String(model)] = (pendingByModel[String(model)] ?? 0) + 1;
+  }
+
+  const truncated = snap.size >= DEMAND_SCAN_LIMIT;
+  if (truncated) {
+    console.warn(`getModelDemand hit the ${DEMAND_SCAN_LIMIT}-order scan limit — waitlist demand is under-counted.`);
+  }
+  return {pendingByModel, truncated};
+});
 
 /**
  * Assign (or, while still Ready for Delivery, re-assign) a physical bike to an order.

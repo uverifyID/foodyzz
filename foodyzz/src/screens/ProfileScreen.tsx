@@ -46,6 +46,7 @@ export default function ProfileScreen() {
     const [cardName, setCardName] = useState('');
     const [cardComplete, setCardComplete] = useState(false);
     const [isSavingCard, setIsSavingCard] = useState(false);
+    const [isRemovingCard, setIsRemovingCard] = useState(false);
     const [showCardEntry, setShowCardEntry] = useState(false);
 
     // Keep user in sync with Firebase Auth state so the effect re-runs
@@ -113,6 +114,39 @@ export default function ProfileScreen() {
         } finally {
             setIsSavingCard(false);
         }
+    };
+
+    // The card backs more than checkout — the deposit hold and rent-to-buy installments
+    // fall back to it — so the server refuses while a rental is live and says why. The
+    // confirm step is here rather than server-side because removal is only destructive
+    // from the customer's point of view: nothing is charged either way.
+    const handleRemoveCard = () => {
+        Alert.alert(
+            'Remove Card?',
+            `Your saved ${profile?.billingCardBrand || 'card'} ending ${profile?.billingCardLast4} will be deleted. You'll need to enter card details again at your next checkout.`,
+            [
+                { text: 'Keep Card', style: 'cancel' },
+                {
+                    text: 'Remove',
+                    style: 'destructive',
+                    onPress: async () => {
+                        setIsRemovingCard(true);
+                        try {
+                            await getFunctionsInstance().httpsCallable('removeCustomerBillingCard')({
+                                customerPhone: user!.phoneNumber,
+                            });
+                            // The card fields clear through the users/{phone} listener in
+                            // UserProfileContext, so there is no local state to reset.
+                            Alert.alert('Card Removed', 'Your saved card has been deleted.');
+                        } catch (err: any) {
+                            Alert.alert('Could Not Remove Card', friendlyError(err, 'Could not remove your card. Please try again.'));
+                        } finally {
+                            setIsRemovingCard(false);
+                        }
+                    },
+                },
+            ],
+        );
     };
 
     const handleSaveProfile = async () => {
@@ -277,12 +311,29 @@ export default function ProfileScreen() {
                                         <Text className="text-[9px] text-emerald-600 font-black uppercase font-mono">Saved · Expires {profile.billingCardExpMonth}/{profile.billingCardExpYear}</Text>
                                     </View>
                                 </View>
-                                <TouchableOpacity
-                                    onPress={() => setShowCardEntry(true)}
-                                    className="bg-slate-200 border border-slate-300 px-3 py-1.5 rounded-xl"
-                                >
-                                    <Text className="text-slate-700 font-black text-[10px] uppercase">Change</Text>
-                                </TouchableOpacity>
+                                <View className="flex-row items-center gap-2">
+                                    <TouchableOpacity
+                                        onPress={() => setShowCardEntry(true)}
+                                        disabled={isRemovingCard}
+                                        className="bg-slate-200 border border-slate-300 px-3 py-1.5 rounded-xl"
+                                    >
+                                        <Text className="text-slate-700 font-black text-[10px] uppercase">Change</Text>
+                                    </TouchableOpacity>
+                                    <TouchableOpacity
+                                        onPress={handleRemoveCard}
+                                        disabled={isRemovingCard}
+                                        className={`flex-row items-center gap-1 border px-3 py-1.5 rounded-xl ${isRemovingCard ? 'bg-slate-100 border-slate-200' : 'bg-red-50 border-red-200'}`}
+                                    >
+                                        {isRemovingCard ? (
+                                            <ActivityIndicator size="small" color="#94a3b8" />
+                                        ) : (
+                                            <>
+                                                <Trash2 size={11} color="#dc2626" />
+                                                <Text className="text-red-600 font-black text-[10px] uppercase">Remove</Text>
+                                            </>
+                                        )}
+                                    </TouchableOpacity>
+                                </View>
                             </View>
                             <Text className="text-[9px] text-slate-400 font-medium mt-3 leading-relaxed">
                                 This card will be used automatically at checkout. No need to re-enter details.

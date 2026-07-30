@@ -12,7 +12,7 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity, Alert, ActivityIndicator, Image, TextInput,
-  KeyboardAvoidingView, Platform,
+  KeyboardAvoidingView,
 } from 'react-native';
 import { Bike as BikeIcon, Calendar, Clock, MapPin, ShieldCheck, Check, CreditCard, Info, Ticket, X } from 'lucide-react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -30,6 +30,7 @@ import {
   parseDay,
   expectedEndDate,
   fetchBikes,
+  fetchModelDemand,
   modelAvailability,
   minCommitmentFor,
   rateFor,
@@ -37,6 +38,7 @@ import {
   toOrderFees,
   computeQuote,
 } from '../services/logistics';
+import type { PendingDemand } from '../services/logistics';
 import {
   normalizeCouponCode,
   lookupPromoByCode,
@@ -96,6 +98,8 @@ export default function OrderWizard() {
   const { profile: userProfile } = useUserProfile();
   const [bikes, setBikes] = useState<Bike[]>([]);
   const [bikesLoading, setBikesLoading] = useState(true);
+  // Orders already queued per model with no bike assigned yet — see fetchModelDemand.
+  const [pendingDemand, setPendingDemand] = useState<PendingDemand>({});
 
   // ── Selections ────────────────────────────────────────────────────────────
   const [startDate, setStartDate] = useState<string>(tomorrowDay());
@@ -155,12 +159,25 @@ export default function OrderWizard() {
   // Availability is read once per wizard run (and again whenever the start date
   // moves) rather than live-subscribed: a bike freeing up mid-checkout shouldn't
   // silently change the card the customer is looking at.
+  //
+  // Queued demand is read on the same schedule and in the same pass. The two are
+  // fetched together because they are only meaningful together — a bike count without
+  // the orders already queued against it is the overselling bug this guards.
   useEffect(() => {
     let cancelled = false;
     setBikesLoading(true);
-    fetchBikes()
-      .then((b) => { if (!cancelled) setBikes(b); })
-      .catch((e) => console.warn('fetchBikes failed:', e))
+    Promise.all([
+      fetchBikes().catch((e) => { console.warn('fetchBikes failed:', e); return [] as Bike[]; }),
+      // A failure here must not block checkout. Falling back to zero demand restores
+      // exactly the pre-waitlist behaviour rather than stranding every model in a
+      // waitlist the customer cannot escape.
+      fetchModelDemand().catch((e) => { console.warn('fetchModelDemand failed:', e); return {} as PendingDemand; }),
+    ])
+      .then(([b, d]) => {
+        if (cancelled) return;
+        setBikes(b);
+        setPendingDemand(d);
+      })
       .finally(() => { if (!cancelled) setBikesLoading(false); });
     return () => { cancelled = true; };
   }, [startDate]);
@@ -207,13 +224,20 @@ export default function OrderWizard() {
   const availability = useMemo(() => {
     if (!rentalType) return [];
     return logistics.bikeModels.map((m) =>
-      modelAvailability(bikes, logistics, m.model, rentalType, startDate),
+      modelAvailability(bikes, logistics, m.model, rentalType, startDate, pendingDemand[String(m.model)] ?? 0),
     );
-  }, [bikes, logistics, rentalType, startDate]);
+  }, [bikes, logistics, rentalType, startDate, pendingDemand]);
 
   const availabilityFor = useCallback(
     (model: number) => availability.find((a) => a.model === model),
     [availability],
+  );
+
+  // Whether the bike being checked out is coming off the waitlist. Read at submit to
+  // flag the order for HQ and to tell the customer their order needs confirming.
+  const isWaitlistOrder = useMemo(
+    () => !!(bikeModel && availabilityFor(bikeModel)?.waitlist),
+    [bikeModel, availabilityFor],
   );
 
   const orderFees = useMemo(
@@ -466,6 +490,10 @@ export default function OrderWizard() {
         rentalType,
         bikeModel,
         bikeId: null,               // a physical bike is assigned at delivery
+        // Placed against stock that was already fully claimed by earlier orders. HQ
+        // must confirm it can be fulfilled before this one gets a bike; nothing is
+        // captured until delivery, so an order it cannot honour is cancelled clean.
+        waitlisted: isWaitlistOrder,
         startDate,
         deliveryTime,
         durationValue: quote.durationValue,
@@ -531,6 +559,18 @@ export default function OrderWizard() {
       // customer never unmounted must not write over the one they just placed.
       orderIdRef.current = null;
 
+      // A waitlisted order is not a confirmed one. Say so before the customer lands on
+      // My Rentals, where it otherwise looks like every other order awaiting pickup.
+      if (isWaitlistOrder) {
+        Alert.alert(
+          'Added to Waitlist',
+          'Admin will confirm if this order can be fulfilled.',
+          [{ text: 'OK', onPress: () => navigation.navigate('Main', { screen: 'My Rentals' }) }],
+          { cancelable: false },
+        );
+        return;
+      }
+
       navigation.navigate('Main', { screen: 'My Rentals' });
     } catch (error: any) {
       logHandledError('checkout', error);
@@ -553,7 +593,11 @@ export default function OrderWizard() {
     const m = logistics.bikeModels.find((b) => b.model === model);
     if (!m || !rentalType) return null;
     const avail = availabilityFor(model);
+    // Three states, in priority order: nothing free at all (Sold Out, unselectable),
+    // stock free but every unit already claimed by an earlier order (waitlist —
+    // selectable, but the customer is told it needs confirming), or plain in stock.
     const soldOut = (avail?.available ?? 0) === 0;
+    const waitlist = !soldOut && !!avail?.waitlist;
     const selected = bikeModel === model;
     const rate = m.rates[rentalType];
     const commit = minCommitmentFor(logistics, model, rentalType);
@@ -597,6 +641,17 @@ export default function OrderWizard() {
               </View>
             </View>
           )}
+          {/* Waitlist banner — amber, and deliberately NOT the rotated stamp used for
+              Sold Out: this card is still tappable and must not read as a dead end. */}
+          {waitlist && (
+            <View className="absolute inset-x-0 bottom-0 items-center">
+              <View className="w-full bg-amber-500 px-4 py-2 border-t-2 border-white">
+                <Text className="text-white font-black text-base uppercase tracking-widest text-center">
+                  Add to Waitlist
+                </Text>
+              </View>
+            </View>
+          )}
         </View>
         <View className="p-4">
           <View className="flex-row items-start justify-between">
@@ -626,6 +681,17 @@ export default function OrderWizard() {
                 {avail?.nextAvailableDate
                   ? `Expected back ${dayLabel(avail.nextAvailableDate)}`
                   : 'No bikes of this model are in stock right now.'}
+              </Text>
+            </View>
+          )}
+
+          {waitlist && (
+            <View className="mt-3 border-2 border-amber-200 bg-amber-50 rounded-xl px-3 py-2">
+              <Text className="text-[11px] font-bold text-amber-700">
+                The last {avail?.available === 1 ? 'bike' : `${avail?.available} bikes`} of this model
+                {avail?.available === 1 ? ' is' : ' are'} already spoken for. You can still place your
+                order — an admin will confirm whether it can be fulfilled, and you are not charged
+                until your bike is delivered.
               </Text>
             </View>
           )}
@@ -687,11 +753,15 @@ export default function OrderWizard() {
       {/* The notes field on step 6 sits at the very bottom of the scroll content, so
           without this the keyboard covered it. This view runs to the bottom of the
           screen, so the padding it adds is exactly the keyboard height — no vertical
-          offset. Android resizes the window itself (adjustResize in the manifest),
-          so only iOS needs the padding behavior. */}
+          offset.
+          Android needs the SAME padding behavior, not undefined. That used to rely on
+          adjustResize (set in the manifest) resizing the window, but the app is now
+          edge-to-edge (targetSdk 36) and enforced edge-to-edge stops that resize —
+          which left Android with no avoidance at all and the keyboard back over the
+          notes field. */}
       <KeyboardAvoidingView
         className="flex-1"
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        behavior="padding"
       >
       <ScrollView
         ref={scrollRef}
@@ -1124,6 +1194,21 @@ export default function OrderWizard() {
                     when you {rentalType === 'rentToBuy' ? 'own the bike' : 'return the bike'}.
                   </Text>
                 )}
+              </View>
+            )}
+
+            {/* Last point before the card is authorized — the customer should not reach
+                the payment sheet without knowing this order still needs confirming. */}
+            {isWaitlistOrder && (
+              <View className="border-2 border-amber-400 bg-amber-50 rounded-2xl px-4 py-3 mb-5">
+                <Text className="text-xs font-black text-amber-800 uppercase tracking-wide mb-1">
+                  Waitlist order
+                </Text>
+                <Text className="text-[11px] font-bold text-amber-700">
+                  Every bike of this model is already claimed by an earlier order. Admin will confirm
+                  if this order can be fulfilled. Your card is only authorized now — you are not
+                  charged unless the bike is delivered.
+                </Text>
               </View>
             )}
 

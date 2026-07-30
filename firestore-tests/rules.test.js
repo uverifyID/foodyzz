@@ -131,8 +131,39 @@ function ctx(env, phone) {
     assertSucceeds(owner.doc("orders/order_2").set({ customerPhone: OWNER_PHONE, status: "requested", providerId: PROVIDER_ID, createdAt: new Date().toISOString() })));
   await check("customer CANNOT create an order spoofing another customer",
     assertFails(owner.doc("orders/order_3").set({ customerPhone: OTHER_PHONE, status: "requested", providerId: PROVIDER_ID, createdAt: new Date().toISOString() })));
-  await check("a provider (non-customer) can still UPDATE order status (dispatch flow)",
-    assertSucceeds(other.doc("orders/order_1").update({ status: "confirmed" })));
+  // UPDATE is allow-listed by field, per role. `request.auth != null` used to stand in
+  // for "staff", but the customer app phone-auths every rider, so it handed order
+  // writes to the entire customer base — including the two fields that decide what
+  // Stripe captures. These assertions pin both halves: the HQ workflow still works,
+  // and no client can reach a priced field.
+  await check("HQ staff can advance order status (dispatch flow)",
+    assertSucceeds(hqStaffCtx.doc("orders/order_1").update({ status: "confirmed", updatedAt: new Date().toISOString() })));
+  await check("HQ staff can stamp provider identity on accept",
+    assertSucceeds(hqStaffCtx.doc("orders/order_1").update({ providerId: PROVIDER_ID, providerName: "Store", providerPhone: MEMBER_PHONE })));
+  await check("HQ staff can drive the return run and the document gate",
+    assertSucceeds(hqStaffCtx.doc("orders/order_1").update({ returnStage: "inspecting", returnStageAt: new Date().toISOString(), docsVerifiedAt: new Date().toISOString() })));
+  await check("HQ staff CANNOT rewrite the capture amount",
+    assertFails(hqStaffCtx.doc("orders/order_1").update({ finalPrice: 0.01 })));
+  await check("HQ staff CANNOT reassign the bike (assignBikeToOrder is transactional)",
+    assertFails(hqStaffCtx.doc("orders/order_1").update({ bikeId: "bike_9" })));
+
+  await check("owning customer can clear their own chat badge",
+    assertSucceeds(owner.doc("orders/order_1").update({ customerUnreadMessage: false })));
+  // The money bug this rule closes: capture takes min(finalPrice || estimatedPrice,
+  // authorized), so writing a cent here charged a cent.
+  await check("owning customer CANNOT rewrite finalPrice on their own order",
+    assertFails(owner.doc("orders/order_1").update({ finalPrice: 0.01 })));
+  await check("owning customer CANNOT rewrite estimatedPrice / authorizedAmount",
+    assertFails(owner.doc("orders/order_1").update({ estimatedPrice: 0.01, authorizedAmount: 0.01 })));
+  // markRentalDelivered reads order.depositAmount to decide the hold.
+  await check("owning customer CANNOT zero out the security deposit",
+    assertFails(owner.doc("orders/order_1").update({ depositAmount: 0 })));
+  await check("owning customer CANNOT self-advance status (bypassing HQ acceptance)",
+    assertFails(owner.doc("orders/order_1").update({ status: "delivered" })));
+  await check("owning customer CANNOT smuggle a priced field alongside an allowed one",
+    assertFails(owner.doc("orders/order_1").update({ customerUnreadMessage: false, finalPrice: 0.01 })));
+  await check("a plain customer CANNOT touch somebody else's order at all",
+    assertFails(other.doc("orders/order_1").update({ status: "confirmed" })));
   // Orders carry the customer's charge/authorization amounts → read is now restricted
   // to the owning customer or admin. Providers must read the redacted providerOrders
   // mirror instead (asserted below), never the raw order.
@@ -141,11 +172,44 @@ function ctx(env, phone) {
   await check("a provider/other customer CANNOT read someone else's order (charge data hidden)",
     assertFails(other.doc("orders/order_1").get()));
 
-  console.log("providerOrders (provider-safe mirror — charge fields stripped):");
-  await check("any authed user can READ providerOrders (the broadcast/dispatch feed)",
-    assertSucceeds(other.doc("providerOrders/order_1").get()));
+  console.log("providerOrders (staff-only mirror — carries customer PII):");
+  // The mirror strips four Stripe ids and NOTHING else, so it still holds every
+  // customer's name, phone, email, address and GPS. Authed-read let any customer
+  // list the whole order book.
+  await check("HQ staff can READ providerOrders (the dispatch feed)",
+    assertSucceeds(hqStaffCtx.doc("providerOrders/order_1").get()));
+  await check("admin can READ providerOrders",
+    assertSucceeds(adminCtx.doc("providerOrders/order_1").get()));
+  await check("a plain customer CANNOT read the mirror (PII of every other customer)",
+    assertFails(other.doc("providerOrders/order_1").get()));
+  await check("...not even for their OWN order — they read orders/ for that",
+    assertFails(owner.doc("providerOrders/order_1").get()));
+  await check("a plain customer CANNOT enumerate the whole order book",
+    assertFails(other.collection("providerOrders").get()));
   await check("clients CANNOT write providerOrders (server-maintained mirror)",
     assertFails(other.doc("providerOrders/order_1").set({ status: "hacked" }, { merge: true })));
+
+  console.log("promos (server prices checkouts off this collection):");
+  // resolveCoupon looks a code up here and reads discountValue/discountType off the
+  // doc, so a client-writable promos collection is a free-rental switch.
+  await check("HQ staff can create a promo for their store",
+    assertSucceeds(hqStaffCtx.doc(`promos/${PROVIDER_ID}_promo_1`).set({
+      offerCode: "SPRING10", isActive: true, offerType: "rent",
+      discountType: "percentage", discountValue: 10,
+    })));
+  await check("HQ staff can retire a promo",
+    assertSucceeds(hqStaffCtx.doc(`promos/${PROVIDER_ID}_promo_1`).update({ isActive: false })));
+  await check("a customer CANNOT mint themselves a 100%-off code",
+    assertFails(owner.doc("promos/forged_1").set({
+      offerCode: "FREEBIE", isActive: true, offerType: "rent",
+      discountType: "percentage", discountValue: 100,
+    })));
+  await check("a customer CANNOT re-activate or re-price an existing promo",
+    assertFails(owner.doc(`promos/${PROVIDER_ID}_promo_1`).update({ isActive: true, discountValue: 100 })));
+  await check("a customer CANNOT delete a promo",
+    assertFails(owner.doc(`promos/${PROVIDER_ID}_promo_1`).delete()));
+  await check("customers can still READ promos (offers carousel + code lookup)",
+    assertSucceeds(owner.doc(`promos/${PROVIDER_ID}_promo_1`).get()));
 
   console.log("admin (email login, admin:true claim, no phone):");
   await check("admin CAN read any customer order",

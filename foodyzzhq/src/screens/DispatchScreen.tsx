@@ -324,6 +324,15 @@ export default function DispatchScreen() {
                           {order.bikeModel ? ` · M${order.bikeModel}` : ''}
                         </Text>
                       </View>
+                      {/* Placed against a model whose free stock was already fully claimed.
+                          Check the fleet has a bike to spare before accepting — the customer
+                          was told this order needs confirming and is not charged until
+                          delivery, so it can still be cancelled at no cost. */}
+                      {order.waitlisted && !order.bikeId && (
+                        <View className="flex-row items-center gap-1 px-1.5 py-0.5 rounded border bg-amber-100 border-amber-400">
+                          <Text className="text-amber-800 font-black text-[7px] uppercase">Waitlist</Text>
+                        </View>
+                      )}
                     </View>
                     <Text className="text-black font-black text-xs uppercase tracking-tight">{order.customerName}</Text>
                     <TouchableOpacity onPress={() => Linking.openURL(`tel:${order.customerPhone}`)}>

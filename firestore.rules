@@ -150,32 +150,90 @@ service cloud.firestore {
     // Orders - carry the customer's charge & authorization amounts, so READ is
     // restricted to the owning customer or an admin. Providers must NEVER see these
     // amounts; they read the redacted `providerOrders` mirror instead (below).
-    // CREATE must be by the customer themselves (or admin). UPDATE stays broad so
-    // a provider (not the customer) can advance order status.
-    // TODO: tighten UPDATE to {owning customer} OR {assigned provider} OR admin.
+    // CREATE must be by the customer themselves (or admin).
+    //
+    // UPDATE is allow-listed BY FIELD, per role. It used to be a bare
+    // `request.auth != null`, which reads as "staff only" but is not: the customer
+    // app signs every rider in with phone auth, so it granted write on every order
+    // to the whole customer base. Two paths made that a live money bug — capture
+    // takes min(order.finalPrice || order.estimatedPrice, authorized) and delivery
+    // reads order.depositAmount, both from the order doc, so a customer could
+    // rewrite their own order before delivery and be charged a cent with no deposit.
+    //
+    // Everything that decides what is charged (prices, deposit, Stripe ids, bike
+    // assignment, coupons, billing schedule) is therefore writable only by the Admin
+    // SDK — Cloud Functions bypass these rules, and every such mutation already goes
+    // through a callable (cancelOrder, capturePaymentIntent, assignBikeToOrder,
+    // markRentalDelivered, chargeDeposit, payoffRentToBuy, setOrderNote, ...).
+    // Adding a field to a list below puts it back in reach of a client: only add
+    // fields that are pure workflow state and cannot influence an amount.
+    function orderCustomerFields() {
+      // The customer app touches exactly one field directly (clearing its own chat
+      // badge, foodyzz ChatScreen). Everything else it does is a callable.
+      return ['customerUnreadMessage'];
+    }
+    function orderHqFields() {
+      // The HQ app's direct writes: status advance (Dispatch/Logistics), provider
+      // identity stamped on accept, the return-run stage, the document review gate,
+      // and its own chat badge.
+      return [
+        'status', 'updatedAt',
+        'providerId', 'providerName', 'providerPhone',
+        'readyForDeliveryAt', 'completedAt',
+        'returnStage', 'returnStageAt',
+        'idRequestedAt', 'idRequestedBy', 'docsVerifiedAt', 'docsRejectedAt',
+        'providerUnreadMessage',
+      ];
+    }
+    function orderChangedKeys() {
+      return request.resource.data.diff(resource.data).affectedKeys();
+    }
     match /orders/{orderId} {
       allow read: if request.auth != null
                   && (resource.data.customerPhone == request.auth.token.phone_number || isAdmin());
       allow create: if (request.auth != null
                         && request.resource.data.customerPhone == request.auth.token.phone_number)
                     || isAdmin();
-      allow update: if request.auth != null;
+      // isAdmin (staff/{phone} allowlist) is unrestricted — platform operators.
+      // isHqStaff (member of any store) may drive the order workflow but not its money.
+      // The owning customer may clear their own unread badge and nothing else.
+      allow update: if isAdmin()
+                    || (isHqStaff() && orderChangedKeys().hasOnly(orderHqFields()))
+                    || (request.auth != null
+                        && resource.data.customerPhone == request.auth.token.phone_number
+                        && orderChangedKeys().hasOnly(orderCustomerFields()));
     }
 
-    // Provider-safe order mirror — a copy of each order with the customer's charge /
-    // authorization fields stripped by the onOrderWriteMirrorForProvider function.
-    // Authed read (the scrubsHQ broadcast feed needs it); writes are server-only.
+    // Provider-safe order mirror — written only by onOrderWriteMirrorForProvider.
+    //
+    // "Provider-safe" means safe for STAFF, not for everyone: the mirror copies every
+    // order field except four raw Stripe identifiers, so it still carries the
+    // customer's name, phone, email, home address and GPS coordinates. Read was
+    // `request.auth != null`, and the customer app phone-auths every rider — so any
+    // customer could list this collection and walk off with the platform's entire
+    // customer base, addresses included.
+    //
+    // Only the HQ app reads it (dispatch feed, chat threads, logistics, QR scan);
+    // the customer app and the web console never touch it. Scoped to staff.
     match /providerOrders/{orderId} {
-      allow read: if request.auth != null;
+      allow read: if isAdmin() || isHqStaff();
       allow write: if false;
     }
 
-    // Promos - unchanged (broad).
-    // TODO: owner-scope writes. The id is `${phone}_${zip}_${promoId}` and the
-    //       rules language has no string split, so add an `ownerPhone` (digits)
-    //       field on create, then: allow write: if ownsPhoneField(request.resource.data.ownerPhone) || isAdmin();
+    // Promos — marketing offers, created and retired by store staff in the HQ app.
+    //
+    // Write was open to any authed user, and resolveCoupon (functions) prices a
+    // checkout straight off this collection: it looks up by `offerCode`, then reads
+    // `isActive`, `offerType`, `discountType` and `discountValue` from the doc it
+    // finds. A customer could therefore write themselves a 100%-off promo and have
+    // the server honour it — the only backstop was the cap at subtotal, which keeps
+    // it from becoming credit but still zeroes the rental.
+    //
+    // Read stays open: the customer app's offers carousel and code lookup both need
+    // it, and single use is enforced server-side against promoRedemptions.
     match /promos/{promoId} {
-      allow read, write: if request.auth != null;
+      allow read: if request.auth != null;
+      allow write: if isAdmin() || isHqStaff();
     }
 
     // Promo redemptions - the single-use ledger. One doc per (promo, customer), written
