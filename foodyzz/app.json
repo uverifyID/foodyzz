@@ -81,6 +81,11 @@
             "CFBundleURLSchemes": [
               "com.googleusercontent.apps.392804438663-ju539i8hqp7dcepr0mhvbmuamm6ol1mf"
             ]
+          },
+          {
+            "CFBundleURLSchemes": [
+              "com.rajshrestha.foodyzz"
+            ]
           }
         ]
       },

@@ -80,6 +80,11 @@
             "CFBundleURLSchemes": [
               "com.googleusercontent.apps.392804438663-hbagug7p8dirjm3c35qagvlbnugkp1vg"
             ]
+          },
+          {
+            "CFBundleURLSchemes": [
+              "com.rajshrestha.foodyzzhq"
+            ]
           }
         ]
       },
