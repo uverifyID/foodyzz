@@ -4,6 +4,7 @@
   "newArchEnabled": "false",
   "ios.deploymentTarget": "15.1",
   "ios.useFrameworks": "static",
+  "ios.forceStaticLinking": "[]",
   "apple.extraPods": "[{\"name\":\"RecaptchaEnterprise\",\"version\":\"~> 18.9.1\"}]",
   "apple.privacyManifestAggregationEnabled": "true"
 }

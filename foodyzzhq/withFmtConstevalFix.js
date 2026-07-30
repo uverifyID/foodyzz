@@ -46,14 +46,34 @@ module.exports = function withFmtConstevalFix(config) {
       let contents = fs.readFileSync(podfile, 'utf8');
 
       if (!contents.includes(MARKER)) {
-        // Insert inside the post_install block, after react_native_post_install(...).
-        const anchor = /react_native_post_install\([^)]*\)/;
-        if (!anchor.test(contents)) {
+        // Insert inside the post_install block, after the COMPLETE
+        // react_native_post_install(...) call. Its argument list contains nested
+        // parens — Expo SDK 54 added `:ccache_enabled => ccache_enabled?(podfile_properties)`
+        // — so the close paren has to be found by balancing. The old
+        // /react_native_post_install\([^)]*\)/ anchor stopped at that inner `)`,
+        // inserted the snippet mid-call and stranded the real `,\n)`, which made
+        // `pod install` die with "unexpected ',', ignoring it".
+        const callStart = contents.indexOf('react_native_post_install(');
+        if (callStart === -1) {
           throw new Error(
             '[withFmtConstevalFix] Could not find react_native_post_install(...) in the Podfile — the anchor changed; update this plugin.'
           );
         }
-        contents = contents.replace(anchor, (m) => m + '\n' + SNIPPET);
+        let depth = 0;
+        let callEnd = -1;
+        for (let i = contents.indexOf('(', callStart); i < contents.length; i++) {
+          if (contents[i] === '(') depth++;
+          else if (contents[i] === ')' && --depth === 0) {
+            callEnd = i + 1;
+            break;
+          }
+        }
+        if (callEnd === -1) {
+          throw new Error(
+            '[withFmtConstevalFix] Unbalanced parentheses in the react_native_post_install(...) call — update this plugin.'
+          );
+        }
+        contents = contents.slice(0, callEnd) + '\n' + SNIPPET + contents.slice(callEnd);
         fs.writeFileSync(podfile, contents);
       }
 
