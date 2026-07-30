@@ -15,6 +15,7 @@ import {
   KeyboardAvoidingView, Platform,
 } from 'react-native';
 import { Bike as BikeIcon, Calendar, Clock, MapPin, ShieldCheck, Check, CreditCard, Info, Ticket, X } from 'lucide-react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { useStripe } from '@stripe/stripe-react-native';
 import * as Haptics from 'expo-haptics';
@@ -63,6 +64,9 @@ const dayLabel = (day: string): string =>
 
 export default function OrderWizard() {
   const navigation = useNavigation<any>();
+  // Presented as a stack modal, so it fills the window and its fixed footer is
+  // the last thing above the nav bar.
+  const { bottom } = useSafeAreaInsets();
   // Home's "Apply to Next Order" opens the wizard with the promo's code and the type
   // it was minted for, so tapping an offer starts the matching transaction and the
   // code is already waiting on the confirm step.
@@ -1117,7 +1121,7 @@ export default function OrderWizard() {
 
       {/* Footer — inside the avoiding view so the pay CTA rides above the keyboard
           instead of being buried under it while the notes field has focus. */}
-      <View className="px-5 py-4 bg-white border-t-2 border-black flex-row">
+      <View className="px-5 pt-4 bg-white border-t-2 border-black flex-row" style={{ paddingBottom: bottom + 16 }}>
         {currentIdx > 0 && (
           <TouchableOpacity
             onPress={goBack}

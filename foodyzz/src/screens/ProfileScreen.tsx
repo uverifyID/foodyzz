@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useLayoutEffect } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, TextInput, Alert, Switch, Modal, ActivityIndicator, Linking } from 'react-native';
 import { User, Mail, MapPin, MessageSquare, CreditCard, AlertTriangle, ChevronRight, Edit2, X, Trash2, ShieldCheck, LogOut, Bell, Volume2 } from 'lucide-react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Constants from 'expo-constants';
 import { previewSound } from '../services/soundPlayer';
@@ -16,6 +17,9 @@ import IdentityDocumentsCard from '../components/IdentityDocumentsCard';
 import { useUserProfile } from '../context/UserProfileContext';
 
 export default function ProfileScreen() {
+  // Modals cover the whole window including the nav bar, so sheets inside one
+  // carry their own bottom inset.
+  const { bottom } = useSafeAreaInsets();
     const navigation = useNavigation<any>();
     const [user, setUser] = useState(authNative().currentUser);
     // Profile now comes from the shared single listener (UserProfileContext) rather
@@ -436,7 +440,7 @@ export default function ProfileScreen() {
             {/* Edit Modal */}
             <Modal visible={isEditing} animationType="slide" transparent={true}>
                 <View className="flex-1 bg-black/60 justify-end">
-                    <View className="bg-white rounded-t-[44px] border-t-4 border-black p-6 h-[85%]">
+                    <View className="bg-white rounded-t-[44px] border-t-4 border-black p-6 h-[85%]" style={{ paddingBottom: bottom + 24 }}>
                         <View className="flex-row justify-between items-center mb-6">
                             <Text className="text-xl font-black uppercase">Edit Details</Text>
                             <TouchableOpacity onPress={() => setIsEditing(false)} className="p-2 bg-slate-100 rounded-full">

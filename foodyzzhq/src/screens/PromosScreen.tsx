@@ -9,7 +9,7 @@ import { useActiveProvider } from '../hooks';
 import ReactNativeAsyncStorage from '@react-native-async-storage/async-storage';
 
 export default function PromosScreen() {
-  const { top } = useSafeAreaInsets();
+  const { top, bottom } = useSafeAreaInsets();
   const [promos, setPromos] = useState<any[]>([]);
   const { profile, loading: providerLoading } = useActiveProvider();
   const [isAddingPromo, setIsAddingPromo] = useState(false);
@@ -395,7 +395,7 @@ export default function PromosScreen() {
               </View>
             </View>
 
-            <ScrollView className="flex-1" showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 40 }}>
+            <ScrollView className="flex-1" showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: bottom + 40 }}>
               {/* Title + Meta */}
               <View className="px-5 py-5 border-b border-slate-800">
                 <Text className="text-white font-black text-xl mb-2">
@@ -499,7 +499,7 @@ export default function PromosScreen() {
       {/* Campaign form overlay — rendered in the main window (not a Dialog) so Compose lifecycle works */}
       {isAddingPromo && (
         <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.9)', justifyContent: 'flex-end', zIndex: 100 }}>
-          <View className="bg-[#020617] rounded-t-[44px] border-t-4 border-slate-800 p-6 h-[85%]">
+          <View className="bg-[#020617] rounded-t-[44px] border-t-4 border-slate-800 p-6 h-[85%]" style={{ paddingBottom: bottom + 24 }}>
             <View className="flex-row justify-between items-center mb-6">
               <View>
                 <Text className="text-white text-xl font-black uppercase tracking-tighter">New Campaign</Text>

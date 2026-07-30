@@ -12,6 +12,7 @@ import {
   type HqPreflight,
 } from '../services/firebase';
 import authNative from '@react-native-firebase/auth';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { CheckSquare, Square } from 'lucide-react-native';
 
 /**
@@ -39,6 +40,8 @@ import { CheckSquare, Square } from 'lucide-react-native';
  * Returning members need no code at all: preflight sees their membership.
  */
 export default function AuthScreen({ onAuthenticated }: { onAuthenticated: (user: any) => void }) {
+  // Rendered outside the navigator, so nothing above it applies the insets.
+  const insets = useSafeAreaInsets();
   const [phone, setPhone] = useState('');
   const [inviteCode, setInviteCode] = useState('');
   const [zipCode, setZipCode] = useState('');
@@ -232,7 +235,16 @@ export default function AuthScreen({ onAuthenticated }: { onAuthenticated: (user
       className="flex-1 bg-[#020617]"
     >
       <ScrollView
-        contentContainerStyle={{ flexGrow: 1, justifyContent: 'center', padding: 24 }}
+        contentContainerStyle={{
+          flexGrow: 1,
+          justifyContent: 'center',
+          paddingHorizontal: 24,
+          // Centred content clears the system bars on its own until the form grows
+          // tall enough to scroll; past that the first and last rows would sit
+          // under them, so the insets go on the scroll content.
+          paddingTop: insets.top + 24,
+          paddingBottom: insets.bottom + 24,
+        }}
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
       >

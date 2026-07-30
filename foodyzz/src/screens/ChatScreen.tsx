@@ -28,6 +28,7 @@ import {
 import { ArrowLeft, Send, MessageSquare, Clock } from 'lucide-react-native';
 import { useNavigation, useRoute, useIsFocused } from '@react-navigation/native';
 import { useHeaderHeight } from '@react-navigation/elements';
+import { BottomTabBarHeightContext } from '@react-navigation/bottom-tabs';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { auth, db } from '../services/firebase';
 import { COLORS } from '../theme';
@@ -56,6 +57,13 @@ export default function ChatScreen() {
     const isFocused = useIsFocused();
     const insets = useSafeAreaInsets();
     const headerHeight = useHeaderHeight();
+    // This screen mounts twice over: as the Chat tab, and as the Support/OrderChat
+    // stack routes. useSafeAreaInsets always reports window insets (bottom-tabs
+    // never narrows them), but under the tab navigator the tab bar already covers
+    // the nav bar — so the inset only belongs to the composer on the stack routes.
+    // Non-null here means we are inside the tab navigator.
+    const tabBarHeight = React.useContext(BottomTabBarHeightContext);
+    const composerInset = tabBarHeight == null ? insets.bottom : 0;
     // Present → order-scoped thread. Absent → global FoodyzzHQ thread.
     const orderId: string | undefined = route.params?.orderId;
     const isOrderThread = !!orderId;
@@ -374,7 +382,7 @@ export default function ChatScreen() {
             {/* Input Control Block */}
             <View
                 className="px-4 pt-4 bg-white border-t-4 border-black flex-row items-center gap-3"
-                style={{ paddingBottom: insets.bottom + 28 }}
+                style={{ paddingBottom: composerInset + 28 }}
             >
                 <TextInput
                     value={inputText}

@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { TouchableOpacity, View } from 'react-native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Sparkles, Calendar, User, MessageCircle, X } from 'lucide-react-native';
 import authNative from '@react-native-firebase/auth';
 
@@ -47,9 +48,14 @@ function useHqChatUnread(): boolean {
 
 function MainTabs() {
   const hqUnread = useHqChatUnread();
+  // An explicit `height` in tabBarStyle overrides the inset-aware height React
+  // Navigation would otherwise compute, so under the edge-to-edge that Android 16
+  // forces the labels would sit under the gesture bar. Add the inset back by hand.
+  // Devices with no bottom inset are unaffected — this is the old height of 70 there.
+  const { bottom } = useSafeAreaInsets();
   return (
     <Tab.Navigator screenOptions={{
-      tabBarStyle: { height: 70, borderTopWidth: 2, borderTopColor: '#e2e8f0' },
+      tabBarStyle: { height: 70 + bottom, paddingBottom: bottom, borderTopWidth: 2, borderTopColor: '#e2e8f0' },
       tabBarActiveTintColor: '#507425',
       tabBarLabelStyle: { fontSize: 10, fontWeight: 'bold', marginBottom: 10 }
     }}>

@@ -944,13 +944,15 @@ export default function ProviderOnboardingWizard({
         </Text>
       </View>
 
-      {/* ── Scrollable Content ── */}
+      {/* ── Scrollable Content ──
+          The final step drops the fixed footer and carries its own CTA, so on
+          that step the scroll content is what has to clear the nav bar. */}
       <ScrollView
         ref={scrollViewRef}
         className="flex-1 px-5 pt-5"
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
-        contentContainerStyle={{ paddingBottom: 24 }}
+        contentContainerStyle={{ paddingBottom: bottom + 24 }}
       >
         {renderStep()}
       </ScrollView>

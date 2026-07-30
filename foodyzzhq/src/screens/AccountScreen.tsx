@@ -86,7 +86,7 @@ const SOUND_OPTIONS = [
 ];
 
 export default function AccountScreen() {
-  const { top } = useSafeAreaInsets();
+  const { top, bottom } = useSafeAreaInsets();
   const navigation = useNavigation<any>();
   const user = authNative().currentUser; // Use native auth instance
   const { profile, loading } = useActiveProvider();
@@ -445,7 +445,14 @@ export default function AccountScreen() {
         )}
       </View>
 
-      <ScrollView className="flex-1 px-4 py-6" showsVerticalScrollIndicator={false}>
+      {/* Stack route with no tab bar under it, so the list runs to the very bottom
+          of the window now that edge-to-edge is on — keep the last tile clear of
+          the nav bar. */}
+      <ScrollView
+        className="flex-1 px-4 py-6"
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={{ paddingBottom: bottom + 24 }}
+      >
         {/* Business Tile */}
         <View className="bg-slate-900 border-2 border-slate-800 rounded-[32px] p-6 shadow-brutalist mb-6">
           <View className="flex-row items-center gap-4 mb-6">
@@ -632,7 +639,7 @@ export default function AccountScreen() {
       {/* Edit HQ Modal */}
       <Modal visible={isEditing} animationType="slide" transparent={true}>
         <View className="flex-1 bg-black/90 justify-end">
-          <View className="bg-[#020617] rounded-t-[44px] border-t-4 border-slate-800 p-6 h-[90%]">
+          <View className="bg-[#020617] rounded-t-[44px] border-t-4 border-slate-800 p-6 h-[90%]" style={{ paddingBottom: bottom + 24 }}>
             <View className="flex-row justify-between items-center mb-6">
               <Text className="text-white text-xl font-black uppercase tracking-tighter">Edit HQ Details</Text>
               <View className="flex-row items-center gap-2">
@@ -803,7 +810,7 @@ export default function AccountScreen() {
       {/* Sound Picker Modal */}
       <Modal visible={showSoundPicker} animationType="slide" transparent={true}>
         <View className="flex-1 bg-black/90 justify-end">
-          <View className="bg-[#020617] rounded-t-[44px] border-t-4 border-slate-800 p-6" style={{ maxHeight: '72%' }}>
+          <View className="bg-[#020617] rounded-t-[44px] border-t-4 border-slate-800 p-6" style={{ maxHeight: '72%', paddingBottom: bottom + 24 }}>
             <View className="flex-row justify-between items-center mb-6">
               <View>
                 <Text className="text-[10px] font-mono text-slate-400 uppercase tracking-widest">Notification Node</Text>
@@ -861,7 +868,7 @@ export default function AccountScreen() {
       {/* Store Switcher Modal */}
       <Modal visible={showStoreSwitcher} animationType="slide" transparent={true}>
         <View className="flex-1 bg-black/90 justify-end">
-          <View className="bg-[#020617] rounded-t-[44px] border-t-4 border-slate-800 p-6" style={{ maxHeight: '72%' }}>
+          <View className="bg-[#020617] rounded-t-[44px] border-t-4 border-slate-800 p-6" style={{ maxHeight: '72%', paddingBottom: bottom + 24 }}>
             <View className="flex-row justify-between items-center mb-6">
               <View>
                 <Text className="text-[10px] font-mono text-slate-400 uppercase tracking-widest">Active Store Node</Text>

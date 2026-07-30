@@ -14,6 +14,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import {
   View, Text, TouchableOpacity, Modal, FlatList, ActivityIndicator, Alert,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Bike as BikeIcon, Check, ChevronDown, X } from 'lucide-react-native';
 import firebase from '@react-native-firebase/app';
 import '@react-native-firebase/functions';
@@ -29,6 +30,9 @@ interface Props {
 }
 
 export default function BikeAssignment({ order, onAssigned }: Props) {
+  // A Modal covers the whole window including the nav bar, so sheets inside one
+  // carry their own bottom inset regardless of what the screen behind them does.
+  const { bottom } = useSafeAreaInsets();
   const hasBike = order.bikeId != null && order.bikeId !== '';
   // The number is locked in once the rider has set off; only Ready-for-Delivery is editable.
   const editable = order.status === OrderStatus.READY_FOR_DELIVERY;
@@ -135,7 +139,7 @@ export default function BikeAssignment({ order, onAssigned }: Props) {
       {/* Picker — available numbers for this model / condition. */}
       <Modal visible={pickerOpen} transparent animationType="slide" onRequestClose={() => setPickerOpen(false)}>
         <View className="flex-1 bg-black/60 justify-end">
-          <View className="bg-white rounded-t-[32px] border-t-4 border-black max-h-[70%] pb-8">
+          <View className="bg-white rounded-t-[32px] border-t-4 border-black max-h-[70%]" style={{ paddingBottom: bottom + 32 }}>
             <View className="flex-row items-center justify-between px-5 pt-5 pb-3">
               <View>
                 <Text className="text-[9px] font-black text-slate-400 uppercase tracking-widest">

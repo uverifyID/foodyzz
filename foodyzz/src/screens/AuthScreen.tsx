@@ -3,8 +3,10 @@ import { View, Text, TextInput, TouchableOpacity, ActivityIndicator, Alert, Keyb
 import { db, subscribeToGlobalConfig, runWithRetry } from '../services/firebase';
 import authNative from '@react-native-firebase/auth';
 import { Phone, ArrowRight, CheckSquare, Square } from 'lucide-react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 export default function AuthScreen({ onAuthenticated }: { onAuthenticated: (user: any) => void }) {
+  const insets = useSafeAreaInsets();
   const [phoneNumber, setPhoneNumber] = useState('');
   const [verificationCode, setVerificationCode] = useState('');
   const [confirm, setConfirm] = useState<any>(null);
@@ -100,9 +102,13 @@ export default function AuthScreen({ onAuthenticated }: { onAuthenticated: (user
   };
 
   return (
-    <KeyboardAvoidingView 
+    <KeyboardAvoidingView
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       className="flex-1 bg-white justify-center px-6"
+      // Rendered outside the navigator, so nothing above it applies the insets.
+      // The content is centred and clears the bars on its own until the keyboard
+      // is up and squeezes it — these keep it off them in that state too.
+      style={{ paddingTop: insets.top, paddingBottom: insets.bottom }}
     >
       <View className="items-center mb-10">
         <Image

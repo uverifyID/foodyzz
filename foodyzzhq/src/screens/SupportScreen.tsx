@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, TextInput, ActivityIndicator, KeyboardAvoidingView, Platform, Alert } from 'react-native';
 import { ArrowLeft, Send, ShieldCheck } from 'lucide-react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import { auth, db, getActiveProviderId } from '../services/firebase';
 import { COLORS } from '../theme';
@@ -8,6 +9,8 @@ import { SupportMessage, AppRole } from '../types';
 
 export default function SupportScreen() {
   const navigation = useNavigation();
+  // This is a headerShown:false stack route, so the screen owns both insets.
+  const insets = useSafeAreaInsets();
   const user = auth().currentUser;
   const [supportInputText, setSupportInputText] = useState('');
   const [supportMessages, setSupportMessages] = useState<SupportMessage[]>([]);
@@ -121,7 +124,7 @@ export default function SupportScreen() {
       className="flex-1 bg-white"
     >
       {/* Secure Support Header */}
-      <View className="bg-slate-900 px-4 pt-12 pb-4 border-b-4 border-black flex-row items-center justify-between shadow-sm">
+      <View className="bg-slate-900 px-4 pb-4 border-b-4 border-black flex-row items-center justify-between shadow-sm" style={{ paddingTop: insets.top + 16 }}>
         <View className="flex-row items-center gap-3">
           <TouchableOpacity 
             onPress={() => navigation.goBack()} 
@@ -181,7 +184,7 @@ export default function SupportScreen() {
         )}
       </ScrollView>
 
-      <View className="p-4 bg-slate-900 border-t-4 border-black flex-row items-center gap-3">
+      <View className="p-4 bg-slate-900 border-t-4 border-black flex-row items-center gap-3" style={{ paddingBottom: insets.bottom + 16 }}>
         <TextInput
           value={supportInputText}
           onChangeText={setSupportInputText}

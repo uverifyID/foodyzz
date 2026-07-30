@@ -11,6 +11,7 @@ import {
   Alert 
 } from 'react-native';
 import { ArrowLeft, Send, MessageSquare } from 'lucide-react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { auth, db } from '../services/firebase'; 
 import { COLORS, LAYOUT } from '../theme';
@@ -20,7 +21,9 @@ export default function ChatScreen() {
   const navigation = useNavigation();
   const route = useRoute();
   const { orderId } = route.params as { orderId: string };
-  
+  // This is a headerShown:false stack route, so the screen owns both insets.
+  const insets = useSafeAreaInsets();
+
   const user = auth().currentUser;
   const [inputText, setInputText] = useState('');
   const [messages, setMessages] = useState<any[]>([]);
@@ -135,7 +138,7 @@ export default function ChatScreen() {
       className="flex-1 bg-white"
     >
       {/* Neo-Brutalist Header - Dark for Provider */}
-      <View className="bg-slate-900 px-4 pt-12 pb-4 border-b-4 border-black flex-row items-center justify-between shadow-sm">
+      <View className="bg-slate-900 px-4 pb-4 border-b-4 border-black flex-row items-center justify-between shadow-sm" style={{ paddingTop: insets.top + 16 }}>
         <View className="flex-row items-center gap-3">
           <TouchableOpacity 
             onPress={() => navigation.goBack()} 
@@ -211,7 +214,7 @@ export default function ChatScreen() {
         )}
       </ScrollView>
 
-      <View className="p-4 bg-slate-900 border-t-4 border-black flex-row items-center gap-3">
+      <View className="p-4 bg-slate-900 border-t-4 border-black flex-row items-center gap-3" style={{ paddingBottom: insets.bottom + 16 }}>
         <TextInput
           value={inputText}
           onChangeText={setInputText}

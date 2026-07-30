@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback, useLayoutEffect } from 'react'
 import { View, Text, ScrollView, TouchableOpacity, Modal, ActivityIndicator, Alert, TextInput } from 'react-native';
 import QRCode from 'react-native-qrcode-svg';
 import { Calendar, Clock, X, CheckCircle, AlertTriangle, ChevronRight, MapPin, Star, MessageCircle } from 'lucide-react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { COLORS, LAYOUT } from '../theme'; // Adjusted import path
 import { db, getFunctionsInstance } from '../services/firebase';
 import authNative from '@react-native-firebase/auth';
@@ -177,6 +178,9 @@ const historyStatusLabel = (order: RentalOrder): string => {
 
 
 export default function OrdersScreen() {
+  // Modals cover the whole window including the nav bar, so sheets inside one
+  // carry their own bottom inset.
+  const { bottom } = useSafeAreaInsets();
     const navigation = useNavigation<any>();
     const route = useRoute<any>();
     // Shared users/{phone} listener — read here to know whether the customer's ID
@@ -865,7 +869,7 @@ export default function OrdersScreen() {
             {/* Order Detail Modal */}
             <Modal visible={!!selectedOrder} animationType="slide" transparent={true}>
                 <View className="flex-1 bg-black/60 justify-end">
-                    <View className="bg-white border-t-4 border-black rounded-t-[44px] p-6 h-[75%]">
+                    <View className="bg-white border-t-4 border-black rounded-t-[44px] p-6 h-[75%]" style={{ paddingBottom: bottom + 24 }}>
                         <View className="flex-row justify-between items-start mb-6">
                             <View>
                                 <View className="bg-indigo-50 self-start px-2 py-1 rounded border border-indigo-100 mb-1">

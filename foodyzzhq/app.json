@@ -6,15 +6,6 @@
     "orientation": "portrait",
     "userInterfaceStyle": "light",
     "newArchEnabled": false,
-    "androidStatusBar": {
-      "backgroundColor": "#86B54F",
-      "barStyle": "dark-content"
-    },
-    "splash": {
-      "image": "./assets/images/logo/mainpage/splashscreen.png",
-      "resizeMode": "contain",
-      "backgroundColor": "#86B54F"
-    },
     "icon": "./assets/images/logo/icon/appicon.png",
     "scheme": "com.rajshrestha.foodyzzhq",
     "plugins": [
@@ -50,9 +41,9 @@
         "expo-build-properties",
         {
           "android": {
-            "compileSdkVersion": 35,
-            "targetSdkVersion": 35,
-            "buildToolsVersion": "35.0.0"
+            "compileSdkVersion": 36,
+            "targetSdkVersion": 36,
+            "buildToolsVersion": "36.0.0"
           },
           "ios": {
             "useFrameworks": "static",
@@ -64,6 +55,15 @@
               }
             ]
           }
+        }
+      ],
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/images/logo/mainpage/splashscreen.png",
+          "imageWidth": 300,
+          "resizeMode": "contain",
+          "backgroundColor": "#86B54F"
         }
       ]
     ],
@@ -89,7 +89,6 @@
     "android": {
       "googleServicesFile": "./google-services.json",
       "package": "com.foodyzzHQ",
-      "edgeToEdgeEnabled": false,
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/logo/icon/appicon.png",
         "backgroundColor": "#86B54F"

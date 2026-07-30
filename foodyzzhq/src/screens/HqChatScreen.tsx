@@ -417,9 +417,15 @@ export default function HqChatScreen() {
         }}
       />
 
+      {/* No bottom inset here: this is a tab screen, and BottomTabView lays the
+          tab bar out below the screen rather than over it, so the tab bar (which
+          does add the inset) already covers the nav bar. useSafeAreaInsets returns
+          window insets — bottom-tabs never narrows them — so adding it again read
+          as +0 while Android insets were 0 and becomes a visible gap under
+          edge-to-edge. */}
       <View
         className="px-4 pt-4 bg-slate-900 border-t-4 border-black flex-row items-center gap-3"
-        style={{ paddingBottom: insets.bottom + 12 }}
+        style={{ paddingBottom: 12 }}
       >
         <TextInput
           value={replyText}

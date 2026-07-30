@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { View, Text, TouchableOpacity, Modal, TextInput, ActivityIndicator, KeyboardAvoidingView, Platform, Keyboard, TouchableWithoutFeedback } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { FileText, Plus, X, Check } from 'lucide-react-native';
 import firebase from '@react-native-firebase/app';
 
@@ -14,6 +15,9 @@ const noteCache = new Map<string, string>();
 // card (no need to open the editor) and the editor opens instantly with the text
 // already loaded. Persists for the life of the transaction.
 export default function ProviderNotes({ orderId }: { orderId: string }) {
+  // A Modal covers the whole window including the nav bar, so sheets inside one
+  // carry their own bottom inset regardless of what the screen behind them does.
+  const { bottom } = useSafeAreaInsets();
   const cached = noteCache.get(orderId);
   const [open, setOpen] = useState(false);
   const [text, setText] = useState(cached ?? '');
@@ -103,7 +107,7 @@ export default function ProviderNotes({ orderId }: { orderId: string }) {
             <TouchableWithoutFeedback onPress={() => { Keyboard.dismiss(); setOpen(false); }}>
               <View style={{ flex: 1 }} />
             </TouchableWithoutFeedback>
-            <View className="bg-white rounded-t-[44px] border-t-4 border-black p-6">
+            <View className="bg-white rounded-t-[44px] border-t-4 border-black p-6" style={{ paddingBottom: bottom + 24 }}>
               <View className="flex-row justify-between items-center mb-2">
                 <View>
                   <Text className="text-[10px] font-mono font-black text-slate-400 uppercase tracking-widest mb-1">Private · provider only</Text>

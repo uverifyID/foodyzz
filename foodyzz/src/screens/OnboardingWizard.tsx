@@ -6,6 +6,7 @@ import {
 import { db, signOutClean, getFunctionsInstance } from '../services/firebase';
 import { geocodeAddress } from '../services/geo';
 import { User, Mail, MapPin, Hash, ArrowRight, ArrowLeft, Check } from 'lucide-react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { UserProfile } from '../types';
 import AddressAutocomplete from '../components/AddressAutocomplete';
 
@@ -26,6 +27,9 @@ export default function OnboardingWizard({
   profile?: Partial<UserProfile> | null;
   onComplete?: () => void;
 }) {
+  // Rendered outside the navigator, so nothing above it applies the insets and
+  // the old fixed pt-16 was standing in for the status bar.
+  const { top, bottom } = useSafeAreaInsets();
   const [step, setStep] = useState(1);
   const [saving, setSaving] = useState(false);
 
@@ -214,10 +218,17 @@ export default function OnboardingWizard({
       className="flex-1 bg-white"
     >
       <ScrollView
-        contentContainerStyle={{ flexGrow: 1, justifyContent: 'space-between' }}
+        contentContainerStyle={{
+          flexGrow: 1,
+          justifyContent: 'space-between',
+          paddingTop: top + 24,
+          // space-between parks the Continue button on the bottom edge, which is
+          // now the bottom of the window rather than the top of the nav bar.
+          paddingBottom: bottom + 24,
+        }}
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
-        className="px-6 pt-16"
+        className="px-6"
       >
         <View>
           {/* Header + progress */}

@@ -18,6 +18,7 @@ import {
 } from 'react-native';
 import storage from '@react-native-firebase/storage';
 import * as ImagePicker from 'expo-image-picker';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Camera, X, Trash2, Package, ClipboardCheck, Plus } from 'lucide-react-native';
 import firebase from '@react-native-firebase/app';
 
@@ -33,6 +34,9 @@ interface Props {
 const MAX_PHOTOS = 6;
 
 export default function HandoverSheet({ order, mode = 'deliver', onClose, onDelivered }: Props) {
+  // A Modal covers the whole window including the nav bar, so the sheet's action
+  // row carries its own bottom inset — it is the last thing above the nav bar.
+  const { bottom } = useSafeAreaInsets();
   const [notes, setNotes] = useState('');
   const [photos, setPhotos] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
@@ -414,7 +418,7 @@ export default function HandoverSheet({ order, mode = 'deliver', onClose, onDeli
             </View>
           </ScrollView>
 
-          <View className="px-5 pb-8 pt-3 border-t border-slate-100">
+          <View className="px-5 pt-3 border-t border-slate-100" style={{ paddingBottom: bottom + 32 }}>
             <TouchableOpacity
               onPress={confirm}
               disabled={saving}

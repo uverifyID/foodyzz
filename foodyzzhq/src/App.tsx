@@ -378,7 +378,11 @@ export default function App() {
 
   return (
     <SafeAreaProvider>
-      <StatusBar style="light" backgroundColor="#020617" translucent={false} />
+      {/* Edge-to-edge is mandatory from Android 16 / targetSdk 36, so the status
+          bar is always translucent and `backgroundColor`/`translucent` are no-ops
+          that warn at runtime. Only the icon style is still ours to set; each
+          screen paints its own background up under the bar via the top inset. */}
+      <StatusBar style="light" />
       <StripeProvider publishableKey={stripeKey || 'pk_test_placeholder'} key={stripeKey}>
         <ActiveStoreContext.Provider value={{ switchStore }}>
           {/* Catch render errors anywhere in the navigation tree and show a

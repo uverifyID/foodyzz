@@ -191,7 +191,7 @@ function rtbSummary(order: any) {
 }
 
 export default function LogisticsScreen() {
-  const { top } = useSafeAreaInsets();
+  const { top, bottom } = useSafeAreaInsets();
   const navigation = useNavigation<any>();
   const functions = firebase.app().functions('us-central1');
 
@@ -1317,7 +1317,7 @@ export default function LogisticsScreen() {
           {/* Close button */}
           <TouchableOpacity
             onPress={() => setShowQRScanner(false)}
-            style={{ position: 'absolute', top: 56, right: 20, backgroundColor: 'rgba(0,0,0,0.7)', padding: 10, borderRadius: 24 }}
+            style={{ position: 'absolute', top: top + 12, right: 20, backgroundColor: 'rgba(0,0,0,0.7)', padding: 10, borderRadius: 24 }}
           >
             <X size={22} color="white" />
           </TouchableOpacity>
@@ -1332,7 +1332,7 @@ export default function LogisticsScreen() {
         onRequestClose={() => { setScannedOrder(null); setQrNotFound(false); }}
       >
         <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'flex-end' }}>
-          <View style={{ backgroundColor: 'white', borderTopLeftRadius: 44, borderTopRightRadius: 44, borderTopWidth: 4, borderColor: 'black', padding: 24, maxHeight: '80%' }}>
+          <View style={{ backgroundColor: 'white', borderTopLeftRadius: 44, borderTopRightRadius: 44, borderTopWidth: 4, borderColor: 'black', padding: 24, paddingBottom: bottom + 24, maxHeight: '80%' }}>
             {qrNotFound ? (
               <View style={{ alignItems: 'center', paddingVertical: 32 }}>
                 <View style={{ width: 72, height: 72, borderRadius: 36, backgroundColor: '#fef2f2', borderWidth: 2, borderColor: '#fecaca', justifyContent: 'center', alignItems: 'center', marginBottom: 16 }}>
