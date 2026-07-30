@@ -7,6 +7,8 @@
     "android": "cross-env NODE_OPTIONS=--max-old-space-size=8192 expo run:android",
     "ios": "cross-env NODE_OPTIONS=--max-old-space-size=8192 expo run:ios",
     "web": "cross-env NODE_OPTIONS=--max-old-space-size=8192 expo start --web",
+    "prebuild": "expo prebuild && npx pod-install",
+    "prebuild:clean": "expo prebuild --clean && npx pod-install",
     "postinstall": "patch-package"
   },
   "dependencies": {
