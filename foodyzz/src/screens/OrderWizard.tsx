@@ -47,6 +47,7 @@ import {
 import type { Bike, LogisticsConfig, PromoCampaign, RentalType } from '../types';
 import { useUserProfile } from '../context/UserProfileContext';
 import { useStripeReady } from '../context/StripeReadyContext';
+import { friendlyError, friendlyPaymentError, friendlyServerMessage } from '../services/errors';
 
 const RENTAL_TYPES: { key: RentalType; label: string; blurb: string }[] = [
   { key: 'rent', label: 'Rent', blurb: 'Weekly rental. New or used bike.' },
@@ -432,7 +433,7 @@ export default function OrderWizard() {
           paymentMethodType: 'Card',
           paymentMethodData: { paymentMethodId: savedPaymentMethodId },
         });
-        if (error) { Alert.alert('Payment Error', error.message); return; }
+        if (error) { Alert.alert('Payment Error', friendlyPaymentError(error, 'That payment did not go through. Please try again.')); return; }
       } else {
         const { error: initError } = await initPaymentSheet({
           merchantDisplayName: 'Foodyzz',
@@ -440,10 +441,10 @@ export default function OrderWizard() {
           defaultBillingDetails: { phone: user?.phoneNumber || undefined },
           allowsDelayedPaymentMethods: false,
         });
-        if (initError) { Alert.alert('Payment Setup Error', initError.message); return; }
+        if (initError) { Alert.alert('Payment Setup Error', friendlyPaymentError(initError, 'We could not start the payment. Please try again.')); return; }
         const { error: presentError } = await presentPaymentSheet();
         if (presentError) {
-          if (presentError.code !== 'Canceled') Alert.alert('Payment Error', presentError.message);
+          if (presentError.code !== 'Canceled') Alert.alert('Payment Error', friendlyPaymentError(presentError, 'That payment did not go through. Please try again.'));
           return;
         }
       }
@@ -538,9 +539,9 @@ export default function OrderWizard() {
       // total on screen no longer matches what would be charged.
       if (appliedPromo && String(error?.code || '').includes('failed-precondition')) {
         setAppliedPromo(null);
-        setCouponError(error.message || 'That promo code could not be applied.');
+        setCouponError(friendlyServerMessage(error, 'That promo code could not be applied.'));
       }
-      Alert.alert('Error', error.message || 'An unexpected error occurred during checkout.');
+      Alert.alert('Checkout Failed', friendlyError(error, 'Something went wrong during checkout. Please try again.'));
     } finally {
       setSubmitting(false);
     }
@@ -646,18 +647,40 @@ export default function OrderWizard() {
 
   return (
     <View className="flex-1 bg-slate-50">
-      {/* Progress */}
-      <View className="px-5 pt-4 pb-3 bg-white border-b-2 border-black">
-        <Text className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
-          Step {currentIdx + 1} of {stepSequence.length} · {stepLabel}
-        </Text>
-        <View className="flex-row mt-2">
-          {stepSequence.map((s, i) => (
-            <View
-              key={s}
-              className={`flex-1 h-1.5 mr-1 rounded-full ${i <= currentIdx ? 'bg-brand-green' : 'bg-slate-100'}`}
-            />
-          ))}
+      {/* Title bar + progress. Drawn here rather than as a native header for two
+          reasons: iOS 26 wraps a custom headerRight in a shared-background capsule
+          (a grey disc behind the close button, which react-native-screens 4.11 can't
+          disable), and the white native header used to paint over the top of this
+          white strip — invisibly, since both surfaces are the same white — which is
+          what clipped the step label in half. No safe-area padding is needed: iOS
+          presents this as a page sheet, below the status bar, and Android runs with
+          edgeToEdgeEnabled false. The explicit lineHeight keeps the 10px uppercase
+          glyphs off the top of their own line box. */}
+      <View className="bg-white border-b-2 border-black pt-3">
+        <View className="flex-row items-center px-5">
+          <View className="flex-1" />
+          <Text className="text-lg font-black text-black">Ride Now</Text>
+          <View className="flex-1 items-end">
+            <TouchableOpacity onPress={() => navigation.goBack()} className="p-2">
+              <X size={22} color="black" />
+            </TouchableOpacity>
+          </View>
+        </View>
+        <View className="px-5 pt-3 pb-3">
+          <Text
+            style={{ lineHeight: 14 }}
+            className="text-[10px] font-black text-slate-400 uppercase tracking-widest"
+          >
+            Step {currentIdx + 1} of {stepSequence.length} · {stepLabel}
+          </Text>
+          <View className="flex-row mt-2">
+            {stepSequence.map((s, i) => (
+              <View
+                key={s}
+                className={`flex-1 h-1.5 mr-1 rounded-full ${i <= currentIdx ? 'bg-brand-green' : 'bg-slate-100'}`}
+              />
+            ))}
+          </View>
         </View>
       </View>
 

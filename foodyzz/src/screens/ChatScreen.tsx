@@ -27,7 +27,6 @@ import {
 } from 'react-native';
 import { ArrowLeft, Send, MessageSquare, Clock } from 'lucide-react-native';
 import { useNavigation, useRoute, useIsFocused } from '@react-navigation/native';
-import { useHeaderHeight } from '@react-navigation/elements';
 import { BottomTabBarHeightContext } from '@react-navigation/bottom-tabs';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { auth, db } from '../services/firebase';
@@ -56,7 +55,6 @@ export default function ChatScreen() {
     const route = useRoute<any>();
     const isFocused = useIsFocused();
     const insets = useSafeAreaInsets();
-    const headerHeight = useHeaderHeight();
     // This screen mounts twice over: as the Chat tab, and as the Support/OrderChat
     // stack routes. useSafeAreaInsets always reports window insets (bottom-tabs
     // never narrows them), but under the tab navigator the tab bar already covers
@@ -109,43 +107,16 @@ export default function ChatScreen() {
         return [...remote, ...pending.filter((p) => !confirmed.has(p.id))];
     }, [remote, pending]);
 
+    // This screen draws its own header bar (see `header` below) instead of using the
+    // native one. On iOS 26 UIKit gives every custom headerLeft/headerRight view a
+    // "shared background" capsule: it painted a light pill behind the back button —
+    // opaque against the page rather than transparent — and clipped the bottom of the
+    // button's black border, because the capsule is shorter than the bordered box.
+    // react-native-screens 4.11 exposes no way to opt a bar item out of it, so the
+    // only reliable fix is not to use bar items at all.
     useLayoutEffect(() => {
-        navigation.setOptions({
-            headerShown: true,
-            headerTitle: () => (
-                <View>
-                    <Text className="text-[8px] font-mono font-black text-indigo-600 uppercase tracking-widest leading-none">
-                        {isOrderThread ? 'Order Dispatch' : 'Direct Line'}
-                    </Text>
-                    <Text className="text-sm font-black text-black uppercase tracking-tight leading-none">
-                        {isOrderThread ? (orderData?.providerName || 'Assigning Partner...') : 'FoodyzzHQ'}
-                    </Text>
-                    <Text className="text-[7px] font-mono text-slate-400 font-bold uppercase mt-0.5">
-                        {isOrderThread ? `REF: ${orderId!.replace(/^order_/, '')}` : 'We usually reply in minutes'}
-                    </Text>
-                </View>
-            ),
-            headerTitleAlign: 'left',
-            // As the Chat tab there's nothing to go back to, so only show the arrow
-            // when this screen was pushed (order card / Account → Support).
-            headerLeft: navigation.canGoBack()
-                ? () => (
-                    <TouchableOpacity
-                        onPress={() => navigation.goBack()}
-                        className="p-2 bg-slate-100 rounded-xl border-2 border-black ml-4 mr-2"
-                    >
-                        <ArrowLeft size={18} color="black" />
-                    </TouchableOpacity>
-                )
-                : undefined,
-            headerRight: () => (
-                <View className="bg-indigo-50 px-2 py-0.5 rounded-lg border-2 border-indigo-600 mr-4">
-                    <Text className="text-[8px] font-black text-indigo-600 uppercase">Secure Line</Text>
-                </View>
-            ),
-            headerStyle: { elevation: 0, shadowOpacity: 0, borderBottomWidth: 4, borderBottomColor: 'black', backgroundColor: 'white' },
-        });
-    }, [navigation, orderData, orderId, isOrderThread]);
+        navigation.setOptions({ headerShown: false });
+    }, [navigation]);
 
     // Switching between threads (tab → order card) must not leak the previous
     // thread's bubbles into the new one for a frame.
@@ -295,20 +266,66 @@ export default function ChatScreen() {
         }
     }, [inputText, user, profile, isOrderThread, orderId]);
 
+    // The header the native bar used to render. Nothing here sits in a UIKit bar item,
+    // so no capsule is drawn behind the back button and its border can't be clipped.
+    // insets.top stands in for the status-bar space the native header reserved.
+    const header = (
+        <View style={{ paddingTop: insets.top }} className="bg-white border-b-4 border-black">
+            {/* pb-4, not py-2: the back button is the tallest thing in the row (18pt icon
+                + p-2 + its 2pt border), and at 8pt it sat right on the 4pt bottom rule —
+                the button's lower border and the third title line both read as touching
+                it. The top stays at 8pt since insets.top already spaces the row off the
+                status bar. */}
+            <View className="flex-row items-center px-4 pt-2 pb-4">
+                {/* As the Chat tab there's nothing to go back to, so only show the arrow
+                    when this screen was pushed (order card / Account → Support). */}
+                {navigation.canGoBack() && (
+                    <TouchableOpacity
+                        onPress={() => navigation.goBack()}
+                        className="p-2 bg-slate-100 rounded-xl border-2 border-black mr-3"
+                    >
+                        <ArrowLeft size={18} color="black" />
+                    </TouchableOpacity>
+                )}
+                <View className="flex-1">
+                    <Text className="text-[8px] font-mono font-black text-indigo-600 uppercase tracking-widest leading-none">
+                        {isOrderThread ? 'Order Dispatch' : 'Direct Line'}
+                    </Text>
+                    <Text className="text-sm font-black text-black uppercase tracking-tight leading-none">
+                        {isOrderThread ? (orderData?.providerName || 'Assigning Partner...') : 'FoodyzzHQ'}
+                    </Text>
+                    <Text className="text-[7px] font-mono text-slate-400 font-bold uppercase mt-0.5">
+                        {isOrderThread ? `REF: ${orderId!.replace(/^order_/, '')}` : 'We usually reply in minutes'}
+                    </Text>
+                </View>
+                <View className="bg-indigo-50 px-2 py-0.5 rounded-lg border-2 border-indigo-600 ml-2">
+                    <Text className="text-[8px] font-black text-indigo-600 uppercase">Secure Line</Text>
+                </View>
+            </View>
+        </View>
+    );
+
     if (loading) {
         return (
-            <View className="flex-1 justify-center items-center bg-white">
-                <ActivityIndicator color={COLORS.brand.greenDark} />
+            <View className="flex-1 bg-white">
+                {header}
+                <View className="flex-1 justify-center items-center">
+                    <ActivityIndicator color={COLORS.brand.greenDark} />
+                </View>
             </View>
         );
     }
 
     return (
-        <KeyboardAvoidingView
-            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-            keyboardVerticalOffset={Platform.OS === 'ios' ? headerHeight : 0}
-            className="flex-1 bg-slate-50"
-        >
+        <View className="flex-1 bg-slate-50">
+            {header}
+            <KeyboardAvoidingView
+                behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+                // The header is now a sibling above this view, so this view's bottom edge
+                // IS the screen bottom — the keyboard overlap is exactly its own height
+                // and needs no header offset.
+                className="flex-1 bg-slate-50"
+            >
             {/* Virtualized so a long thread doesn't mount every bubble. Auto-scroll is
                 driven by onContentSizeChange rather than a messages-length effect: the
                 effect fired BEFORE the new bubble had laid out, so the list stopped
@@ -401,6 +418,7 @@ export default function ChatScreen() {
                     <Send size={18} color={inputText.trim() ? '#507425' : '#94a3b8'} />
                 </TouchableOpacity>
             </View>
-        </KeyboardAvoidingView>
+            </KeyboardAvoidingView>
+        </View>
     );
 }

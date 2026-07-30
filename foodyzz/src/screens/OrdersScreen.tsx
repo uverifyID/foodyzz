@@ -14,6 +14,7 @@ import { Marker } from 'react-native-maps';
 import { RentalOrder, OrderStatus } from '../types';
 import { useUserProfile } from '../context/UserProfileContext';
 import { hasDocumentOnFile } from '../services/customerDocuments';
+import { friendlyError, friendlyPaymentError } from '../services/errors';
 
 // Status definitions aligned with POC. Always five steps — step 2 just renames
 // itself to "ID Pending" (and turns orange) when the customer hasn't uploaded
@@ -295,7 +296,7 @@ export default function OrdersScreen() {
             });
             setConfirmCancelId(null);
         } catch (error: any) {
-            Alert.alert('Could not cancel', error?.message || 'Please try again.');
+            Alert.alert('Could not cancel', friendlyError(error, 'We could not cancel that order. Please try again.'));
         } finally {
             setCancellingId(null);
         }
@@ -313,7 +314,7 @@ export default function OrdersScreen() {
             setSelectedOrder(prev => prev ? ({ ...prev, rating: ratingStars, feedback: fb || undefined } as RentalOrder) : prev);
             setRatingStars(0); setRatingFeedback('');
         } catch (e: any) {
-            Alert.alert('Error', e?.message || 'Could not submit rating.');
+            Alert.alert('Could not submit rating', friendlyError(e, 'Your rating did not go through. Please try again.'));
         } finally {
             setSubmittingRating(false);
         }
@@ -336,10 +337,10 @@ export default function OrdersScreen() {
                     defaultBillingDetails: { phone: user?.phoneNumber || undefined },
                     allowsDelayedPaymentMethods: false,
                 });
-                if (initError) { Alert.alert('Payment Setup Error', initError.message); return; }
+                if (initError) { Alert.alert('Payment Setup Error', friendlyPaymentError(initError, 'We could not start the payment. Please try again.')); return; }
                 const { error: presentError } = await presentPaymentSheet();
                 if (presentError) {
-                    if (presentError.code !== 'Canceled') Alert.alert('Payment Error', presentError.message);
+                    if (presentError.code !== 'Canceled') Alert.alert('Payment Error', friendlyPaymentError(presentError, 'That payment did not go through. Please try again.'));
                     return;
                 }
             }
@@ -349,7 +350,7 @@ export default function OrdersScreen() {
             setTipChoice(null); setTipCustom('');
             Alert.alert('Thank you! 🎉', `Your $${amount.toFixed(2)} tip was sent to your provider.`);
         } catch (e: any) {
-            Alert.alert('Error', e?.message || 'Could not add tip.');
+            Alert.alert('Could not add tip', friendlyError(e, 'Your tip did not go through. Please try again.'));
         } finally {
             setSubmittingTip(false);
         }
@@ -379,7 +380,7 @@ export default function OrdersScreen() {
                                 Alert.alert('Congratulations! 🎉', 'Your bike is paid off and now yours to keep.');
                             }
                         } catch (e: any) {
-                            Alert.alert('Payment failed', e?.message || 'Could not complete the payoff. Please try again.');
+                            Alert.alert('Payment failed', friendlyError(e, 'Could not complete the payoff. Please try again.'));
                         } finally {
                             setPayingOffId(null);
                         }

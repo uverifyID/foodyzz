@@ -1,9 +1,9 @@
 import React, { useEffect, useState } from 'react';
-import { TouchableOpacity, View } from 'react-native';
+import { View } from 'react-native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Sparkles, Calendar, User, MessageCircle, X } from 'lucide-react-native';
+import { Sparkles, Calendar, User, MessageCircle } from 'lucide-react-native';
 import authNative from '@react-native-firebase/auth';
 
 import { db } from '../services/firebase';
@@ -95,18 +95,14 @@ export default function AppNavigator() {
       <Stack.Screen
         name="Wizard"
         component={OrderWizard}
-        options={({ navigation }) => ({
+        // No native header: on iOS 26 UIKit wraps a custom headerRight in its own
+        // shared-background capsule, which drew a grey disc behind the close button.
+        // react-native-screens 4.11 can't opt a bar item out of it, so the wizard
+        // draws its own title bar (see OrderWizard) alongside the step progress.
+        options={{
           presentation: 'modal',
-          headerShown: true,
-          title: 'Ride Now',
-          headerStyle: { backgroundColor: 'white' },
-          headerShadowVisible: false,
-          headerRight: () => (
-            <TouchableOpacity onPress={() => navigation.goBack()} style={{ padding: 8 }}>
-              <X size={22} color="black" />
-            </TouchableOpacity>
-          ),
-        })}
+          headerShown: false,
+        }}
       />
       {/* Both of these are the SAME screen as the Chat tab. `Support` is the Account
           entry point to the global FoodyzzHQ conversation; `OrderChat` carries an

@@ -7,6 +7,7 @@
 import React, { useEffect, useState } from 'react';
 import { View, Text, TouchableOpacity, Image, ActivityIndicator, Alert } from 'react-native';
 import { CreditCard, FileText, CheckCircle, Clock, ShieldCheck, Lock, AlertTriangle } from 'lucide-react-native';
+import { friendlyError } from '../services/errors';
 import {
   pickDocumentImage,
   uploadDocumentImage,
@@ -79,7 +80,7 @@ export default function IdentityDocumentsCard({ profile, subtitle, onSaved }: Pr
       const uri = await pickDocumentImage(source, slot === 'address' ? 'addressProof' : 'driverLicense');
       if (uri) setLocal((prev) => ({ ...prev, [slot]: uri }));
     } catch (e: any) {
-      Alert.alert('Could not open', e?.message || 'Please try again.');
+      Alert.alert('Could not open', friendlyError(e, 'We could not open that document. Please try again.'));
     }
   };
 
@@ -133,7 +134,7 @@ export default function IdentityDocumentsCard({ profile, subtitle, onSaved }: Pr
       onSaved?.();
       Alert.alert('Documents submitted', 'FoodyzzHQ will verify your ID and proof of address before delivery.');
     } catch (e: any) {
-      Alert.alert('Upload failed', e?.message || 'Please try again.');
+      Alert.alert('Upload failed', friendlyError(e, 'That upload did not complete. Check your connection and try again.'));
     } finally {
       setBusy(false);
     }

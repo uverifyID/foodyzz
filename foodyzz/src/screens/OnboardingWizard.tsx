@@ -9,6 +9,7 @@ import { User, Mail, MapPin, Hash, ArrowRight, ArrowLeft, Check } from 'lucide-r
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { UserProfile } from '../types';
 import AddressAutocomplete from '../components/AddressAutocomplete';
+import { friendlyError } from '../services/errors';
 
 // One-step-at-a-time profile onboarding. Shown whenever the user's Firestore
 // document has `onboarded !== true`. On completion it writes the collected
@@ -138,7 +139,7 @@ export default function OnboardingWizard({
       onComplete?.();
     } catch (error: any) {
       console.error('Onboarding save error:', error);
-      Alert.alert('Save Failed', error.message || 'Could not save your profile. Please try again.');
+      Alert.alert('Save Failed', friendlyError(error, 'Could not save your profile. Please try again.'));
     } finally {
       setSaving(false);
     }

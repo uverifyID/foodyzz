@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useLayoutEffect } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, TextInput, Alert, Switch, Modal, ActivityIndicator, Linking } from 'react-native';
 import { User, Mail, MapPin, MessageSquare, CreditCard, AlertTriangle, ChevronRight, Edit2, X, Trash2, ShieldCheck, LogOut, Bell, Volume2 } from 'lucide-react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Constants from 'expo-constants';
 import { previewSound } from '../services/soundPlayer';
@@ -11,16 +10,20 @@ import { extractZip, geocodeAddress } from '../services/geo';
 import { GlobalConfig } from '../types';
 import authNative from '@react-native-firebase/auth';
 import { useNavigation } from '@react-navigation/native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useStripe, CardField } from '@stripe/stripe-react-native';
 import AddressAutocomplete from '../components/AddressAutocomplete';
 import IdentityDocumentsCard from '../components/IdentityDocumentsCard';
 import { useUserProfile } from '../context/UserProfileContext';
+import { friendlyError, friendlyPaymentError } from '../services/errors';
 
 export default function ProfileScreen() {
-  // Modals cover the whole window including the nav bar, so sheets inside one
-  // carry their own bottom inset.
-  const { bottom } = useSafeAreaInsets();
     const navigation = useNavigation<any>();
+    // insets.top backs the in-screen header (the native one is off to avoid the
+    // iOS 26 bar-item capsule); insets.bottom is for the edit sheet, which as a
+    // Modal covers the whole window including the nav bar.
+    const insets = useSafeAreaInsets();
+    const { bottom } = insets;
     const [user, setUser] = useState(authNative().currentUser);
     // Profile now comes from the shared single listener (UserProfileContext) rather
     // than a duplicate per-screen users/{phone} onSnapshot.
@@ -62,27 +65,13 @@ export default function ProfileScreen() {
         });
     }, []);
 
+    // Header drawn in-screen (see `header` below) rather than via a native one: on
+    // iOS 26 UIKit wraps a custom headerRight in its own shared-background capsule,
+    // which painted a grey pill behind the Edit button. react-native-screens 4.11
+    // exposes no way to opt a bar item out of it.
     useLayoutEffect(() => {
-        navigation.setOptions({
-            headerShown: true,
-            headerTitle: () => (
-                <View>
-                    <Text className="text-xl font-black text-black uppercase tracking-tighter leading-none">My.<Text className="text-brand-green-dark">Profile</Text></Text>
-                </View>
-            ),
-            headerTitleAlign: 'left',
-            headerRight: () => !isEditing ? (
-                <TouchableOpacity
-                    onPress={() => setIsEditing(true)}
-                    className="bg-indigo-50 px-3 py-1.5 rounded-xl border border-indigo-100 flex-row items-center gap-2 mr-4"
-                >
-                    <Edit2 size={12} color={COLORS.brand.greenDark} />
-                    <Text className="text-indigo-700 font-black text-[10px] uppercase">Edit</Text>
-                </TouchableOpacity>
-            ) : null,
-            headerStyle: { elevation: 0, shadowOpacity: 0, borderBottomWidth: 0, backgroundColor: 'white' },
-        });
-    }, [navigation, isEditing]);
+        navigation.setOptions({ headerShown: false });
+    }, [navigation]);
 
     // Seed the edit-form fields whenever the shared profile updates. Mirrors the old
     // per-snapshot behavior (the listener that used to live here set these on every
@@ -107,7 +96,7 @@ export default function ProfileScreen() {
                 paymentMethodData: { billingDetails: { name: cardName.trim() } },
             });
             if (error || !paymentMethod) {
-                Alert.alert('Card Error', error?.message || 'Could not process card details.');
+                Alert.alert('Card Error', friendlyPaymentError(error, 'Could not process those card details. Check them and try again.'));
                 return;
             }
             await getFunctionsInstance().httpsCallable('saveCustomerBillingCard')({
@@ -120,7 +109,7 @@ export default function ProfileScreen() {
             setCardComplete(false);
             Alert.alert('Card Saved', 'Your card has been securely saved for future orders.');
         } catch (err: any) {
-            Alert.alert('Save Failed', err.message || 'Could not save card.');
+            Alert.alert('Save Failed', friendlyError(err, 'Could not save your card. Please try again.'));
         } finally {
             setIsSavingCard(false);
         }
@@ -206,16 +195,40 @@ export default function ProfileScreen() {
         }
     };
 
+    // What the native header used to render. Nothing here is a UIKit bar item, so no
+    // capsule is drawn behind the Edit button. insets.top stands in for the status-bar
+    // space the native header reserved.
+    const header = (
+        <View style={{ paddingTop: insets.top }} className="bg-white">
+            <View className="flex-row items-center justify-between px-4 pt-2 pb-3">
+                <Text className="text-xl font-black text-black uppercase tracking-tighter leading-none">My.<Text className="text-brand-green-dark">Profile</Text></Text>
+                {!isEditing && (
+                    <TouchableOpacity
+                        onPress={() => setIsEditing(true)}
+                        className="bg-indigo-50 px-3 py-1.5 rounded-xl border border-indigo-100 flex-row items-center gap-2"
+                    >
+                        <Edit2 size={12} color={COLORS.brand.greenDark} />
+                        <Text className="text-indigo-700 font-black text-[10px] uppercase">Edit</Text>
+                    </TouchableOpacity>
+                )}
+            </View>
+        </View>
+    );
+
     if (loading) {
         return (
-            <View className="flex-1 justify-center items-center bg-white">
-                <ActivityIndicator color={COLORS.brand.greenDark} />
+            <View className="flex-1 bg-white">
+                {header}
+                <View className="flex-1 justify-center items-center">
+                    <ActivityIndicator color={COLORS.brand.greenDark} />
+                </View>
             </View>
         );
     }
 
     return (
         <View className="flex-1 bg-white">
+            {header}
             <ScrollView className="flex-1 px-4 pt-4" showsVerticalScrollIndicator={false}>
                 {/* Profile Card */}
                 <View className="bg-white border-2 border-black rounded-[32px] p-6 shadow-brutalist mb-6">
