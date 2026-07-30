@@ -7,6 +7,11 @@ Options -Indexes
 AddDefaultCharset UTF-8
 DirectoryIndex index.html
 
+# Real 404 page with a real 404 status — crawlers must not see Apache's default
+# page or a soft-200. Referenced with the extension so the clean-URL rules below
+# (which only match [a-z-]+) never touch it.
+ErrorDocument 404 /404.html
+
 <IfModule mod_rewrite.c>
   RewriteEngine On
 

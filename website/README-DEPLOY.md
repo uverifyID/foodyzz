@@ -10,6 +10,7 @@ Static site, no build step. Everything in this folder is deploy-ready.
 | `contact.html` | Contact form → `contactForm` Cloud Function → email to admin |
 | `privacy.html` | Privacy Policy (privacy@foodyzz.com) |
 | `terms.html` | Terms & Conditions (legal@foodyzz.com) |
+| `404.html` | Not-found page, served with a real 404 via `ErrorDocument` (noindex) |
 | `css/style.css` | Brand system (foodyzz green #86B54F, neubrutalist, Inter/Space Grotesk) |
 | `js/main.js` | Nav toggle + footer year |
 | `js/contact.js` | Contact form submit → Cloud Function endpoint |
@@ -37,6 +38,9 @@ Static site, no build step. Everything in this folder is deploy-ready.
 4. **Test**:
    - https://foodyzz.com loads; www.foodyzz.com and http:// redirect to it
    - `/privacy`, `/terms`, `/contact` clean URLs resolve
+   - a nonsense URL (`/nope`) returns the styled 404 page **with HTTP status 404**
+     (`curl -sI https://foodyzz.com/nope | head -1`)
+   - the App Store / Google Play buttons in the `#get-app` band open the live listings
    - Submit the contact form → admin email arrives (rajshrestha@gmail.com via
      `apiConfigSecret/smtp`), and a `contactMessages` doc appears in Firestore
 

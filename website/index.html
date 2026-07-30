@@ -10,15 +10,20 @@
   <link rel="canonical" href="https://foodyzz.com/" />
   <link rel="icon" type="image/png" sizes="64x64" href="assets/favicon-64.png" />
   <link rel="apple-touch-icon" href="assets/foodyzz-icon.png" />
+  <!-- iOS Safari smart app banner: offers the App Store install to iPhone visitors -->
+  <meta name="apple-itunes-app" content="app-id=6794564474" />
   <meta property="og:type" content="website" />
   <meta property="og:site_name" content="Foodyzz" />
   <meta property="og:locale" content="en_US" />
   <meta property="og:title" content="Foodyzz — E-Bike Rentals for NYC Delivery Riders" />
   <meta property="og:description" content="Rent today, own it later. E-bikes delivered to your door in New York City — flexible plans built for delivery riders." />
   <meta property="og:image" content="https://foodyzz.com/assets/foodyzz-icon.png" />
+  <meta property="og:image:width" content="512" />
+  <meta property="og:image:height" content="512" />
   <meta property="og:image:alt" content="Foodyzz — e-bike rentals for NYC delivery riders" />
   <meta property="og:url" content="https://foodyzz.com/" />
-  <meta name="twitter:card" content="summary_large_image" />
+  <!-- Square 512×512 share image, so the compact card — not the wide one — is correct here -->
+  <meta name="twitter:card" content="summary" />
   <meta name="twitter:title" content="Foodyzz — E-Bike Rentals for NYC Delivery Riders" />
   <meta name="twitter:description" content="Rent today, own it later. E-bikes delivered to your door in New York City — flexible plans built for delivery riders." />
   <meta name="twitter:image" content="https://foodyzz.com/assets/foodyzz-icon.png" />
@@ -45,6 +50,10 @@
           "url": "https://foodyzz.com/assets/foodyzz-icon.png"
         },
         "description": "E-bike rentals, rent-to-own plans, and outright purchase for New York City delivery riders — delivered to your door.",
+        "sameAs": [
+          "https://play.google.com/store/apps/details?id=com.foodyzz",
+          "https://apps.apple.com/us/app/foodyzz/id6794564474"
+        ],
         "areaServed": {
           "@type": "City",
           "name": "New York City",
@@ -79,6 +88,40 @@
         "name": "Foodyzz",
         "inLanguage": "en-US",
         "publisher": { "@id": "https://foodyzz.com/#organization" }
+      },
+      {
+        "@type": "MobileApplication",
+        "@id": "https://foodyzz.com/#app-android",
+        "name": "Foodyzz",
+        "operatingSystem": "Android",
+        "applicationCategory": "TravelApplication",
+        "url": "https://play.google.com/store/apps/details?id=com.foodyzz",
+        "installUrl": "https://play.google.com/store/apps/details?id=com.foodyzz",
+        "downloadUrl": "https://play.google.com/store/apps/details?id=com.foodyzz",
+        "description": "Rent, rent-to-own, or buy a delivery-grade e-bike in New York City — delivered to your door and managed from your phone.",
+        "publisher": { "@id": "https://foodyzz.com/#organization" },
+        "offers": {
+          "@type": "Offer",
+          "price": "0",
+          "priceCurrency": "USD"
+        }
+      },
+      {
+        "@type": "MobileApplication",
+        "@id": "https://foodyzz.com/#app-ios",
+        "name": "Foodyzz",
+        "operatingSystem": "iOS",
+        "applicationCategory": "TravelApplication",
+        "url": "https://apps.apple.com/us/app/foodyzz/id6794564474",
+        "installUrl": "https://apps.apple.com/us/app/foodyzz/id6794564474",
+        "downloadUrl": "https://apps.apple.com/us/app/foodyzz/id6794564474",
+        "description": "Rent, rent-to-own, or buy a delivery-grade e-bike in New York City — delivered to your door and managed from your phone.",
+        "publisher": { "@id": "https://foodyzz.com/#organization" },
+        "offers": {
+          "@type": "Offer",
+          "price": "0",
+          "priceCurrency": "USD"
+        }
       },
       {
         "@type": "Service",
@@ -455,16 +498,21 @@
         Join the riders already earning on Foodyzz bikes across New York City.
       </p>
       <div class="store-badges">
-        <a class="store-badge" href="/contact" aria-label="Download on the App Store">
-          <span style="font-size:1.6rem"></span>
+        <a class="store-badge" href="https://apps.apple.com/us/app/foodyzz/id6794564474"
+           target="_blank" rel="noopener" aria-label="Download Foodyzz on the App Store">
+          <!-- Inline SVG, not the U+F8FF Apple glyph — that renders as tofu off Apple devices -->
+          <svg width="20" height="24" viewBox="0 0 384 512" fill="currentColor" aria-hidden="true" focusable="false">
+            <path d="M318.7 268.7c-.2-36.7 16.4-64.4 50.1-84.9-18.8-26.9-47.2-41.7-84.7-44.6-36.8-2.8-77 21.3-91.7 21.3-15.5 0-51.1-20.3-79.1-20.3C56.9 141.2 0 184.4 0 272.2c0 26.1 4.8 53.1 14.4 80.8 12.8 36.5 62 122.3 113.4 120.7 26.9-.6 45.8-19.1 80.8-19.1 33.8 0 50.9 18.5 80.7 18.5 51.8-.8 96.2-78.8 108.3-115.4-69.4-32.7-78.9-96.4-78.9-89zM256.6 68.3c25.8-30.6 22.7-58.4 21.7-68.3-21.8 1.3-47 14.9-61.3 31.7-15.8 18-25.1 40.3-23.1 65.1 23.6 1.8 45.2-10.3 62.7-28.5z" />
+          </svg>
           <span><span class="small">Download on the</span><span class="big">App Store</span></span>
         </a>
-        <a class="store-badge" href="/contact" aria-label="Get it on Google Play">
+        <a class="store-badge" href="https://play.google.com/store/apps/details?id=com.foodyzz"
+           target="_blank" rel="noopener" aria-label="Get Foodyzz on Google Play">
           <span style="font-size:1.5rem">▶</span>
           <span><span class="small">Get it on</span><span class="big">Google Play</span></span>
         </a>
       </div>
-      <p class="store-soon">Store listings rolling out now — <a href="/contact">contact us</a> for early access.</p>
+      <p class="store-soon">Free to download. Need a hand getting started? <a href="/contact">Contact us</a>.</p>
     </div>
   </section>
 
@@ -483,6 +531,13 @@
             <li><a href="#how">How It Works</a></li>
             <li><a href="#plans">Plans</a></li>
             <li><a href="#nyc">NYC Coverage</a></li>
+          </ul>
+        </div>
+        <div>
+          <h4>Get the App</h4>
+          <ul>
+            <li><a href="https://apps.apple.com/us/app/foodyzz/id6794564474" target="_blank" rel="noopener">iPhone — App Store</a></li>
+            <li><a href="https://play.google.com/store/apps/details?id=com.foodyzz" target="_blank" rel="noopener">Android — Google Play</a></li>
           </ul>
         </div>
         <div>
