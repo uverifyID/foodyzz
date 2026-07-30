@@ -33,6 +33,7 @@ import { auth, db } from '../services/firebase';
 import { COLORS } from '../theme';
 import { AppRole } from '../types';
 import { useUserProfile } from '../context/UserProfileContext';
+import { logHandledError } from '../services/errors';
 
 // One shape for both threads so the renderer never branches on the collection.
 type ChatMessage = {
@@ -143,7 +144,7 @@ export default function ChatScreen() {
                     orderRef.update({ customerUnreadMessage: false }).catch(() => {});
                 }
             })
-            .catch((e) => console.error('Error fetching order context:', e));
+            .catch((e) => logHandledError('chat:order-context', e));
 
         // Bound the read: only the 100 most recent (DESC + limit) instead of the
         // whole thread, then reverse so display stays oldest→newest.
@@ -166,7 +167,7 @@ export default function ChatScreen() {
                 setListenerFailed(false);
                 setLoading(false);
             }, (error) => {
-                console.error('Firestore Messaging Error:', error);
+                logHandledError('chat:order-messages', error);
                 setListenerFailed(true);
                 setLoading(false);
             });
@@ -199,7 +200,7 @@ export default function ChatScreen() {
                 setListenerFailed(false);
                 setLoading(false);
             }, (error) => {
-                console.error('Error fetching support messages:', error);
+                logHandledError('chat:support-messages', error);
                 setListenerFailed(true);
                 setLoading(false);
             });

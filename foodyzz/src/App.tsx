@@ -27,6 +27,7 @@ import OnboardingWizard from './screens/OnboardingWizard';
 import ErrorBoundary from './components/ErrorBoundary';
 import { UserProfileProvider, useUserProfile } from './context/UserProfileContext';
 import { StripeReadyContext } from './context/StripeReadyContext';
+import { logHandledError } from './services/errors';
 
 // Global navigation reference for deep-linking outside of component context (e.g., from notifications)
 const navigationRef = createNavigationContainerRef<any>();
@@ -273,7 +274,7 @@ export default function App() {
         const key = snap.data()?.stripe?.publishableKey;
         if (key) setStripeKey(key);
       },
-      (err) => console.error('Stripe Key fetch error:', err)
+      (err) => logHandledError('stripe:key-fetch', err)
     );
     return unsub;
   }, [user]);

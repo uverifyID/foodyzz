@@ -87,24 +87,22 @@ export const friendlyError = (e: any, fallback: string): string => {
   return fallback;
 };
 
-// Codes that mean "the customer typed something wrong", as opposed to "the app
-// broke". Callers use this to log at a lower level: console.error raises a LogBox
-// toast over the UI in dev builds, and a mistyped verification code doesn't warrant
-// one on top of the Alert the customer already sees.
-const EXPECTED = new Set([
-  'auth/invalid-verification-code',
-  'auth/missing-verification-code',
-  'auth/invalid-verification-id',
-  'auth/code-expired',
-  'auth/session-expired',
-  'auth/invalid-phone-number',
-  'auth/missing-phone-number',
-  'auth/too-many-requests',
-]);
-
-/** True when the failure is the customer's input rather than a fault worth alerting on. */
-export const isExpectedUserError = (e: any): boolean =>
-  typeof e?.code === 'string' && EXPECTED.has(e.code.trim());
+/**
+ * Records a failure the app has already dealt with — one the customer was told about
+ * through `friendlyError`, or one a listener degrades past on its own.
+ *
+ * Deliberately `console.log` rather than `console.error`. LogBox turns console.error
+ * into a toast pinned over the UI, and that toast outlives the screen that raised it:
+ * a sign-in that failed on the auth screen leaves `[auth/app-not-authorized]` sitting
+ * across the bottom of the Explore tab long after the customer has signed in by other
+ * means. Handled failures belong in the Metro/logcat stream, not on the page. Real
+ * crashes still reach ErrorBoundary, which is where a dev-build toast is warranted.
+ */
+export const logHandledError = (scope: string, e: any): void => {
+  const code = typeof e?.code === 'string' ? e.code.trim() : '';
+  const message = String(e?.message ?? e ?? '');
+  console.log(`[${scope}]`, code ? `${code} — ${message}` : message);
+};
 
 // Two sources DO write their message for the customer: Stripe ("Your card was
 // declined.") and our own Cloud Functions HttpsError ("That promo code has expired.").

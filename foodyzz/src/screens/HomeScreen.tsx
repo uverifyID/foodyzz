@@ -11,6 +11,7 @@ import '@react-native-firebase/functions';
 import { UserProfile, GlobalConfig } from '../types';
 import { geocodeZip, geocodeAddress, haversineMiles, extractZip, Coords } from '../services/geo';
 import { useUserProfile } from '../context/UserProfileContext';
+import { logHandledError } from '../services/errors';
 
 const DEFAULT_RADIUS = 10;
 
@@ -54,7 +55,7 @@ export default function HomeScreen() {
         viewedPromos.current.add(item.promoId);
         const incrementPromoViewsCall = firebase.app().functions('us-central1').httpsCallable('incrementPromoViews');
         incrementPromoViewsCall({ promoId: item.promoId }).catch(err =>
-          console.error("Failed to log view:", err)
+          logHandledError('home:promo-view', err)
         );
       }
     });
@@ -88,7 +89,7 @@ export default function HomeScreen() {
       .onSnapshot((snap) => {
         if (!snap) return;
         setProviders(snap.docs.map(d => ({ id: d.id, ...d.data() } as any)));
-      }, (err) => console.error("Provider Sync Error:", err));
+      }, (err) => logHandledError('home:provider-sync', err));
 
     return () => unsubProviders();
   }, []);
@@ -103,7 +104,7 @@ export default function HomeScreen() {
       .onSnapshot((snap) => {
         if (!snap) return;
         setPromos(snap.docs.map(d => ({ id: d.id, ...d.data() } as any)));
-      }, (err) => console.error("Promo Sync Error:", err));
+      }, (err) => logHandledError('home:promo-sync', err));
 
     return () => unsubPromos();
   }, []);

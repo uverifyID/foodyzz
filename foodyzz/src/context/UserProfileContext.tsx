@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { db } from '../services/firebase';
+import { logHandledError } from '../services/errors';
 
 // Single source of truth for the signed-in customer's `users/{phone}` profile doc.
 // Previously every tab screen (Explore, Account, Chat, the Wizard, the tab-bar
@@ -39,7 +40,7 @@ export function UserProfileProvider({
         setLoading(false);
       },
       (err) => {
-        console.error('Profile listener error (UserProfileContext):', err);
+        logHandledError('profile:listener', err);
         setLoading(false);
       },
     );

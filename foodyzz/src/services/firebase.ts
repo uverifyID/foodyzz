@@ -2,6 +2,7 @@ import '@react-native-firebase/app';
 import auth, { FirebaseAuthTypes } from '@react-native-firebase/auth';
 import firestore from '@react-native-firebase/firestore';
 import functions from '@react-native-firebase/functions';
+import { logHandledError } from './errors';
 
 // Bound the local Firestore (LevelDB) persistence cache so it evicts via LRU
 // well before it can pressure device storage. Without this the SDK defaults to
@@ -114,7 +115,8 @@ export const saveFcmToken = async (phoneNumber: string, fcmToken: string) => {
     // and would leak PII into device/crash logs.
     if (__DEV__) console.log('Customer FCM token saved');
   } catch (error) {
-    console.error(`Error saving customer FCM token for ${phoneNumber}:`, error);
+    // Scope carries no phone number — see the note above on keeping PII out of logs.
+    logHandledError('fcm:save-token', error);
   }
 };
 

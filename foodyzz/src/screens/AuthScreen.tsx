@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, TextInput, TouchableOpacity, ActivityIndicator, Alert, KeyboardAvoidingView, Platform, Image, Linking } from 'react-native';
 import { db, subscribeToGlobalConfig, runWithRetry } from '../services/firebase';
-import { friendlyError, isExpectedUserError } from '../services/errors';
+import { friendlyError, logHandledError } from '../services/errors';
 import authNative from '@react-native-firebase/auth';
 import { Phone, ArrowRight, CheckSquare, Square } from 'lucide-react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -46,13 +46,9 @@ export default function AuthScreen({ onAuthenticated }: { onAuthenticated: (user
       setConfirm(confirmation);
       Alert.alert("Success", "Verification code sent.");
     } catch (error: any) {
-      // A mistyped number is the customer's doing, not a fault: log it quietly so it
-      // doesn't raise a LogBox toast over the Alert in dev builds.
-      if (isExpectedUserError(error)) {
-        if (__DEV__) console.log('[auth] send code rejected:', error?.code);
-      } else {
-        console.error("Send code error:", error);
-      }
+      // The Alert below is how the customer hears about this. Logging it as an error
+      // as well would only pin a LogBox toast over the app on top of that.
+      logHandledError('auth:send-code', error);
       Alert.alert(
         "Could Not Send Code",
         friendlyError(error, 'We could not send a code to that number. Check it and try again.'),
@@ -96,12 +92,8 @@ export default function AuthScreen({ onAuthenticated }: { onAuthenticated: (user
 
       onAuthenticated(user);
     } catch (error: any) {
-      // Same as above: a wrong 6-digit code is expected input, not an app error.
-      if (isExpectedUserError(error)) {
-        if (__DEV__) console.log('[auth] verification rejected:', error?.code);
-      } else {
-        console.error("Verification Error:", error);
-      }
+      // Same as above: the Alert is the customer-facing channel, the log is for us.
+      logHandledError('auth:verify-code', error);
       Alert.alert(
         "Verification Failed",
         friendlyError(error, 'We could not verify that code. Request a new one and try again.'),

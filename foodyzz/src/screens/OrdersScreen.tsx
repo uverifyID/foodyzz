@@ -14,7 +14,7 @@ import { Marker } from 'react-native-maps';
 import { RentalOrder, OrderStatus } from '../types';
 import { useUserProfile } from '../context/UserProfileContext';
 import { hasDocumentOnFile } from '../services/customerDocuments';
-import { friendlyError, friendlyPaymentError } from '../services/errors';
+import { friendlyError, friendlyPaymentError, logHandledError } from '../services/errors';
 
 // Status definitions aligned with POC. Always five steps — step 2 just renames
 // itself to "ID Pending" (and turns orange) when the customer hasn't uploaded
@@ -276,7 +276,7 @@ export default function OrdersScreen() {
             setPastOrders(all.filter(isFinishedOrder));
             setLoading(false);
         }, (error) => {
-            console.error("Firestore Listen Error:", error);
+            logHandledError('orders:listener', error);
             setLoading(false);
         });
 

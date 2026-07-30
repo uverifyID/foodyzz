@@ -47,7 +47,7 @@ import {
 import type { Bike, LogisticsConfig, PromoCampaign, RentalType } from '../types';
 import { useUserProfile } from '../context/UserProfileContext';
 import { useStripeReady } from '../context/StripeReadyContext';
-import { friendlyError, friendlyPaymentError, friendlyServerMessage } from '../services/errors';
+import { friendlyError, friendlyPaymentError, friendlyServerMessage, logHandledError } from '../services/errors';
 
 const RENTAL_TYPES: { key: RentalType; label: string; blurb: string }[] = [
   { key: 'rent', label: 'Rent', blurb: 'Weekly rental. New or used bike.' },
@@ -533,7 +533,7 @@ export default function OrderWizard() {
 
       navigation.navigate('Main', { screen: 'My Rentals' });
     } catch (error: any) {
-      console.error('Checkout Error:', error);
+      logHandledError('checkout', error);
       // A code the backend refused (wrong type, expired, or already spent) has to come
       // off before a retry — otherwise every retry fails on the same coupon, and the
       // total on screen no longer matches what would be charged.
