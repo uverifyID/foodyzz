@@ -245,6 +245,17 @@ export default function OrderWizard() {
     [logistics, rentalType, optedOutFees],
   );
 
+  // What the Fees step lists. The deposit is dropped from the LIST only — it is not a
+  // rental fee, it is refundable, and leading with it made the step open on a charge
+  // the customer never actually pays. It is still disclosed twice below: in the "how
+  // and when you are charged" panel and again on the confirm step.
+  //
+  // `orderFees` itself is deliberately untouched — that array is what createPaymentIntent
+  // re-prices against and what is written to the order, so filtering it would change
+  // what the backend sees, not just what the screen shows. Memoised so the step does
+  // not rebuild the array on every render.
+  const listedFees = useMemo(() => orderFees.filter((f) => f.key !== 'deposit'), [orderFees]);
+
   const quote = useMemo(() => {
     if (!rentalType || !bikeModel) return null;
     return computeQuote(logistics, bikeModel, rentalType, orderFees, durationValue);
@@ -949,10 +960,33 @@ export default function OrderWizard() {
               So there are no surprises — here is everything that comes with your rental.
             </Text>
 
-            {orderFees.map((fee) => {
+            {/* The bike rental itself, in the slot the deposit used to hold. It is the
+                one line every customer is looking for, and it opens the list with what
+                they are actually paying rather than a refundable hold. Priced with the
+                same rateFor() the quote and the backend use, so it cannot drift. */}
+            {bikeModel && rentalType && quote && (
+              <View className="flex-row items-center justify-between px-4 py-4 mb-3 rounded-2xl border-2 border-black bg-white shadow-brutalist">
+                <View className="flex-1 pr-3">
+                  <Text className="font-black text-slate-800 uppercase text-sm">Bike rental</Text>
+                  <Text className="text-[11px] font-bold text-slate-400 mt-0.5">
+                    Model {bikeModel} · {quote.durationUnit === 'months' ? 'Billed monthly' : 'Billed weekly'}
+                  </Text>
+                </View>
+                <View className="items-end">
+                  <Text className="font-black text-slate-800">
+                    ${rateFor(logistics, bikeModel, rentalType).toFixed(2)}
+                  </Text>
+                  <Text className="text-[10px] font-black uppercase mt-0.5 text-emerald-600">
+                    × {quote.durationValue} {quote.durationUnit}
+                  </Text>
+                </View>
+              </View>
+            )}
+
+            {listedFees.map((fee) => {
               const locked = fee.required;
-              // The deposit is always secured at delivery (see computeQuote/isDeposit),
-              // so it can never be opted out — even when its `required` flag is false.
+              // Kept for the label/copy branches below: the deposit no longer appears in
+              // this list, but a `deposit` key reaching here must still never be opt-out.
               const isDeposit = fee.key === 'deposit';
               const uiLocked = locked || isDeposit;
               return (
