@@ -328,7 +328,15 @@ export interface BikeModelConfig {
   imageUrl: string;
   rates: { rent: number; buy: number; rentToBuy: number };
   // Minimum number of periods the customer must commit to. Buy has none.
-  minCommitment: { rent: number; rentToBuy: number };
+  // rentToBuyCadence controls how often installments bill. 'monthly' is production;
+  // 'daily'/'weekly' exist only to exercise a plan end-to-end without waiting months.
+  // Mirrors LogisticsDoc in functions/src/index.ts, which is authoritative.
+  minCommitment: {
+    rent: number;
+    rentToBuy: number;
+    rentCadence?: 'daily' | 'weekly' | 'monthly';
+    rentToBuyCadence?: 'daily' | 'weekly' | 'monthly';
+  };
 }
 
 // `required` fees cannot be opted out of. The deposit (isDeposit) is disclosed to

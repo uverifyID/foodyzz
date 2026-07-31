@@ -129,7 +129,7 @@ export default function GlobalConfigTab({
                                 </div>
                             </div>
 
-                            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                            <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
                                 <div>
                                     <label className={label}>Min Rent (weeks)</label>
                                     <input type="number" step="1" value={m.minCommitment.rent}
@@ -139,6 +139,29 @@ export default function GlobalConfigTab({
                                     <label className={label}>Min Rent to Buy (months)</label>
                                     <input type="number" step="1" value={m.minCommitment.rentToBuy}
                                         onChange={(e) => updateModel(idx, 'minCommitment.rentToBuy', parseInt(e.target.value, 10) || 0)} className={input} />
+                                </div>
+                                <div>
+                                    {/* Billing interval for rent-to-buy installments. Daily and weekly
+                                        exist only so a plan can be exercised end-to-end without waiting
+                                        months — they were previously settable outside this console, which
+                                        meant a test setting could sit in production with nothing showing
+                                        it. Surfaced here so it is visible and reversible. */}
+                                    <label className={label}>Rent to Buy billing</label>
+                                    <select
+                                        value={m.minCommitment.rentToBuyCadence ?? 'monthly'}
+                                        onChange={(e) => updateModel(idx, 'minCommitment.rentToBuyCadence', e.target.value)}
+                                        className={input}
+                                    >
+                                        <option value="monthly">Monthly (production)</option>
+                                        <option value="weekly">Weekly (testing)</option>
+                                        <option value="daily">Daily (testing)</option>
+                                    </select>
+                                    {m.minCommitment.rentToBuyCadence &&
+                                     m.minCommitment.rentToBuyCadence !== 'monthly' && (
+                                        <p className="mt-1 text-xs font-bold text-rose-600">
+                                            Test cadence — installments bill {m.minCommitment.rentToBuyCadence}, not monthly.
+                                        </p>
+                                    )}
                                 </div>
                                 <div>
                                     <label className={label}>New in stock</label>
