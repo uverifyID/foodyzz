@@ -3555,7 +3555,13 @@ function quoteRentalRenewal(order: any, logistics: LogisticsDoc, config: GlobalC
   const quote = computeRentalSubtotal(
     logistics, "rent", Number(order.bikeModel), Number(order.durationValue) || 1, acceptedFeeKeys,
   );
-  const renewalSubtotal = round2(quote.subtotal - quote.oneTimeFees);
+  // A renewal is a fresh rental period, not a continuation of the paid-for one: the
+  // customer keeps the bike for another full committed term, so it is priced exactly
+  // like a new rental — including the fee bundle. This used to subtract oneTimeFees,
+  // which read `once` as "once ever". It means once PER RENTAL PERIOD, and a renewal
+  // starts a new one, so maintenance/tracker/insurance apply again and the platform
+  // was absorbing them on every missed collection.
+  const renewalSubtotal = quote.subtotal;
   const pricing = computePricing(renewalSubtotal, Number(order.taxRate) || 0, config);
   const adminFee = Math.max(0, Number(logistics.pickupFee) || 0);
 
@@ -3568,7 +3574,9 @@ function quoteRentalRenewal(order: any, logistics: LogisticsDoc, config: GlobalC
     amount: round2(quote.baseRate * quote.periods),
   }];
   for (const f of logistics.fees || []) {
-    if (f.isDeposit || f.cadence === "once") continue;
+    // Only the deposit is excluded — it is secured separately and never invoiced.
+    // Every billable fee is re-charged, `once` included, for the reason above.
+    if (f.isDeposit) continue;
     if (!f.required && !acceptedFeeKeys.includes(f.key)) continue;
     lines.push({label: String(f.label || "Fee"), amount: round2(f.amount)});
   }
