@@ -261,6 +261,16 @@ export default function OrderWizard() {
     return computeQuote(logistics, bikeModel, rentalType, orderFees, durationValue);
   }, [logistics, bikeModel, rentalType, orderFees, durationValue]);
 
+  // Wording for the fees step. A fee's `cadence` is the unit its RATE is quoted in, not
+  // how often the card is charged — computeQuote bills plain rent as rate × term plus the
+  // fee bundle ONCE, all in a single charge at delivery, and rent-to-buy repeats rate +
+  // the same bundle on every installment. "Billed weekly" next to a 4-week charge read as
+  // four weekly debits, so the step now names the period the customer actually pays for.
+  const isInstalmentPlan = rentalType === 'rentToBuy';
+  const unitLabel = quote?.durationUnit === 'months' ? 'month' : 'week';
+  // "4-week" / "1 week" — the term the single charge covers.
+  const termLabel = quote ? `${quote.durationValue}-${unitLabel}` : '';
+
   // Stripe's cut, estimated the same way the backend computes it
   // (feeBase * processingFee + transactionFee). Shown up front so the amount held
   // on the card is never a surprise at the payment sheet.
@@ -958,6 +968,11 @@ export default function OrderWizard() {
             </View>
             <Text className="text-xs font-bold text-slate-400 mb-4">
               So there are no surprises — here is everything that comes with your rental.
+              {quote
+                ? isInstalmentPlan
+                  ? ' This is what you pay each month.'
+                  : ` Your ${termLabel} rental is paid in one charge at delivery.`
+                : ''}
             </Text>
 
             {/* The bike rental itself, in the slot the deposit used to hold. It is the
@@ -969,15 +984,25 @@ export default function OrderWizard() {
                 <View className="flex-1 pr-3">
                   <Text className="font-black text-slate-800 uppercase text-sm">Bike rental</Text>
                   <Text className="text-[11px] font-bold text-slate-400 mt-0.5">
-                    Model {bikeModel} · {quote.durationUnit === 'months' ? 'Billed monthly' : 'Billed weekly'}
+                    Model {bikeModel} · ${rateFor(logistics, bikeModel, rentalType).toFixed(2)} per {unitLabel}
+                    {isInstalmentPlan
+                      ? ''
+                      : ` × ${quote.durationValue} ${quote.durationValue === 1 ? unitLabel : quote.durationUnit}`}
                   </Text>
                 </View>
                 <View className="items-end">
+                  {/* The amount actually taken: the whole term for plain rent, one
+                      installment for rent-to-buy. Showing the weekly rate here was the
+                      other half of the confusion — it sat next to "billed weekly". */}
                   <Text className="font-black text-slate-800">
-                    ${rateFor(logistics, bikeModel, rentalType).toFixed(2)}
+                    $
+                    {(
+                      rateFor(logistics, bikeModel, rentalType) *
+                      (isInstalmentPlan ? 1 : quote.durationValue)
+                    ).toFixed(2)}
                   </Text>
                   <Text className="text-[10px] font-black uppercase mt-0.5 text-emerald-600">
-                    × {quote.durationValue} {quote.durationUnit}
+                    {isInstalmentPlan ? 'Per month' : `${termLabel} total`}
                   </Text>
                 </View>
               </View>
@@ -1005,7 +1030,11 @@ export default function OrderWizard() {
                   <View className="flex-1 pr-3">
                     <Text className="font-black text-slate-800 uppercase text-sm">{fee.label}</Text>
                     <Text className="text-[11px] font-bold text-slate-400 mt-0.5">
-                      {fee.cadence === 'weekly' ? 'Billed weekly' : fee.cadence === 'monthly' ? 'Billed monthly' : 'One time'}
+                      {isDeposit
+                        ? 'One time'
+                        : isInstalmentPlan
+                          ? 'Charged with each monthly payment'
+                          : `Charged once for the ${termLabel} period`}
                       {isDeposit ? '' : locked ? ' · Required' : ' · Optional'}
                       {isDeposit ? ' · Refundable, not charged today' : ''}
                     </Text>
@@ -1039,8 +1068,11 @@ export default function OrderWizard() {
               <View className="flex-row items-start mb-2">
                 <Text className="text-[11px] font-black text-indigo-700 w-4">2.</Text>
                 <Text className="flex-1 text-[11px] font-bold text-indigo-700">
-                  On delivery you will see <Text className="font-black">two separate transactions</Text>: the bike
-                  rental and fees are charged, and the ${quote?.depositAmount.toFixed(2) ?? '0.00'} security deposit
+                  On delivery you will see <Text className="font-black">two separate transactions</Text>:{' '}
+                  {isInstalmentPlan
+                    ? 'your first monthly payment (rental plus fees) is charged'
+                    : `your full ${termLabel} rental plus fees is charged in one payment`}
+                  , and the ${quote?.depositAmount.toFixed(2) ?? '0.00'} security deposit
                   is <Text className="font-black">charged</Text>.
                 </Text>
               </View>
@@ -1161,7 +1193,10 @@ export default function OrderWizard() {
                       value={`$${quote.baseRate.toFixed(2)} / ${quote.durationUnit === 'weeks' ? 'week' : 'month'}`}
                     />
                     {quote.recurringFees > 0 && (
-                      <SummaryRow label="Fees" value={`$${quote.recurringFees.toFixed(2)} per period`} />
+                      <SummaryRow
+                        label="Fees"
+                        value={`$${quote.recurringFees.toFixed(2)} ${isInstalmentPlan ? 'per month' : `per ${termLabel} period`}`}
+                      />
                     )}
                   </>
                 )}
