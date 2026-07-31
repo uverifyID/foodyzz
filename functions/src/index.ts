@@ -61,6 +61,46 @@ async function verifyCustomerId(stripe: Stripe, customerId: string): Promise<str
   }
 }
 
+/**
+ * First payment method in `candidates` that can actually be charged off-session for
+ * `customerId`, or null if none can.
+ *
+ * Off-session charges require the card to be ATTACHED to the customer, and Stripe
+ * refuses to re-attach one that was detached: "This PaymentMethod was previously used
+ * without being attached to a Customer or was detached from a Customer, and may not be
+ * used again." Orders and billing schedules store the payment method id they were
+ * created with, so any of those references can go stale when the customer's card
+ * changes. Walking the candidates — rather than committing to the first id — lets the
+ * deposit and the installment fall through to whatever card the customer has on file
+ * now, instead of failing on a card that no longer exists.
+ *
+ * A card already attached to this customer costs one retrieve and no write.
+ */
+async function resolveUsablePaymentMethod(
+  stripe: Stripe,
+  customerId: string,
+  candidates: (string | null | undefined)[],
+): Promise<string | null> {
+  const tried = new Set<string>();
+  for (const id of candidates) {
+    if (!id || tried.has(id)) continue;
+    tried.add(id);
+    try {
+      const pm = await stripe.paymentMethods.retrieve(id);
+      const owner = typeof pm.customer === "string" ? pm.customer : null;
+      if (owner === customerId) return id;
+      if (owner) continue; // Belongs to someone else — never borrow it.
+      // Unowned: either never attached or detached. Only the first case can be
+      // rescued, and attach() is the only way to tell them apart.
+      await stripe.paymentMethods.attach(id, {customer: customerId});
+      return id;
+    } catch (e: any) {
+      console.warn(`resolveUsablePaymentMethod: ${id} unusable (${e?.code || e?.message || e}); trying next.`);
+    }
+  }
+  return null;
+}
+
 const CONFIG_TTL_MS = 60_000;
 let configCache: { data: GlobalConfig; at: number } | null = null;
 
@@ -1753,11 +1793,24 @@ export const saveCustomerBillingCard = onCall(async (request) => {
     customerId = await verifyCustomerId(stripe, customerId);
 
     if (customerId) {
-      const existing = await stripe.paymentMethods.list({customer: customerId, type: "card"});
-      for (const pm of existing.data) {
-        await stripe.paymentMethods.detach(pm.id);
+      // The customer's existing cards are deliberately NOT detached.
+      //
+      // Changing the card used to detach every old one first. But a live order still
+      // needs the card it was created with: the deposit at delivery charges the card
+      // from the rental PaymentIntent, and the rent-to-buy cron charges
+      // billingSchedule.paymentMethodId. Stripe will not re-attach a detached card
+      // ("...may not be used again"), so changing the card mid-rental permanently
+      // stranded those charges — the deposit then failed at handover, with the bike
+      // already handed over and the rental captured.
+      //
+      // Leaving the old card attached costs nothing: it stops being the default here,
+      // resolveUsablePaymentMethod picks whatever is actually chargeable, and
+      // removeCustomerBillingCard is the only path that detaches — and it refuses
+      // while any rental is live.
+      const existingPm = await stripe.paymentMethods.retrieve(paymentMethod.id);
+      if ((existingPm.customer as string | null) !== customerId) {
+        await stripe.paymentMethods.attach(paymentMethod.id, {customer: customerId});
       }
-      await stripe.paymentMethods.attach(paymentMethod.id, {customer: customerId});
       await stripe.customers.update(customerId, {
         name: cardName,
         invoice_settings: {default_payment_method: paymentMethod.id},
@@ -3280,15 +3333,16 @@ export const markRentalDelivered = onCall(async (request) => {
       // profile has saved. createPaymentIntent sets setup_future_usage, so the rental
       // card is retained and reusable here.
       const customerId = rentalCustomerId || user.stripeCustomerId;
-      const paymentMethodId = rentalPaymentMethodId || user.billingPaymentMethodId;
-      if (!customerId || !paymentMethodId) {
-        throw new Error("no saved card on file for this customer");
-      }
-      // Card must be attached to the customer for an off-session charge.
+      if (!customerId) throw new Error("no saved card on file for this customer");
+      // Prefer the rental card, but fall through to the profile's current card when it
+      // is no longer chargeable. A customer who changed their card between checkout and
+      // delivery detaches the rental card, and a detached card can never be re-attached
+      // — this used to surface as "deposit not charged" at handover.
+      const paymentMethodId = await resolveUsablePaymentMethod(
+        stripe, customerId, [rentalPaymentMethodId, user.billingPaymentMethodId],
+      );
+      if (!paymentMethodId) throw new Error("no usable card on file for this customer");
       const pm = await stripe.paymentMethods.retrieve(paymentMethodId);
-      if (!pm || (pm as any).customer !== customerId) {
-        await stripe.paymentMethods.attach(paymentMethodId, {customer: customerId});
-      }
       // Backfill the profile so a later charge/refund has the card directly,
       // display fields included — the customer app only renders a saved card
       // when billingCardLast4 is present. Covers a recordOrderCard that never
@@ -4111,7 +4165,11 @@ export const chargeDeposit = onCall(async (request) => {
 
   const user = (await db.collection("users").doc(String(order.customerPhone)).get()).data() || {};
   const customerId = user.stripeCustomerId;
-  const paymentMethodId = order.depositPaymentMethodId || user.billingPaymentMethodId;
+  // Falls through to the profile's current card if the deposit card was detached by a
+  // card change — see resolveUsablePaymentMethod.
+  const paymentMethodId = customerId ? await resolveUsablePaymentMethod(
+    stripe, customerId, [order.depositPaymentMethodId, user.billingPaymentMethodId],
+  ) : null;
   if (!customerId || !paymentMethodId) {
     throw new HttpsError("failed-precondition", "No saved card on file for this customer.");
   }
@@ -4210,7 +4268,11 @@ async function chargeRentToBuyPeriods(
 
   const user = (await db.collection("users").doc(String(order.customerPhone)).get()).data() || {};
   const customerId = user.stripeCustomerId;
-  const paymentMethodId = sched.paymentMethodId || order.depositPaymentMethodId || user.billingPaymentMethodId;
+  // The schedule's card is preferred, but a customer who changes their card mid-plan
+  // detaches it — without this fall-through every remaining installment would fail.
+  const paymentMethodId = customerId ? await resolveUsablePaymentMethod(
+    stripe, customerId, [sched.paymentMethodId, order.depositPaymentMethodId, user.billingPaymentMethodId],
+  ) : null;
   if (!customerId || !paymentMethodId) return {ok: false, error: "no saved card on file for this customer"};
 
   try {
