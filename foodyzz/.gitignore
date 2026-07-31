@@ -1,0 +1,19 @@
+# Generated native projects (expo prebuild). Kept out of git so the app builds
+# from app.json + the config plugins as the single source of truth — the same
+# model foodyzzhq uses. While these were tracked, every prebuild rewrote them
+# with fresh object UUIDs and dirtied the tree, and the version had to be
+# hand-propagated into build.gradle / Info.plist or EAS would ship the old one.
+#
+# Anchored with a leading slash ON PURPOSE: a bare `android/` or `ios/` matches a
+# directory of that name at ANY depth, which would also swallow the shipped
+# assets below. Anchoring means they can never be caught in the first place.
+#
+#   assets/sounds/android      assets/sounds/IOS
+#   assets/customer/android    assets/customer/ios
+#   assets/images/logo/android assets/images/logo/ios
+#
+# EAS respects .gitignore (it resolves paths with `git check-ignore --no-index`),
+# so an over-broad rule here silently ships an app with no notification sounds
+# or icons. Verify with `git check-ignore --no-index -v <path>` after any edit.
+/android/
+/ios/
