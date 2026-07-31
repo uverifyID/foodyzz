@@ -347,7 +347,11 @@ export const computeQuote = (
     oneTimeFees: round2(oneTimeFees),
     depositAmount: rentalType === 'buy' ? 0 : deposit,
     total,
-    perPeriodSubtotal: rentalType === 'rentToBuy' ? round2(baseRate + recurringFees) : undefined,
+    // Every rent-to-buy month bills the same thing: the fee bundle rides along with the
+    // rental charge, so an installment costs exactly what the first month did. It used
+    // to drop the one-time fees after month 1, which read `once` as "once per plan" —
+    // it means once per rental charge, and each installment is one.
+    perPeriodSubtotal: rentalType === 'rentToBuy' ? perPeriod : undefined,
   };
 };
 

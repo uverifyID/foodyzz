@@ -1026,10 +1026,13 @@ function computeRentalSubtotal(
   const oneTimeFees = billable.filter((f) => f.cadence === "once").reduce((sum, f) => sum + f.amount, 0);
   const round2 = (n: number) => Math.round(n * 100) / 100;
 
-  // Rent-to-buy is billed one period at a time. What is charged at delivery is a single
-  // period (rate + recurring fees, plus any one-time fees on the first period only); the
-  // installment cron charges `perPeriodSubtotal` each due period thereafter.
+  // Rent-to-buy is billed one period at a time, and every period bills the same thing:
+  // the fee bundle rides along with each rental charge, so an installment costs exactly
+  // what the first month did. This used to drop the one-time fees after period 1,
+  // reading `once` as "once per plan" — it means once per rental charge, and each
+  // installment is one.
   if (rentalType === "rentToBuy") {
+    const perPeriod = round2(baseRate + recurringFees + oneTimeFees);
     return {
       baseRate,
       periods,
@@ -1037,8 +1040,8 @@ function computeRentalSubtotal(
       recurringFees,
       oneTimeFees,
       depositAmount: deposit,
-      subtotal: round2(baseRate + recurringFees + oneTimeFees),
-      perPeriodSubtotal: round2(baseRate + recurringFees),
+      subtotal: perPeriod,
+      perPeriodSubtotal: perPeriod,
     };
   }
 
