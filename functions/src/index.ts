@@ -3510,8 +3510,17 @@ async function resolveOffSessionCard(
 ): Promise<{ ok: true; customerId: string; paymentMethodId: string } | { ok: false; error: string }> {
   const user = (await db.collection("users").doc(String(order.customerPhone)).get()).data() || {};
   const customerId = user.stripeCustomerId;
-  const paymentMethodId = order.depositPaymentMethodId || user.billingPaymentMethodId;
-  if (!customerId || !paymentMethodId) return {ok: false, error: "no saved card on file for this customer"};
+  if (!customerId) return {ok: false, error: "no saved card on file for this customer"};
+  // Falls through to the profile's current card when the order's stored card is no
+  // longer chargeable — a customer who changed their card mid-rental detaches it, and
+  // a renewal is charged off-session with nobody watching. See
+  // resolveUsablePaymentMethod.
+  const config = await getConfig();
+  const stripe = getStripe(config.stripe.secretKey);
+  const paymentMethodId = await resolveUsablePaymentMethod(
+    stripe, customerId, [order.depositPaymentMethodId, user.billingPaymentMethodId],
+  );
+  if (!paymentMethodId) return {ok: false, error: "no usable card on file for this customer"};
   return {ok: true, customerId, paymentMethodId};
 }
 
