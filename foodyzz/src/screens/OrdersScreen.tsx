@@ -83,6 +83,15 @@ const isFinishedOrder = (order: RentalOrder): boolean =>
     order.status === 'cancelled' || order.status === 'completed' ||
     (order.status === 'delivered' && !isRentalOut(order));
 
+// Rating and tipping stay open from handover until after the bike comes back. Kept at
+// module scope — a plain predicate over the selected order, so it costs one comparison
+// at render time and allocates nothing per render.
+//
+// Must stay in step with RATEABLE_ORDER_STATUSES in functions/src/index.ts, which
+// guards submitOrderRating and createTipPaymentIntent.
+const isRateableOrder = (order?: RentalOrder | null): boolean =>
+    order?.status === OrderStatus.DELIVERED || order?.status === OrderStatus.COMPLETED;
+
 // Whole days from today to a local YYYY-MM-DD rental day. Negative = overdue. Parsed
 // field-by-field because new Date('YYYY-MM-DD') is UTC midnight, which reads as the
 // previous day in every US timezone.
@@ -1120,8 +1129,17 @@ export default function OrdersScreen() {
 
                             {/* Rate + tip, once the rental is complete. The provider
                                 price-adjustment approval flow that used to sit here is
-                                gone: a rental is quoted in full up front and never re-priced. */}
-                            {selectedOrder?.status === OrderStatus.DELIVERED && (
+                                gone: a rental is quoted in full up front and never re-priced.
+
+                                COMPLETED as well as DELIVERED. DELIVERED is only the
+                                window while the bike is out; returning it settles the
+                                deposit and moves the order to COMPLETED, which is when
+                                a customer actually goes to rate the rental. Gating on
+                                DELIVERED alone made the section vanish at exactly that
+                                point. submitOrderRating / createTipPaymentIntent accept
+                                the same two statuses — widening only this would render
+                                controls the backend then refuses. */}
+                            {isRateableOrder(selectedOrder) && (
                                 <View className="space-y-4">
                                     {/* Rating */}
                                     <View className="bg-white border-2 border-black rounded-[28px] p-4">

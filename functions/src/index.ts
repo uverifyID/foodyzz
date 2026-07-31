@@ -1994,6 +1994,12 @@ export const setOrderNote = onCall(async (request) => {
 // the resulting order update fires onOrderUpdatedUpdateStats, which aggregates the
 // rating into providerPerformance, mirrors avgRating onto the provider doc, and pushes
 // the provider a notification.
+// When a customer may still rate or tip. DELIVERED alone was too narrow: it is the
+// window while the bike is out, and the order flips to COMPLETED the moment it is
+// returned and the deposit settles — which is exactly when someone sits down to rate
+// the rental. Anyone who waited until the end found the option gone.
+const RATEABLE_ORDER_STATUSES: string[] = [OrderStatus.DELIVERED, OrderStatus.COMPLETED];
+
 export const submitOrderRating = onCall(async (request) => {
   if (!request.auth) throw new HttpsError("unauthenticated", "Authentication required.");
   const {orderId, rating, feedback} = request.data;
@@ -2014,7 +2020,7 @@ export const submitOrderRating = onCall(async (request) => {
   if (digits(authPhone) !== digits(order.customerPhone)) {
     throw new HttpsError("permission-denied", "You are not authorized to rate this order.");
   }
-  if (order.status !== OrderStatus.DELIVERED) {
+  if (!RATEABLE_ORDER_STATUSES.includes(order.status)) {
     throw new HttpsError("failed-precondition", "You can only rate after the order is delivered.");
   }
   if (typeof order.rating === "number") {
@@ -2100,7 +2106,7 @@ export const createTipPaymentIntent = onCall(async (request) => {
     if (digits(authPhone) !== digits(order.customerPhone)) {
       throw new HttpsError("permission-denied", "You are not authorized to tip on this order.");
     }
-    if (order.status !== OrderStatus.DELIVERED) {
+    if (!RATEABLE_ORDER_STATUSES.includes(order.status)) {
       throw new HttpsError("failed-precondition", "You can only tip after the order is delivered.");
     }
     if (typeof order.tip === "number" && order.tip > 0) {
