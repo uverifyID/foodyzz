@@ -15,29 +15,35 @@ import type {
 // Fallback used only until an admin has seeded apiConfig/logistics (or while the
 // first snapshot is in flight). Values match the project appendix.
 export const DEFAULT_LOGISTICS: LogisticsConfig = {
+  // The rent rate carries the Protection Plan waiver inside it — there is deliberately
+  // no separate protection fee, so nothing on a bill is priced against the waiver.
+  // NOTE when repricing: the base rate is charged PER PERIOD OF THE TERM (rate × weeks)
+  // while the fee bundle is charged ONCE per rental. Folding a once-per-rental fee into
+  // the weekly rate therefore multiplies it by the term — these rates spread the old
+  // $9.99 across the 4-week minimum commitment so a standard rental costs what it did.
   bikeModels: [
     {
       model: 1,
       name: 'Foodyzz Model 1',
       imageUrl: '',
-      rates: { rent: 19.99, buy: 799, rentToBuy: 89.99 },
-      minCommitment: { rent: 4, rentToBuy: 8 },
-    },
-    {
-      model: 2,
-      name: 'Foodyzz Model 2',
-      imageUrl: '',
-      rates: { rent: 29.99, buy: 999, rentToBuy: 109.99 },
-      minCommitment: { rent: 4, rentToBuy: 10 },
+      rates: { rent: 22.49, buy: 899, rentToBuy: 69.99 },
+      minCommitment: { rent: 4, rentToBuy: 12, rentCadence: 'weekly', rentToBuyCadence: 'monthly' },
+      certification: {
+        deviceStandard: 'UL 2849',
+        batteryStandard: 'UL 2271',
+        lab: 'TÜV Rheinland',
+        deviceCertificateNumber: 'CU 726061660001',
+        batteryCertificateNumber: 'CU 72303450 0003',
+        verifyUrl: 'https://www.certipedia.com',
+      },
     },
   ],
   durationUnits: { rent: 'weeks', rentToBuy: 'months' },
-  inventory: { 1: { new: 10, used: 5 }, 2: { new: 15, used: 2 } },
+  inventory: { 1: { new: 10, used: 5 } },
   fees: [
     { key: 'deposit', label: 'Deposit', amount: 100, required: true, cadence: 'once', isDeposit: true },
-    { key: 'weeklyMaintenance', label: 'Weekly maintenance', amount: 5.99, required: true, cadence: 'weekly' },
-    { key: 'gpsTracker', label: 'GPS tracker', amount: 4.99, required: true, cadence: 'weekly' },
-    { key: 'insurance', label: 'Insurance', amount: 9.99, required: true, cadence: 'weekly' },
+    { key: 'maintenance', label: 'Maintenance', amount: 5.99, required: true, cadence: 'weekly' },
+    { key: 'gpsTracker', label: 'GPS tracker', amount: 4.99, required: false, cadence: 'weekly' },
   ],
   delivery: { startTime: '17:00', endTime: '21:00', slotMinutes: 60 },
   restockDays: 2,
@@ -223,21 +229,26 @@ export const minCommitmentFor = (
 
 /**
  * Fees to display for a rental type. Buy shows none at all (a purchase carries no
- * deposit, maintenance, tracker or insurance). Rent / Rent-to-Buy show every fee
- * so the customer is fully aware; `required: false` ones start opted-in but can be
- * toggled off, `required: true` ones are locked on.
+ * deposit, maintenance or tracker). Rent / Rent-to-Buy show every fee so the customer
+ * is fully aware; `required: false` ones start OFF and are only charged once the
+ * customer selects them, `required: true` ones are locked on and are part of the
+ * quoted total. Pre-selecting an optional recurring charge is a consent problem, not
+ * a default — so opting in is always an affirmative tap.
  */
 export const feesFor = (config: LogisticsConfig, rentalType: RentalType): FeeConfig[] =>
   rentalType === 'buy' ? [] : config.fees || [];
 
-export const toOrderFees = (fees: FeeConfig[], optedOutKeys: string[]): OrderFee[] =>
+export const toOrderFees = (fees: FeeConfig[], selectedKeys: string[]): OrderFee[] =>
   fees.map((f) => ({
     key: f.key,
     label: f.label,
     amount: f.amount,
     required: f.required,
     cadence: f.cadence,
-    accepted: f.required ? true : !optedOutKeys.includes(f.key),
+    // The deposit is never a choice and is never rendered as a toggle, so it must not
+    // fall through the opt-in branch and serialise as unaccepted just because a config
+    // has it flagged `required: false`.
+    accepted: f.required || f.isDeposit === true ? true : selectedKeys.includes(f.key),
   }));
 
 export interface RentalQuote {

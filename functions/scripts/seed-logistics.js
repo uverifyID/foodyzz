@@ -32,16 +32,23 @@ const BIKE_MODELS = [
     model: 1,
     name: 'Foodyzz Model 1',
     imageUrl: '',
-    rates: { rent: 19.99, buy: 799, rentToBuy: 89.99 },
+    // The rent rate carries the damage/theft waiver inside it — there is deliberately no
+    // separate protection fee, so nothing on a bill is priced against the waiver. The
+    // base rate bills per week while the fee bundle bills once per rental, so a fee
+    // folded into the rate must be spread across the minimum term, not simply added.
+    rates: { rent: 22.49, buy: 899, rentToBuy: 69.99 },
     // Minimum commitment the customer must sign up for, in the unit below.
-    minCommitment: { rent: 4, rentToBuy: 8 },
-  },
-  {
-    model: 2,
-    name: 'Foodyzz Model 2',
-    imageUrl: '',
-    rates: { rent: 29.99, buy: 999, rentToBuy: 109.99 },
-    minCommitment: { rent: 4, rentToBuy: 10 },
+    minCommitment: { rent: 4, rentToBuy: 12, rentCadence: 'weekly', rentToBuyCadence: 'monthly' },
+    // NYC Admin Code § 20-610 covers renting and leasing, not just selling: the listing
+    // must name the accredited laboratory that certified the device and its battery.
+    certification: {
+      deviceStandard: 'UL 2849',
+      batteryStandard: 'UL 2271',
+      lab: 'TÜV Rheinland',
+      deviceCertificateNumber: 'CU 726061660001',
+      batteryCertificateNumber: 'CU 72303450 0003',
+      verifyUrl: 'https://www.certipedia.com',
+    },
   },
 ];
 
@@ -52,7 +59,6 @@ const DURATION_UNITS = { rent: 'weeks', rentToBuy: 'months' };
 // below is the live source of truth once bikes start moving.
 const INVENTORY = {
   1: { new: 10, used: 5 },
-  2: { new: 15, used: 2 },
 };
 
 // Appendix: fees. `required: true` fees cannot be opted out of by the customer.
@@ -60,9 +66,8 @@ const INVENTORY = {
 // it is secured separately against a saved card (see functions setupDepositMandate).
 const FEES = [
   { key: 'deposit', label: 'Deposit', amount: 100, required: true, cadence: 'once', isDeposit: true },
-  { key: 'weeklyMaintenance', label: 'Weekly maintenance', amount: 5.99, required: true, cadence: 'weekly' },
-  { key: 'gpsTracker', label: 'GPS tracker', amount: 4.99, required: true, cadence: 'weekly' },
-  { key: 'insurance', label: 'Insurance', amount: 9.99, required: true, cadence: 'weekly' },
+  { key: 'maintenance', label: 'Maintenance', amount: 5.99, required: true, cadence: 'weekly' },
+  { key: 'gpsTracker', label: 'GPS tracker', amount: 4.99, required: false, cadence: 'weekly' },
 ];
 
 // Appendix: delivery time window (5pm–9pm), sliced into hourly selectable slots.
