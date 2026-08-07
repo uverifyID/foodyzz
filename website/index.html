@@ -140,7 +140,7 @@
             {
               "@type": "Offer",
               "name": "Rent",
-              "description": "Rent a delivery-grade e-bike by the week, delivered to your door. Return or extend when your term ends."
+              "description": "Rent a delivery-grade e-bike by the week, delivered to your door, with the Protection Plan damage and theft waiver included. Return or extend when your term ends."
             },
             {
               "@type": "Offer",
@@ -165,7 +165,7 @@
             "name": "How does the security deposit work?",
             "acceptedAnswer": {
               "@type": "Answer",
-              "text": "When your rental is delivered, a deposit is held on your card — it is not charged. When you return the bike in good condition, the hold is released a couple of days after inspection. If there's damage, only the documented repair amount is deducted and you see an itemized breakdown in the app and by email."
+              "text": "Your security deposit is charged at delivery, as a transaction separate from your first payment. When you return the bike in good condition, it is refunded a couple of days after inspection. If there's damage, only the documented repair amount is deducted from the refund and you see an itemized breakdown in the app and by email."
             }
           },
           {
@@ -182,6 +182,14 @@
             "acceptedAnswer": {
               "@type": "Answer",
               "text": "You pay a fixed monthly installment. Every payment builds toward ownership, and the app shows your remaining balance at all times. You can pay off the remaining balance early any time with no penalty — after the final payment, the bike is 100% yours."
+            }
+          },
+          {
+            "@type": "Question",
+            "name": "What does the Protection Plan cover?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "Every Foodyzz rental includes the Protection Plan at no extra charge: a damage and theft waiver that applies to the bike, not to you as a rider. It waives 50% of eligible repair and damage costs and caps your out-of-pocket liability for a stolen or lost bike at $500 when a working battery is returned. It does not apply to rent-to-own, and it never covers your injuries, medical bills, lost earnings, or claims by anyone you hit. A helmet is required on every ride."
             }
           },
           {
@@ -259,7 +267,7 @@
           <a class="btn btn-primary" href="#get-app">Get the App</a>
           <a class="btn btn-ghost" href="#plans">See Plans</a>
         </div>
-        <p class="hero-note">No long-term lock-in · Deposit held, not charged · Cancel before delivery, no fee</p>
+        <p class="hero-note">No long-term lock-in · Deposit refunded on return · Cancel before delivery, no fee</p>
         <div class="hero-stats">
           <div class="stat"><div class="n">3</div><div class="l">Flexible plans</div></div>
           <div class="stat"><div class="n">To-door</div><div class="l">Delivery &amp; pickup</div></div>
@@ -288,8 +296,8 @@
           </div>
           <div class="pcard tint">
             <div class="k">Deposit</div>
-            <div class="v">Held — not charged</div>
-            <div class="s">Released after return</div>
+            <div class="v">$100 · charged at delivery</div>
+            <div class="s">Refunded when you return the bike</div>
           </div>
           <div class="pbtn">Track my delivery</div>
         </div>
@@ -315,7 +323,7 @@
         <div class="card">
           <div class="icon">💳</div>
           <h3>Pay as you ride</h3>
-          <p>Card on file, charged only when your bike is actually delivered. Your security deposit is held — not charged — and released after the bike comes back.</p>
+          <p>Card on file, charged only when your bike is actually delivered. Your security deposit is charged as a separate transaction at delivery and refunded when the bike comes back.</p>
         </div>
         <div class="card">
           <div class="icon">🏁</div>
@@ -385,7 +393,8 @@
           <p class="desc">Ride by the week or month. Perfect for trying the life or covering a busy season.</p>
           <ul>
             <li>Delivery &amp; return pickup included</li>
-            <li>Deposit held, not charged</li>
+            <li>Protection Plan included — damage &amp; theft waiver on the bike</li>
+            <li>Deposit refunded when you return the bike</li>
             <li>Extend or return any time</li>
             <li>Card charged only at delivery</li>
           </ul>
@@ -416,6 +425,12 @@
           <a class="btn btn-ghost" href="#get-app">Buy a bike</a>
         </div>
       </div>
+      <p class="store-soon" style="margin-top:24px">
+        Every rental includes the <a href="/protection">Protection Plan</a> at no extra charge — a damage
+        and theft waiver that applies to the bike, not to you as a rider. It does not apply to
+        rent-to-own, where damage, theft, and loss stay your responsibility. Helmet required on every
+        ride.
+      </p>
     </div>
   </section>
 
@@ -459,7 +474,7 @@
       <div class="faq-list">
         <details class="faq">
           <summary>How does the security deposit work?</summary>
-          <div class="a">When your rental is delivered, a deposit is <b>held</b> on your card — it is not charged. When you return the bike in good condition, the hold is released a couple of days after inspection. If there's damage, only the documented repair amount is deducted and you see an itemized breakdown in the app and by email.</div>
+          <div class="a">Your security deposit is <b>charged</b> at delivery, as a transaction separate from your first payment. When you return the bike in good condition, it is <b>refunded</b> a couple of days after inspection. If there's damage, only the documented repair amount is deducted from the refund and you see an itemized breakdown in the app and by email.</div>
         </details>
         <details class="faq">
           <summary>When is my card actually charged?</summary>
@@ -468,6 +483,10 @@
         <details class="faq">
           <summary>How does rent-to-own work?</summary>
           <div class="a">You pay a fixed monthly installment. Every payment builds toward ownership, and the app shows your remaining balance at all times. You can pay off the remaining balance early any time with no penalty — after the final payment, the bike is 100% yours.</div>
+        </details>
+        <details class="faq">
+          <summary>What does the Protection Plan cover?</summary>
+          <div class="a">Every rental includes it at no extra charge: a <b>damage and theft waiver on the bike</b>, which applies to the bike and not to you as a rider. It waives 50% of eligible repair and damage costs and caps your out-of-pocket liability for a stolen or lost bike at $500 when a working battery is returned. It does <b>not</b> apply to rent-to-own, and it never covers your injuries, medical bills, lost earnings, or claims by anyone you hit. A helmet is required on every ride. <a href="/protection">Read the full Protection Plan →</a></div>
         </details>
         <details class="faq">
           <summary>Do I need a credit check?</summary>
@@ -554,6 +573,7 @@
           <ul>
             <li><a href="/privacy">Privacy Policy</a></li>
             <li><a href="/terms">Terms &amp; Conditions</a></li>
+            <li><a href="/protection">Protection Plan</a></li>
           </ul>
         </div>
       </div>

@@ -1,0 +1,518 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Protection Plan — Foodyzz</title>
+  <meta name="description" content="Included with every Foodyzz rental: a damage and theft waiver that applies to the bike, not to you as a rider. What it waives, what it never waives, why rent-to-buy works differently, and the safety rules that come with it." />
+  <meta name="theme-color" content="#86B54F" />
+  <meta name="robots" content="index, follow, max-image-preview:large" />
+  <link rel="canonical" href="https://foodyzz.com/protection" />
+  <link rel="icon" type="image/png" sizes="64x64" href="assets/favicon-64.png" />
+  <link rel="apple-touch-icon" href="assets/foodyzz-icon.png" />
+  <!-- iOS Safari smart app banner: offers the App Store install to iPhone visitors -->
+  <meta name="apple-itunes-app" content="app-id=6794564474" />
+  <meta property="og:type" content="website" />
+  <meta property="og:site_name" content="Foodyzz" />
+  <meta property="og:locale" content="en_US" />
+  <meta property="og:title" content="Protection Plan — Foodyzz" />
+  <meta property="og:description" content="Included with every Foodyzz rental — a damage and theft waiver that applies to the bike, not to you as a rider. Helmet required on every ride." />
+  <meta property="og:image" content="https://foodyzz.com/assets/foodyzz-icon.png" />
+  <meta property="og:url" content="https://foodyzz.com/protection" />
+  <!-- Square 512×512 share image, so the compact card — not the wide one — is correct here -->
+  <meta name="twitter:card" content="summary" />
+  <meta name="twitter:title" content="Protection Plan — Foodyzz" />
+  <meta name="twitter:description" content="Included with every Foodyzz rental — a damage and theft waiver that applies to the bike, not to you as a rider. Helmet required on every ride." />
+  <meta name="twitter:image" content="https://foodyzz.com/assets/foodyzz-icon.png" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&family=Space+Grotesk:wght@500;700&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="css/style.css" />
+
+  <!-- Page-scoped: the waived / never-waived ledger only exists here, so it stays
+       out of the shared stylesheet. Same brutalist system — hard borders, no gradients. -->
+  <style>
+    .lede {
+      background: var(--green-tint); border: 3px solid var(--black); border-radius: var(--radius);
+      box-shadow: var(--shadow-sm); padding: 26px 28px; margin: 0 0 34px;
+    }
+    .lede p { font-size: 1.05rem; color: var(--green-ink); }
+    .lede p + p { margin-top: 12px; }
+    .keypoints { list-style: none; padding: 0; margin: 18px 0 0; }
+    .keypoints li {
+      padding: 8px 0 8px 34px; position: relative; font-weight: 600; color: var(--green-ink); font-size: .97rem;
+    }
+    .keypoints li::before {
+      content: "→"; position: absolute; left: 0; top: 7px; width: 22px; height: 22px;
+      display: flex; align-items: center; justify-content: center; font-size: .8rem; font-weight: 700;
+      background: var(--black); color: var(--green); border-radius: 6px;
+    }
+    .ledger { display: grid; grid-template-columns: 1fr 1fr; gap: 22px; margin: 22px 0 28px; }
+    .ledger .col {
+      background: var(--white); border: 3px solid var(--black); border-radius: var(--radius);
+      box-shadow: var(--shadow-sm); padding: 22px 22px 18px;
+    }
+    .ledger .col h3 { margin: 0 0 6px; font-size: 1.1rem; }
+    .ledger .col .hint {
+      font-family: 'JetBrains Mono', monospace; font-size: .68rem; text-transform: uppercase;
+      letter-spacing: .08em; color: var(--stone-text); margin-bottom: 12px;
+    }
+    .ledger ul { list-style: none; padding: 0; margin: 0; }
+    .ledger li { padding: 8px 0 8px 30px; position: relative; font-size: .93rem; margin: 0; }
+    .ledger li::before {
+      position: absolute; left: 0; top: 8px; width: 20px; height: 20px; border-radius: 6px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: .72rem; font-weight: 700; border: 2px solid var(--black);
+    }
+    .ledger .yes li::before { content: "✓"; background: var(--green); color: var(--black); }
+    .ledger .no  li::before { content: "✕"; background: #FDE8E8; color: #9B1C1C; }
+    .warn {
+      background: #FDE8E8; border: 3px solid var(--black); border-radius: var(--radius);
+      box-shadow: var(--shadow-sm); padding: 22px 24px; margin: 26px 0;
+    }
+    .warn h3 { margin-bottom: 8px; font-size: 1.1rem; color: #9B1C1C; }
+    .warn p, .warn li { color: #7A1717; }
+    .warn ul { margin: 10px 0 0; padding-left: 22px; }
+    .numbers { border: 3px solid var(--black); border-radius: var(--radius); overflow: hidden; margin: 22px 0 28px; }
+    .numbers .row { display: flex; justify-content: space-between; gap: 18px; padding: 14px 18px; background: var(--white); border-bottom: 3px solid var(--black); }
+    .numbers .row:last-child { border-bottom: none; }
+    .numbers .row .l { font-size: .93rem; color: var(--stone-text); }
+    .numbers .row .r { font-family: 'JetBrains Mono', monospace; font-weight: 700; color: var(--green-dark); text-align: right; white-space: nowrap; }
+    .legal .faq-list { margin: 18px 0 8px; }
+    @media (max-width: 640px) {
+      .ledger { grid-template-columns: 1fr; }
+      .numbers .row { flex-direction: column; gap: 4px; }
+      .numbers .row .r { text-align: left; }
+    }
+  </style>
+
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "WebPage",
+    "@id": "https://foodyzz.com/protection#page",
+    "url": "https://foodyzz.com/protection",
+    "name": "Protection Plan — Foodyzz",
+    "description": "Included with every Foodyzz rental — a damage and theft waiver that applies to the bike, not to the rider. Not available on rent-to-buy.",
+    "inLanguage": "en-US",
+    "isPartOf": { "@id": "https://foodyzz.com/#website" },
+    "publisher": { "@id": "https://foodyzz.com/#organization" },
+    "breadcrumb": {
+      "@type": "BreadcrumbList",
+      "itemListElement": [
+        { "@type": "ListItem", "position": 1, "name": "Home", "item": "https://foodyzz.com/" },
+        { "@type": "ListItem", "position": 2, "name": "Protection Plan" }
+      ]
+    }
+  }
+  </script>
+
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "FAQPage",
+    "@id": "https://foodyzz.com/protection#faq",
+    "mainEntity": [
+      {
+        "@type": "Question",
+        "name": "Do I pay extra for the Protection Plan?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "No. It is included in every Foodyzz rental as a term of the rental agreement. There is no separate charge, and there is nothing to add, decline, or cancel."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "Does the Protection Plan apply to rent-to-buy?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "No. On rent-to-buy you are paying toward owning the bike and you carry the risk of damage, theft, and loss the way an owner does. Repairs for normal wear and tear are included with a $9.99 service fee per request, but damage beyond ordinary wear is billed in full, and if the bike is stolen or lost you are responsible for its full replacement value."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "Does the Protection Plan protect me as a rider?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "No. It is a contractual waiver that reduces what Foodyzz can charge you for damage to, or theft of, the bike we own. It pays nothing to you and applies to nothing of yours, so it is no substitute for arranging health, disability, and liability protection of your own."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "Does the Protection Plan cover me if I get hurt?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "No. The plan applies to the bike only. Your injuries, medical bills, lost delivery earnings, and any claim brought against you by a pedestrian, driver, or property owner are never waived. You need health, disability, and liability protection of your own."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "Do I have to wear a helmet?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "Yes. Foodyzz requires a properly fitted helmet on every ride, every time, regardless of what local law requires of you. Riding without one is a breach of your rental agreement and can cost you the waiver for that incident."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "What happens if a rental bike is stolen?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "Report it in the app immediately and file a police report within 24 hours. On a rental, provided you return a working battery and meet the other conditions, your out-of-pocket liability for the bike is capped at $500. On rent-to-buy there is no cap and you are responsible for the bike's full replacement value."
+        }
+      }
+    ]
+  }
+  </script>
+</head>
+<body>
+
+  <header class="site-header">
+    <div class="container nav">
+      <a class="nav-logo" href="/" aria-label="Foodyzz home"><img src="assets/foodyzz-wordmark.png" alt="Foodyzz" /></a>
+      <button class="nav-toggle" aria-label="Toggle menu" aria-expanded="false"><span></span><span></span><span></span></button>
+      <ul class="nav-links">
+        <li><a href="/#why">Why Foodyzz</a></li>
+        <li><a href="/#plans">Plans</a></li>
+        <li><a href="/protection">Protection</a></li>
+        <li><a href="/#faq">FAQ</a></li>
+        <li><a href="/contact">Contact</a></li>
+        <li><a class="btn btn-primary nav-cta" href="/#get-app">Get the App</a></li>
+      </ul>
+    </div>
+  </header>
+
+  <main class="legal">
+    <h1>Protection Plan</h1>
+    <p class="updated">Last updated: August 7, 2026</p>
+
+    <div class="lede">
+      <p>
+        <b>Every Foodyzz rental includes the Protection Plan — a damage and theft waiver on the bike
+        itself. It applies to the bike, never to you as a rider.</b>
+      </p>
+      <p>
+        It is not something you buy. It is a term of your rental agreement that limits what we can charge
+        you when <em>our</em> bike is damaged or stolen. What it does not do — and cannot do — is protect
+        you, your body, your income, or anyone you might hurt while riding.
+      </p>
+      <ul class="keypoints">
+        <li>Included with every rental. No separate charge, nothing to add or cancel.</li>
+        <li>Not available on rent-to-buy — see <a href="#rent-to-buy">section 3</a>.</li>
+        <li>It applies to the bike. It does nothing for the rider.</li>
+        <li>It is no substitute for arranging protection of your own.</li>
+        <li>A helmet must be worn at all times, on every ride, no exceptions.</li>
+      </ul>
+    </div>
+
+    <h2>1. What the Protection Plan actually is</h2>
+    <p>
+      When you rent a Foodyzz e-bike, the bike belongs to Foodyzz. Under your
+      <a href="/terms">Terms &amp; Conditions</a>, you are responsible to us for damage beyond ordinary
+      wear, and for the bike's full replacement value if it is stolen, lost, or not returned.
+    </p>
+    <p>
+      The Protection Plan is a <b>contractual waiver built into the rental</b>: Foodyzz agrees in advance
+      to give up part of that claim against you. It reduces your bill after an incident. That is the
+      whole of it. It is part of the rental rate you are quoted in the app — it is not a line on your
+      bill, not an upgrade, and there is nothing to opt into or out of.
+    </p>
+    <p>
+      <b>It is no substitute for protection of your own.</b> The plan applies to the bike and nothing
+      else. It pays nothing to you, and it does nothing for your medical bills, your income, or your
+      liability to anyone else. Nothing on this page is advice about what you should arrange for
+      yourself — see <a href="#your-own-protection">section 7</a>.
+    </p>
+
+    <h2>2. What the Protection Plan waives</h2>
+    <p>
+      On an active rental, the plan applies to eligible incidents involving the bike, its battery, and
+      the accessories we supplied with it, reported to us in the app within the deadlines in
+      <a href="#reporting">section 8</a>.
+    </p>
+
+    <div class="numbers">
+      <div class="row">
+        <span class="l">What the Protection Plan costs you</span>
+        <span class="r">NOTHING — BUILT INTO THE RATE</span>
+      </div>
+      <div class="row">
+        <span class="l">Eligible repair and damage costs</span>
+        <span class="r">FOODYZZ WAIVES 50% · YOU PAY 50%</span>
+      </div>
+      <div class="row">
+        <span class="l">Theft or loss of the bike — your out-of-pocket liability</span>
+        <span class="r">CAPPED AT $500</span>
+      </div>
+      <div class="row">
+        <span class="l">Theft cap condition — a working battery must be returned</span>
+        <span class="r">REQUIRED</span>
+      </div>
+      <div class="row">
+        <span class="l">Applies to rent-to-buy plans</span>
+        <span class="r">NO — SEE SECTION 3</span>
+      </div>
+    </div>
+
+    <h3>Repairs and damage</h3>
+    <p>
+      For an eligible incident, the plan waives <b>50% of the repair and damage cost</b> and you pay the
+      other 50%. You always receive an itemized breakdown — parts, labor, and the amount waived — in the
+      app and by email before we charge anything.
+    </p>
+
+    <h3>Theft or loss</h3>
+    <p>
+      If the bike is stolen or lost, your out-of-pocket liability for the bike is <b>capped at $500</b>,
+      provided you (a) report the theft in the app immediately, (b) file a police report within 24 hours
+      and give us the report number, (c) return a <b>working battery</b>, and (d) had the bike locked
+      with the supplied lock if it was unattended.
+    </p>
+
+    <h2 id="rent-to-buy">3. Rent-to-buy works differently</h2>
+    <div class="warn">
+      <h3>The Protection Plan does not apply to rent-to-buy</h3>
+      <p>
+        On a rent-to-buy plan you are paying toward owning the bike, and you carry its risk the way an
+        owner does. There is no damage waiver and no theft cap:
+      </p>
+      <ul>
+        <li><b>Damage beyond ordinary wear is billed to you in full</b> — there is no 50% split.</li>
+        <li><b>Theft or loss is yours in full</b> — you are responsible for the bike's full replacement value, and your remaining installment balance stays payable.</li>
+      </ul>
+    </div>
+    <p>
+      What rent-to-buy does include is servicing: <b>repairs for normal wear and tear are included in
+      your plan</b>, with a <b>$9.99 service fee per repair request</b>. That is maintenance on a bike we
+      still hold title to — it is not a waiver, and it does not extend to damage, theft, or loss.
+    </p>
+    <p>
+      Because you carry that risk from day one, we strongly encourage every rent-to-buy rider to arrange
+      property protection of their own for the bike, and to lock and store it accordingly. See
+      <a href="#your-own-protection">section 7</a>.
+    </p>
+
+    <h2 id="not-waived">4. What is never waived</h2>
+
+    <div class="ledger">
+      <div class="col">
+        <h3>What a rental waives</h3>
+        <div class="hint">The bike, on eligible incidents</div>
+        <ul class="yes">
+          <li>50% of eligible repair and damage costs on the bike</li>
+          <li>Accident damage to the frame, drivetrain, wheels, and brakes</li>
+          <li>Theft or loss — your liability capped at $500, conditions met</li>
+          <li>Vandalism by a third party, with a police report</li>
+        </ul>
+      </div>
+      <div class="col">
+        <h3>Never waived</h3>
+        <div class="hint">You, and everything that isn't our bike</div>
+        <ul class="no">
+          <li><b>Your injuries</b> — medical bills, ambulance, hospital, rehab</li>
+          <li><b>Your lost income</b> — missed shifts or delivery earnings</li>
+          <li><b>Third-party liability</b> — a pedestrian, driver, cyclist, or property you hit</li>
+          <li>Your phone, bag, cargo, or the food you were carrying</li>
+          <li>Intentional damage, abuse, or negligence by the rider</li>
+          <li>Tickets, fines, towing, impound, or confiscation</li>
+        </ul>
+      </div>
+    </div>
+
+    <p>Nothing is waived, and full charges stand, where the loss or damage involves:</p>
+    <ul>
+      <li>Riding while impaired by alcohol, drugs, or medication.</li>
+      <li>Racing, stunts, off-road riding, or carrying passengers or loads beyond the bike's rated capacity.</li>
+      <li>Letting anyone other than the registered account holder ride the bike, or subleasing, lending, or selling it.</li>
+      <li>Theft while the bike was unattended and unlocked, or locked with something other than the supplied lock, or left in a location we told you not to leave it.</li>
+      <li>A theft or loss you did not report to us and to the police within 24 hours, or for which no working battery is returned.</li>
+      <li>Modifications, unauthorized repairs, tampering with the battery, controller, or speed limiter, or charging with a charger we did not supply.</li>
+      <li>Submersion, flood, or leaving the bike or battery exposed in a way the manual tells you not to.</li>
+      <li>Use outside our New York City service area, or any unlawful use.</li>
+      <li>Damage you did not report at delivery that we can show was there before your ride, or damage discovered only at return that you never reported.</li>
+      <li>Any incident where the rental has ended, the account is past due, or the account is suspended.</li>
+    </ul>
+
+    <p>
+      <b>Replacement parts and accessories.</b> Batteries, locks, lights, phone mounts, and delivery bags
+      supplied with your bike are serviced as <b>routine maintenance</b>. Replacing them because they
+      were lost, stolen separately from the bike, or damaged through misuse is charged separately and is
+      <b>not</b> part of routine maintenance.
+    </p>
+
+    <div class="warn">
+      <h3>Nothing here protects you</h3>
+      <p>
+        Foodyzz is not your employer, and the plan does nothing for you or for anything you carry for a
+        delivery platform you work with. It waives no liability of yours to anyone else, pays no medical
+        bill, replaces no lost income, and does nothing for what you were carrying. If you are in a
+        collision, the Protection Plan is not what pays your hospital bill — and it is not what pays the
+        person you hit.
+      </p>
+    </div>
+
+    <h2>5. You are responsible for the bike</h2>
+    <p>
+      The plan reduces a bill. It does not transfer responsibility. While the bike is with you, you are
+      responsible for it and for how it is ridden:
+    </p>
+    <ul>
+      <li>Inspect the bike before every ride — brakes, tires, lights, battery mount.</li>
+      <li>Lock it with the supplied lock whenever it is unattended, to a fixed object, and take the battery with you where practical.</li>
+      <li>Charge only with the supplied charger, indoors, unmodified, and never unattended overnight. Stop using any battery that is hot, swollen, or damaged and tell us straight away.</li>
+      <li>Keep to New York City's <b>15 mph</b> e-bike speed limit. Your bike is set to it — do not modify or defeat the limiter.</li>
+      <li>Store it responsibly and out of the weather.</li>
+      <li>Report damage, a crash, a malfunction, or theft the moment it happens — in the app or through our <a href="/contact">contact form</a>.</li>
+      <li>Do not modify, disassemble, sublease, sell, or lend the bike. The registered account holder is responsible at all times.</li>
+    </ul>
+
+    <h2 id="helmet">6. You are responsible for your own safety — helmet required</h2>
+    <div class="warn">
+      <h3>A helmet must be worn at all times</h3>
+      <p>
+        Foodyzz requires a properly fitted, undamaged helmet on <b>every ride, every time</b> — regardless
+        of what the law requires of you personally, and regardless of how short the trip is. This is a
+        condition of your agreement with us.
+      </p>
+      <p style="margin-top:10px">
+        New York law requires helmets in a number of circumstances, including for certain e-bike classes,
+        for younger riders, and for commercial cyclists working in New York City. Our rule is simpler and
+        stricter: <b>always</b>.
+      </p>
+    </div>
+    <p>
+      Riding without a helmet — or without working lights and brakes, or against traffic, or on a
+      sidewalk, or in violation of any traffic law — is a breach of your agreement with us. In addition
+      to any other remedy, we may <b>decline to waive anything for that incident</b>, or end your rental.
+    </p>
+    <p>
+      Riding an e-bike carries real risk: collisions, falls, weather, road hazards, and traffic. You
+      accept that risk. You are responsible for riding within your abilities, for the safety gear you
+      wear, and for the safety of everyone around you. Nothing on this page and nothing in the Protection
+      Plan changes that.
+    </p>
+
+    <h2 id="your-own-protection">7. What you should arrange for yourself</h2>
+    <p>
+      Because the Protection Plan applies to the bike and nothing else — and does not apply at all on
+      rent-to-buy — we strongly encourage every rider to arrange real protection of their own. Depending
+      on your situation, that may include:
+    </p>
+    <ul>
+      <li><b>Health coverage</b> — for injuries from a crash.</li>
+      <li><b>Personal liability coverage</b> (often part of a renters or homeowners policy) — for claims by someone you injure or whose property you damage.</li>
+      <li><b>Disability or income-protection coverage</b> — for the weeks you cannot ride.</li>
+      <li><b>Property coverage for the bike itself</b> — particularly on rent-to-buy, where damage, theft, and loss are entirely your responsibility.</li>
+      <li><b>Occupational accident coverage</b> — some delivery platforms offer or arrange this for active couriers. Check what yours provides, and what it excludes, before you rely on it.</li>
+    </ul>
+    <p>
+      Foodyzz does not sell, arrange, endorse, or take a commission on any of these products, and we
+      cannot advise you on what to buy. Speak with a licensed agent or broker about what is right for
+      you.
+    </p>
+
+    <h2 id="reporting">8. Reporting an incident</h2>
+    <ol>
+      <li><b>Get safe first.</b> If anyone is hurt, call 911 before you call us.</li>
+      <li><b>Report it in the app immediately</b> — the same day for damage, and right away for theft or loss. Use the order chat or our <a href="/contact">contact form</a>.</li>
+      <li><b>Photograph everything</b> — the bike, the damage, the location, and the lock if it was cut.</li>
+      <li><b>File a police report within 24 hours</b> for theft, vandalism, or any collision involving another person or vehicle, and send us the report number.</li>
+      <li><b>Return a working battery</b> if a rental bike is stolen or lost — the $500 theft cap depends on it.</li>
+      <li><b>Do not arrange your own repair.</b> Unauthorized repairs are not eligible and may make the whole incident ineligible. We will arrange service or a swap.</li>
+    </ol>
+    <p>
+      We will send you an itemized assessment before charging anything. Amounts still owed after any
+      waiver may be charged to your card on file or withheld from your security deposit refund, with the
+      breakdown provided to you, exactly as described in your
+      <a href="/terms">Terms &amp; Conditions</a>.
+    </p>
+
+    <h2>9. When these terms apply</h2>
+    <ul>
+      <li><b>Included, not optional.</b> The Protection Plan comes with every rental as part of the agreement. There is no separate fee, and nothing to add, decline, or cancel.</li>
+      <li><b>Rentals only.</b> It does not apply to rent-to-buy plans, or to bikes you have purchased outright.</li>
+      <li><b>While the rental is active.</b> The waiver applies to incidents during an active rental on an account that is current. It is <b>never retroactive</b>, and it does not survive the end of the rental.</li>
+      <li><b>Past-due or suspended accounts.</b> If the rental period is unpaid or the account is suspended, nothing is waived.</li>
+      <li><b>Not transferable.</b> The waiver runs to the registered account holder and the specific bike on the rental.</li>
+      <li><b>Deposits.</b> It does not replace your security deposit and does not change how the deposit is charged or refunded.</li>
+    </ul>
+
+    <h2>10. Legal terms</h2>
+    <p>
+      The Protection Plan is part of, and governed by, the Foodyzz
+      <a href="/terms">Terms &amp; Conditions</a>. This page describes it in plain English; where this
+      page and the Terms &amp; Conditions differ, the Terms &amp; Conditions control. Personal
+      information collected when you report an incident is handled under our
+      <a href="/privacy">Privacy Policy</a>.
+    </p>
+    <p>
+      TO THE MAXIMUM EXTENT PERMITTED BY LAW, THE PROTECTION PLAN IS LIMITED TO THE WAIVER OF AMOUNTS
+      DESCRIBED ON THIS PAGE. IT CREATES NO OBLIGATION TO INDEMNIFY OR DEFEND YOU, NO OBLIGATION AS TO
+      BODILY INJURY, DEATH, LOST EARNINGS, OR THIRD-PARTY CLAIMS, AND NO WARRANTY THAT A BIKE WILL BE
+      AVAILABLE OR REPAIRED WITHIN ANY PARTICULAR TIME. FOODYZZ'S TOTAL LIABILITY IN CONNECTION WITH THE
+      PLAN WILL NOT EXCEED THE RENTAL AMOUNTS YOU PAID IN THE THREE (3) MONTHS BEFORE THE EVENT GIVING
+      RISE TO THE CLAIM.
+    </p>
+    <p>
+      Foodyzz determines eligibility, and whether damage is ordinary wear, misuse, or negligence, based
+      on inspection, photographs, service records, and any police report. We will explain our
+      determination in writing. We may change these terms prospectively on notice in the app or by
+      email; changes do not affect an incident already reported. If any part of this page is held
+      unenforceable, the rest remains in effect. These terms are governed by the laws of the State of
+      New York.
+    </p>
+
+    <h2>11. Common questions</h2>
+    <div class="faq-list">
+      <details class="faq">
+        <summary>Do I pay extra for it?</summary>
+        <div class="a">No. It is included in every rental as a term of the rental agreement. There is no line for it on your bill and nothing to add, decline, or cancel — the rate you are quoted in the app already includes it.</div>
+      </details>
+      <details class="faq">
+        <summary>Does it apply to rent-to-buy?</summary>
+        <div class="a">No. On rent-to-buy you carry the risk of damage, theft, and loss the way an owner does — damage beyond ordinary wear is billed in full, and a stolen or lost bike is your responsibility at full replacement value. Repairs for normal wear and tear are still included, with a $9.99 service fee per request. See <a href="#rent-to-buy">section 3</a>.</div>
+      </details>
+      <details class="faq">
+        <summary>Does this protect me as a rider?</summary>
+        <div class="a">No. It is a waiver of what you would otherwise owe Foodyzz for damage to or theft of our bike — it pays nothing to you and applies to nothing of yours. It is no substitute for arranging health, disability, and liability protection of your own. See <a href="#your-own-protection">section 7</a>.</div>
+      </details>
+      <details class="faq">
+        <summary>Does it cover me if I get hurt?</summary>
+        <div class="a">No. Your injuries, medical bills, lost delivery earnings, and any claim brought against you by a pedestrian, driver, or property owner are never waived. Arrange health, disability, and liability protection of your own — see <a href="#your-own-protection">section 7</a>.</div>
+      </details>
+      <details class="faq">
+        <summary>Do I really have to wear a helmet every time?</summary>
+        <div class="a">Yes. Every ride, every time, regardless of trip length or what the law requires of you personally. Riding without one breaches your agreement and can cost you the waiver for that incident.</div>
+      </details>
+      <details class="faq">
+        <summary>My bike was stolen. What do I owe?</summary>
+        <div class="a">On a rental, with the conditions met — reported immediately, police report within 24 hours, a working battery returned, and the bike locked if it was unattended — your out-of-pocket liability for the bike is capped at $500. On rent-to-buy there is no cap: you are responsible for the full replacement value and your remaining balance stays payable.</div>
+      </details>
+      <details class="faq">
+        <summary>Who decides whether damage is "ordinary wear"?</summary>
+        <div class="a">Our service team, based on the delivery inspection, your photos, the repair assessment, and service history. You get the itemized reasoning in writing before anything is charged, and you can dispute it through the app or our <a href="/contact">contact form</a>.</div>
+      </details>
+    </div>
+
+    <h2>12. Contact</h2>
+    <div class="card">
+      <p style="margin-bottom:8px"><b>Incidents &amp; repairs:</b> report in the app, or <a href="/contact">contact us</a></p>
+      <p style="margin-bottom:8px"><b>Legal:</b> <a href="mailto:legal@foodyzz.com">legal@foodyzz.com</a></p>
+      <p><b>Mail:</b> Foodyzz HQ, New York, NY</p>
+    </div>
+  </main>
+
+  <footer class="site-footer">
+    <div class="container">
+      <div class="footer-bottom">
+        <span>© <span id="year">2026</span> Foodyzz. All rights reserved.</span>
+        <span><a href="/privacy">Privacy</a> · <a href="/terms">Terms</a> · <a href="/protection">Protection Plan</a> · <a href="/contact">Contact</a></span>
+        <span>Get the app: <a href="https://apps.apple.com/us/app/foodyzz/id6794564474" target="_blank" rel="noopener">App Store</a> · <a href="https://play.google.com/store/apps/details?id=com.foodyzz" target="_blank" rel="noopener">Google Play</a></span>
+        <span>Foodyzz HQ, New York, NY</span>
+      </div>
+    </div>
+  </footer>
+
+  <script src="js/main.js"></script>
+</body>
+</html>
