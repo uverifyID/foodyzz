@@ -403,6 +403,21 @@ export interface BikeModelConfig {
     rentCadence?: 'daily' | 'weekly' | 'monthly';
     rentToBuyCadence?: 'daily' | 'weekly' | 'monthly';
   };
+  // NYC Admin Code § 20-610 (Local Law 39 of 2023) applies to renting and leasing a
+  // powered bicycle, not only to selling one: the device must be certified to UL 2849
+  // and its battery to UL 2271, and the certifying laboratory's mark or name must be
+  // shown to the customer — on an online listing, on the listing itself. `lab` is the
+  // accredited testing laboratory that issued the certification; without it the app
+  // cannot make the disclosure the rule requires, so the card says so rather than
+  // quietly showing nothing.
+  certification?: {
+    deviceStandard?: string;          // 'UL 2849'
+    batteryStandard?: string;         // 'UL 2271'
+    lab?: string;                     // accredited laboratory, e.g. 'TUV Rheinland'
+    deviceCertificateNumber?: string; // certificate id for the device
+    batteryCertificateNumber?: string;// certificate id for the battery
+    verifyUrl?: string;               // public register the customer can check it against
+  };
 }
 
 // `required` fees cannot be opted out of. The deposit (isDeposit) is disclosed to

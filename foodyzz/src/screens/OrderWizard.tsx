@@ -12,7 +12,7 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity, Alert, ActivityIndicator, Image, TextInput,
-  KeyboardAvoidingView,
+  KeyboardAvoidingView, Linking,
 } from 'react-native';
 import { Bike as BikeIcon, Calendar, Clock, MapPin, ShieldCheck, Check, CreditCard, Info, Ticket, X } from 'lucide-react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -111,8 +111,9 @@ export default function OrderWizard() {
     initialOfferType && RENTAL_TYPES.some((t) => t.key === initialOfferType) ? initialOfferType : null,
   );
   const [bikeModel, setBikeModel] = useState<number | null>(null);
-  // Fees the customer switched OFF. Only possible for `required: false` fees.
-  const [optedOutFees, setOptedOutFees] = useState<string[]>([]);
+  // Optional fees the customer switched ON. Only possible for `required: false` fees,
+  // and always an affirmative tap — an optional recurring charge is never pre-selected.
+  const [selectedFees, setSelectedFees] = useState<string[]>([]);
   // Committed term. Seeded from the model's minimum and never allowed below it.
   const [durationValue, setDurationValue] = useState<number>(0);
   const [selectedProviderId, setSelectedProviderId] = useState<string | null>(null);
@@ -241,9 +242,10 @@ export default function OrderWizard() {
   );
 
   const orderFees = useMemo(
-    () => (rentalType ? toOrderFees(feesFor(logistics, rentalType), optedOutFees) : []),
-    [logistics, rentalType, optedOutFees],
+    () => (rentalType ? toOrderFees(feesFor(logistics, rentalType), selectedFees) : []),
+    [logistics, rentalType, selectedFees],
   );
+
 
   // What the Fees step lists. The deposit is dropped from the LIST only — it is not a
   // rental fee, it is refundable, and leading with it made the step open on a charge
@@ -260,6 +262,34 @@ export default function OrderWizard() {
     if (!rentalType || !bikeModel) return null;
     return computeQuote(logistics, bikeModel, rentalType, orderFees, durationValue);
   }, [logistics, bikeModel, rentalType, orderFees, durationValue]);
+
+  // Rental-purchase disclosures (NY Personal Property Law § 501(7)(a)): the cash price,
+  // the number of payments, and the total of payments needed to own — stated before the
+  // customer commits, not buried in an agreement.
+  //
+  // `noFinanceCharge` is COMPUTED, never assumed. A rent-to-buy plan may only be called
+  // interest-free where the total actually payable to acquire ownership does not exceed
+  // the cash price, and that comparison includes every required fee, because a required
+  // fee is money the customer must pay to get there. Where the total runs over, the
+  // screen states the difference instead — a "0% interest" badge on a plan that costs
+  // more than the bike is the exact claim NY treats as deceptive.
+  const rtoTerms = useMemo(() => {
+    if (rentalType !== 'rentToBuy' || !quote || !bikeModel) return null;
+    const round2 = (n: number) => Math.round(n * 100) / 100;
+    const months = quote.durationValue;
+    // Pre-tax, so it compares like-for-like against the cash price.
+    const perMonth = round2(quote.perPeriodSubtotal ?? quote.total);
+    const totalOfPayments = round2(perMonth * months);
+    const cashPrice = rateFor(logistics, bikeModel, 'buy');
+    return {
+      months,
+      perMonth,
+      totalOfPayments,
+      cashPrice,
+      difference: round2(Math.abs(totalOfPayments - cashPrice)),
+      noFinanceCharge: cashPrice > 0 && totalOfPayments <= cashPrice,
+    };
+  }, [rentalType, quote, bikeModel, logistics]);
 
   // Wording for the fees step. A fee's `cadence` is the unit its RATE is quoted in, not
   // how often the card is charged — computeQuote bills plain rent as rate × term plus the
@@ -696,6 +726,57 @@ export default function OrderWizard() {
             </Text>
           )}
 
+          {/* NYC Admin Code § 20-610: a powered bicycle offered for rent or lease must be
+              certified (UL 2849 / battery UL 2271) and the certifying laboratory's mark or
+              name must appear on the online listing, alongside the DCWP/FDNY battery safety
+              information. This is that listing, so the disclosure belongs on the card. */}
+          <View className="mt-3 border-2 border-slate-200 bg-slate-50 rounded-xl px-3 py-2">
+            <Text className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1">
+              Safety certification
+            </Text>
+            {m.certification?.lab ? (
+              <>
+                <Text className="text-[11px] font-bold text-slate-600">
+                  Certified by <Text className="font-black">{m.certification.lab}</Text>.
+                </Text>
+                <Text className="text-[11px] font-bold text-slate-600 mt-0.5">
+                  Bike · {m.certification.deviceStandard || 'UL 2849'}
+                  {m.certification.deviceCertificateNumber
+                    ? ` · Certificate ${m.certification.deviceCertificateNumber}`
+                    : ''}
+                </Text>
+                <Text className="text-[11px] font-bold text-slate-600 mt-0.5">
+                  Battery · {m.certification.batteryStandard || 'UL 2271'}
+                  {m.certification.batteryCertificateNumber
+                    ? ` · Certificate ${m.certification.batteryCertificateNumber}`
+                    : ''}
+                </Text>
+                <Text className="text-[11px] font-bold text-slate-500 mt-1">
+                  Speed limited to 15 mph, the citywide limit for e-bikes in New York City.
+                </Text>
+                {!!m.certification.verifyUrl && (
+                  <TouchableOpacity onPress={() => Linking.openURL(m.certification!.verifyUrl!)}>
+                    <Text className="text-[11px] font-black text-brand-green-dark underline mt-1">
+                      Verify this certificate →
+                    </Text>
+                  </TouchableOpacity>
+                )}
+              </>
+            ) : (
+              <Text className="text-[11px] font-bold text-amber-700">
+                Certification details for this model are being updated. Ask us before you order —
+                every Foodyzz bike and battery is certified to UL 2849 / UL 2271.
+              </Text>
+            )}
+            <TouchableOpacity
+              onPress={() => Linking.openURL('https://www.nyc.gov/site/dca/about/micromobility-notices.page')}
+            >
+              <Text className="text-[11px] font-black text-brand-green-dark underline mt-1">
+                NYC battery safety information →
+              </Text>
+            </TouchableOpacity>
+          </View>
+
           {soldOut && (
             <View className="mt-3 border-2 border-red-200 bg-red-50 rounded-xl px-3 py-2">
               <Text className="text-[11px] font-bold text-red-500">
@@ -889,7 +970,7 @@ export default function OrderWizard() {
                 The bike electrical system is UL 2849 certified — the certification mark is displayed on the frame.{'\n'}
                 The battery is UL 2271 certified.{'\n'}
                 IP Rating: IP65 (dust and splash resistant){'\n'}
-                Frame loading: can load 300 lbs
+                Frame loading: can load 300 lbs (rider + cargo combined)
               </Text>
               <Text className="text-[11px] font-bold text-slate-400 mt-2">
                 Contact compliance@foodyzz.com for details
@@ -904,7 +985,7 @@ export default function OrderWizard() {
               </View>
               <Text className="text-[11px] font-bold text-slate-500 leading-4">
                 The battery is removable.{'\n'}
-                Top speed: 21 mph{'\n'}
+                Top speed: 19 mph{'\n'}
                 Distance per charge: 80 km (50 miles) with pedal assistance in eco mode{'\n'}
                 Integrated battery management system (BMS)
               </Text>
@@ -1019,7 +1100,7 @@ export default function OrderWizard() {
                   key={fee.key}
                   disabled={uiLocked}
                   onPress={() =>
-                    setOptedOutFees((prev) =>
+                    setSelectedFees((prev) =>
                       prev.includes(fee.key) ? prev.filter((k) => k !== fee.key) : [...prev, fee.key],
                     )
                   }
@@ -1042,12 +1123,39 @@ export default function OrderWizard() {
                   <View className="items-end">
                     <Text className="font-black text-slate-800">${fee.amount.toFixed(2)}</Text>
                     <Text className={`text-[10px] font-black uppercase mt-0.5 ${fee.accepted ? 'text-emerald-600' : 'text-slate-400'}`}>
-                      {fee.key === 'deposit' ? 'At delivery' : locked ? 'Included' : fee.accepted ? 'Added' : 'Opted out'}
+                      {fee.key === 'deposit' ? 'At delivery' : locked ? 'Required' : fee.accepted ? 'Added' : 'Tap to add'}
                     </Text>
                   </View>
                 </TouchableOpacity>
               );
             })}
+
+            {/* The all-in periodic price, stated once, above the charge explainer. Listing
+                the parts without ever summing them is what turns a fee table into drip
+                pricing — the customer must see the number they actually pay, on the same
+                screen that promises no surprises. Tax and the card fee are named here and
+                shown in full on the confirm step, once the provider (and its tax rate) is
+                known. */}
+            {quote && (
+              <View className="flex-row items-center justify-between px-4 py-4 mb-3 rounded-2xl border-2 border-black bg-white shadow-brutalist">
+                <View className="flex-1 pr-3">
+                  <Text className="font-black text-slate-800 uppercase text-sm">
+                    {isInstalmentPlan ? 'Total per month' : `Total for ${termLabel} rental`}
+                  </Text>
+                  <Text className="text-[11px] font-bold text-slate-400 mt-0.5">
+                    Rental plus every required fee. Sales tax and the card processing fee are added on the
+                    next step, before you pay.
+                  </Text>
+                </View>
+                <Text className="text-lg font-black text-brand-green-dark">
+                  $
+                  {(isInstalmentPlan
+                    ? (quote.perPeriodSubtotal ?? quote.total)
+                    : quote.total
+                  ).toFixed(2)}
+                </Text>
+              </View>
+            )}
 
             <View className="border-2 border-indigo-200 bg-indigo-50 rounded-2xl p-4 mb-6">
               <View className="flex-row items-center mb-2">
@@ -1084,6 +1192,23 @@ export default function OrderWizard() {
                   bike</Text>, minus any adjustments for damage.
                 </Text>
               </View>
+
+              {/* Recurring billing has to be disclosed before the card is taken, not after
+                  the first charge — the amount, how often, for how long, and how to stop.
+                  Plain rent is a single charge for the committed term, so this is
+                  instalment-only. */}
+              {isInstalmentPlan && quote && (
+                <View className="flex-row items-start mt-2">
+                  <Text className="text-[11px] font-black text-indigo-700 w-4">4.</Text>
+                  <Text className="flex-1 text-[11px] font-bold text-indigo-700">
+                    This plan then <Text className="font-black">renews automatically every month</Text> at $
+                    {(quote.perPeriodSubtotal ?? quote.total).toFixed(2)} plus tax and card fee, for{' '}
+                    {quote.durationValue} months, until the bike is paid off. We notify you before each
+                    payment. You can pay the balance off early any time in My Rentals with no penalty —
+                    amounts already owed stay payable.
+                  </Text>
+                </View>
+              )}
             </View>
           </View>
         )}
@@ -1248,6 +1373,57 @@ export default function OrderWizard() {
                         </Text>
                       </View>
                     </View>
+
+                    {/* The statutory rent-to-own disclosures, in the customer's own terms. */}
+                    {rtoTerms && (
+                      <View className="bg-slate-50 border border-slate-200 rounded-xl p-3 mt-3">
+                        <Text className="text-[11px] font-black text-slate-500 uppercase tracking-wide mb-2">
+                          What it costs to own it
+                        </Text>
+                        <View className="flex-row items-center justify-between mb-1">
+                          <Text className="text-[11px] font-bold text-slate-500">Cash price if you bought it today</Text>
+                          <Text className="text-[11px] font-black text-slate-800">${rtoTerms.cashPrice.toFixed(2)}</Text>
+                        </View>
+                        <View className="flex-row items-center justify-between mb-1">
+                          <Text className="text-[11px] font-bold text-slate-500">
+                            {rtoTerms.months} payments of ${rtoTerms.perMonth.toFixed(2)}
+                          </Text>
+                          <Text className="text-[11px] font-black text-slate-800">
+                            ${rtoTerms.totalOfPayments.toFixed(2)}
+                          </Text>
+                        </View>
+                        <Text
+                          className={`text-[11px] font-black mt-1 ${
+                            rtoTerms.noFinanceCharge ? 'text-emerald-600' : 'text-slate-600'
+                          }`}
+                        >
+                          {rtoTerms.noFinanceCharge
+                            ? `0% interest — no finance charge. Paying monthly costs $${rtoTerms.difference.toFixed(2)} less than the cash price.`
+                            : `Paying monthly costs $${rtoTerms.difference.toFixed(2)} more than the cash price. There is no interest rate — this is the difference between the two ways to buy.`}
+                        </Text>
+                        <Text className="text-[11px] font-bold text-slate-400 mt-2">
+                          Ownership transfers to you only after the final payment or an early payoff. Sales tax and
+                          the card processing fee are charged on each payment and are not included above.
+                        </Text>
+                      </View>
+                    )}
+
+                    {/* NY Personal Property Law § 504-a — the right to a reduced payment on a
+                        25%+ involuntary income drop. § 501(7)(a) requires the agreement to
+                        describe it, so it is disclosed where the plan is agreed to. */}
+                    <View className="bg-amber-50 border border-amber-200 rounded-xl p-3 mt-3">
+                      <Text className="text-[11px] font-black text-amber-800 uppercase tracking-wide mb-1">
+                        If your income drops
+                      </Text>
+                      <Text className="text-[12px] font-bold text-amber-900">
+                        Once you have paid at least half of the total above, you have a right to lower your monthly
+                        payment if your income falls by 25% or more through involuntary job loss, reduced work,
+                        illness, pregnancy, or disability. Send us evidence of the drop and we reduce each payment by
+                        that percentage or 50%, whichever is smaller, for as long as it lasts. The total you pay to
+                        own the bike does not change — the number of payments extends instead.
+                      </Text>
+                    </View>
+
                     <Text className="text-[11px] font-bold text-slate-400 mt-2">
                       You can pay off the remaining balance early any time from My Rentals.
                     </Text>
@@ -1280,6 +1456,33 @@ export default function OrderWizard() {
                 </Text>
               </View>
             )}
+
+            {/* Placing the order is the acknowledgement. Two things have to be in front of
+                the customer at that moment: that Foodyzz rents for commercial delivery work
+                rather than household use, and the rules that govern how the bike may be
+                ridden in this city. Both are conditions of the rental, not fine print. */}
+            <View className="border-2 border-black bg-white rounded-2xl p-4 mb-6 shadow-brutalist">
+              <View className="flex-row items-center mb-2">
+                <ShieldCheck size={16} color="#507425" />
+                <Text className="ml-2 text-[11px] font-black text-slate-700 uppercase tracking-wide">
+                  Before you confirm
+                </Text>
+              </View>
+              <Text className="text-[12px] font-bold text-slate-600 mb-2">
+                Foodyzz rents e-bikes <Text className="font-black">for commercial delivery and courier
+                work</Text>. By placing this order you confirm you are getting this bike mainly for that
+                work, and not mainly for personal, family, or household use.
+              </Text>
+              <Text className="text-[12px] font-bold text-slate-600 mb-2">
+                <Text className="font-black">Wear a helmet on every ride</Text> — every time, however short
+                the trip. It is a condition of your rental.
+              </Text>
+              <Text className="text-[12px] font-bold text-slate-600">
+                New York City limits e-bikes to <Text className="font-black">15 mph</Text> on city streets
+                and in bike lanes. Your bike is set to that limit. Follow all traffic laws, ride with
+                lights after dark, and lock the bike with the lock we supply.
+              </Text>
+            </View>
 
             <Text className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Notes (optional)</Text>
             <TextInput
