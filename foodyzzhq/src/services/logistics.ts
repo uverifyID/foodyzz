@@ -35,6 +35,8 @@ export const DEFAULT_LOGISTICS: LogisticsConfig = {
         deviceCertificateNumber: 'CU 726061660001',
         batteryCertificateNumber: 'CU 72303450 0003',
         verifyUrl: 'https://www.certipedia.com',
+        deviceClass: 'Class 2',
+        maxSpeedMph: 15,
       },
     },
   ],

@@ -417,6 +417,11 @@ export interface BikeModelConfig {
     deviceCertificateNumber?: string; // certificate id for the device
     batteryCertificateNumber?: string;// certificate id for the battery
     verifyUrl?: string;               // public register the customer can check it against
+    // NY recognises three classes of bicycle with electric assist. Anything outside them
+    // is a motor vehicle needing registration, a licence and insurance — so the class is
+    // what tells a delivery rider the bike they are given is legal to ride.
+    deviceClass?: string;             // 'Class 2'
+    maxSpeedMph?: number;             // as configured — 15 for New York City
   };
 }
 

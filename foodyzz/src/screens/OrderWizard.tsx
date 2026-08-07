@@ -770,7 +770,11 @@ export default function OrderWizard() {
                     : ''}
                 </Text>
                 <Text className="text-[11px] font-bold text-slate-500 mt-1">
-                  Speed limited to 15 mph, the citywide limit for e-bikes in New York City.
+                  {m.certification.deviceClass
+                    ? `${m.certification.deviceClass} bicycle with electric assist. `
+                    : ''}
+                  Speed limited to {m.certification.maxSpeedMph ?? 15} mph, the citywide limit for e-bikes
+                  in New York City.
                 </Text>
                 {!!m.certification.verifyUrl && (
                   <TouchableOpacity onPress={() => Linking.openURL(m.certification!.verifyUrl!)}>
