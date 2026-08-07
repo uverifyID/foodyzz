@@ -8,7 +8,7 @@
 
 ## 🔴 Blocking — a claim can't be made until these are answered
 
-### ~~Q1 — Is there a UL certificate on file?~~ ✅ MOSTLY ANSWERED — three actions remain
+### ~~Q1 — Is there a UL certificate on file?~~ ✅ VERIFIED Aug 7 — two actions remain
 
 **Answered Aug 6, 2026**, from the supplier's certification and testing sheet:
 
@@ -25,10 +25,21 @@
 
 **This unblocks C05, C06, T03 and blog post #4** — after action 1 below.
 
-**Three things still to do:**
+**Two things still to do:**
 
-**1. Verify both numbers on Certipedia yourself. Do this before the first ad runs.**
-It's free, takes five minutes, and the supplier explicitly invites it. Check that each certificate is **live, in scope, and names the actual model** you're buying. Screenshot the results and keep them — that screenshot is your substantiation file if anyone ever challenges the claim.
+**1. ~~Verify both numbers on Certipedia yourself.~~ ✅ DONE Aug 7, 2026 — both live and valid.**
+
+| | Bike | Battery |
+|---|---|---|
+| Standard | ANSI/CAN/UL 2849:2022 | ANSI/CAN/UL/ULC 2271:2023 |
+| Covers model | **E FORWARD X** (electrical system) | **LN-IR-5-U** (battery pack) |
+| Holder | XIANGJIN (TIANJIN) CYCLE CO., LTD. | LN Energy Technology Co., Ltd |
+| Issued | Mar 10, 2026 | Jan 5, 2024 |
+| Status | Valid | Valid |
+
+Both are now linked from the app — **one link per certificate**, next to its own number — and from the Terms. Still worth screenshotting both pages for the substantiation file.
+
+**What verification surfaced, and what it means for copy:** the certificates belong to the **manufacturers**, not to Foodyzz, and they name **specific models**. So: never imply Foodyzz is certified (the bike is), and **confirm the units and battery packs actually shipped are the E FORWARD X with the LN-IR-5-U pack**. A substituted battery is not a certified battery, and the battery is the part New York City is enforcing on.
 
 **2. Note what you don't have yet.** The supplier's own sheet says: *"we are able to provide the original certification certificates and reports during the final contract confirmation stage; however… we cannot share our company's certificates or reports during the initial quotation phase."*
 

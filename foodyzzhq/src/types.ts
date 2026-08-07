@@ -297,6 +297,14 @@ export interface GlobalConfig {
     tnc?: string;
     privacy?: string;
   };
+  // Public certificate pages on the issuing laboratory's register, one per
+  // certificate. A rider can check the bike and the battery independently — which is
+  // the point: NYC requires the lab to be named, and naming it is worth more when the
+  // customer can go and look.
+  cert?: {
+    frame?: string;
+    battery?: string;
+  };
   supportPhoneNumber: string;
 }
 

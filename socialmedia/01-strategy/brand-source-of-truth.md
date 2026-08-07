@@ -146,14 +146,25 @@ Three consequences worth knowing:
 
 ⚠️ Do not publish "top speed" figures. The app used to say 21 mph, then 19; both conflicted with the configured limit and both are gone. Say **"Class 2 with a throttle, motor assist to 15 mph — New York City's limit."**
 
-**Certifications** *(supplier certification sheet, Aug 2026)*
+**Certifications** — ✅ **both verified live on Certipedia, Aug 7, 2026**
 
-| | |
-|---|---|
-| Electrical system | **UL 2849 certified** — certificate **CU 726061660001** |
-| Battery | **UL 2271 certified** — certificate **CU 72303450 0003** |
-| Testing laboratory | **TÜV Rheinland** |
-| Verify at | **certipedia.com** |
+| | Bike | Battery |
+|---|---|---|
+| Certificate | **CU 726061660001** | **CU 72303450 0003** |
+| Standard | **ANSI/CAN/UL 2849:2022** | **ANSI/CAN/UL/ULC 2271:2023** |
+| Covers | Electrical system of e-bike, model **E FORWARD X** | Rechargeable Li-ion battery pack, model **LN-IR-5-U** |
+| Certificate holder | XIANGJIN (TIANJIN) CYCLE CO., LTD. | LN Energy Technology Co., Ltd |
+| Issued | March 10, 2026 | January 5, 2024 |
+| Status | **Valid** | **Valid** |
+| Verify | [certipedia.com/certificates/72606166](https://www.certipedia.com/certificates/72606166?locale=en) | [certipedia.com/certificates/72303450](https://www.certipedia.com/certificates/72303450?locale=en) |
+
+Both pages carry the **cTUVus** mark and state *"The validity of the certificate does not expire unless the standard(s) expire or the client cancels it."* Both links are live in the app on the bike's listing, one per certificate, and in the Terms.
+
+**Three things this changes for copy:**
+
+1. **The certificates are held by the manufacturers, not by Foodyzz.** XIANGJIN holds the bike certificate; LN Energy holds the battery one. Never write or imply that Foodyzz is certified — the *bike* is. "Certified to UL 2849 by TÜV Rheinland" is the safe form.
+2. **They name specific models — E FORWARD X and battery pack LN-IR-5-U.** Confirm the units actually shipped are those models and that pack. A substituted battery is not a certified battery, and the battery is the part the city cares about.
+3. **UL 2849 covers the electrical system**, which is what the standard is for. Say "the electrical system is certified to UL 2849," not "the bike is UL-certified" as a blanket claim.
 | Mark location | Displayed on the frame |
 | IP rating | **IP65** — dust and splash resistant |
 | Frame loading | **300 lbs, rider + cargo combined** (136 kg) |

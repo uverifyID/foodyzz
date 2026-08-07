@@ -661,6 +661,12 @@ export default function OrderWizard() {
   const renderModelCard = (model: number) => {
     const m = logistics.bikeModels.find((b) => b.model === model);
     if (!m || !rentalType) return null;
+    // The bike and the battery hold separate certificates, so each gets its own link
+    // to its own page on the laboratory's register — a rider checking one has not
+    // checked the other. Kept in apiConfig/global so the URLs can be corrected without
+    // a release; the model's own verifyUrl is the fallback if they are ever absent.
+    const frameCertUrl: string | undefined = config?.cert?.frame || m.certification?.verifyUrl;
+    const batteryCertUrl: string | undefined = config?.cert?.battery || m.certification?.verifyUrl;
     const avail = availabilityFor(model);
     // Three states, in priority order: nothing free at all (Sold Out, unselectable),
     // stock free but every unit already claimed by an earlier order (waitlist —
@@ -763,12 +769,26 @@ export default function OrderWizard() {
                     ? ` · Certificate ${m.certification.deviceCertificateNumber}`
                     : ''}
                 </Text>
+                {!!frameCertUrl && (
+                  <TouchableOpacity onPress={() => Linking.openURL(frameCertUrl)}>
+                    <Text className="text-[11px] font-black text-brand-green-dark underline mt-0.5 mb-1">
+                      Verify the bike certificate →
+                    </Text>
+                  </TouchableOpacity>
+                )}
                 <Text className="text-[11px] font-bold text-slate-600 mt-0.5">
                   Battery · {m.certification.batteryStandard || 'UL 2271'}
                   {m.certification.batteryCertificateNumber
                     ? ` · Certificate ${m.certification.batteryCertificateNumber}`
                     : ''}
                 </Text>
+                {!!batteryCertUrl && (
+                  <TouchableOpacity onPress={() => Linking.openURL(batteryCertUrl)}>
+                    <Text className="text-[11px] font-black text-brand-green-dark underline mt-0.5">
+                      Verify the battery certificate →
+                    </Text>
+                  </TouchableOpacity>
+                )}
                 <Text className="text-[11px] font-bold text-slate-500 mt-1">
                   {m.certification.deviceClass
                     ? `${m.certification.deviceClass} bicycle with electric assist. `
@@ -776,13 +796,6 @@ export default function OrderWizard() {
                   Speed limited to {m.certification.maxSpeedMph ?? 15} mph, the citywide limit for e-bikes
                   in New York City.
                 </Text>
-                {!!m.certification.verifyUrl && (
-                  <TouchableOpacity onPress={() => Linking.openURL(m.certification!.verifyUrl!)}>
-                    <Text className="text-[11px] font-black text-brand-green-dark underline mt-1">
-                      Verify this certificate →
-                    </Text>
-                  </TouchableOpacity>
-                )}
               </>
             ) : (
               <Text className="text-[11px] font-bold text-amber-700">
