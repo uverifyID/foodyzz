@@ -65,6 +65,10 @@ const STEP_TITLES = ['Start date', 'Delivery time', 'Type', 'Your bike', 'Fees',
 const dayLabel = (day: string): string =>
   parseDay(day).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
 
+// The published Terms this screen's acknowledgements correspond to — stored on the order
+// so a dispute is answered with the version the rider actually saw, not today's.
+const TERMS_VERSION = '2026-08-07';
+
 export default function OrderWizard() {
   const navigation = useNavigation<any>();
   // Presented as a stack modal, so it fills the window and its fixed footer is
@@ -114,6 +118,10 @@ export default function OrderWizard() {
   // Optional fees the customer switched ON. Only possible for `required: false` fees,
   // and always an affirmative tap — an optional recurring charge is never pre-selected.
   const [selectedFees, setSelectedFees] = useState<string[]>([]);
+  // Checkout acknowledgements. Both are conditions of the rental, so both gate the pay
+  // button rather than sitting under it as text the rider can scroll past.
+  const [ackSafety, setAckSafety] = useState(false);
+  const [ackTerms, setAckTerms] = useState(false);
   // Committed term. Seeded from the model's minimum and never allowed below it.
   const [durationValue, setDurationValue] = useState<number>(0);
   const [selectedProviderId, setSelectedProviderId] = useState<string | null>(null);
@@ -445,7 +453,7 @@ export default function OrderWizard() {
       case 3: return !!rentalType;
       case 4: return !!bikeModel && (availabilityFor(bikeModel)?.available ?? 0) > 0;
       case 5: return true;
-      case 6: return !!selectedProviderId && !!userProfile?.address;
+      case 6: return !!selectedProviderId && !!userProfile?.address && ackSafety && ackTerms;
       default: return false;
     }
   };
@@ -568,6 +576,16 @@ export default function OrderWizard() {
         needBy: endDate ? parseDay(endDate).toISOString() : null,
 
         notes,
+        // What the rider actually agreed to at checkout, stored with the order so it
+        // survives a later change to the Terms or to the wizard's copy.
+        acknowledgements: {
+          helmetOnEveryRide: true,
+          speedLimitMph: 15,
+          batteryChargingRules: true,
+          commercialUse: true,
+          termsVersion: TERMS_VERSION,
+          acceptedAt: new Date().toISOString(),
+        },
         status: 'requested',
         paymentIntentId,
         // Nothing is charged until the bike is actually delivered.
@@ -1457,31 +1475,70 @@ export default function OrderWizard() {
               </View>
             )}
 
-            {/* Placing the order is the acknowledgement. Two things have to be in front of
-                the customer at that moment: that Foodyzz rents for commercial delivery work
-                rather than household use, and the rules that govern how the bike may be
-                ridden in this city. Both are conditions of the rental, not fine print. */}
+            {/* A disclosure nobody records is worth very little the day it matters. The
+                rider ticks these, and what they ticked is written onto the order with the
+                version of the Terms they saw — so the record survives a later edit to this
+                screen's copy or to the Terms themselves. */}
             <View className="border-2 border-black bg-white rounded-2xl p-4 mb-6 shadow-brutalist">
-              <View className="flex-row items-center mb-2">
+              <View className="flex-row items-center mb-3">
                 <ShieldCheck size={16} color="#507425" />
                 <Text className="ml-2 text-[11px] font-black text-slate-700 uppercase tracking-wide">
                   Before you confirm
                 </Text>
               </View>
-              <Text className="text-[12px] font-bold text-slate-600 mb-2">
-                Foodyzz rents e-bikes <Text className="font-black">for commercial delivery and courier
-                work</Text>. By placing this order you confirm you are getting this bike mainly for that
-                work, and not mainly for personal, family, or household use.
-              </Text>
-              <Text className="text-[12px] font-bold text-slate-600 mb-2">
-                <Text className="font-black">Wear a helmet on every ride</Text> — every time, however short
-                the trip. It is a condition of your rental.
-              </Text>
-              <Text className="text-[12px] font-bold text-slate-600">
-                New York City limits e-bikes to <Text className="font-black">15 mph</Text> on city streets
-                and in bike lanes. Your bike is set to that limit. Follow all traffic laws, ride with
-                lights after dark, and lock the bike with the lock we supply.
-              </Text>
+
+              <TouchableOpacity
+                onPress={() => setAckSafety((v) => !v)}
+                className="flex-row items-start mb-3"
+                accessibilityRole="checkbox"
+                accessibilityState={{ checked: ackSafety }}
+              >
+                <View
+                  className={`w-6 h-6 rounded-md border-2 border-black items-center justify-center mr-3 ${
+                    ackSafety ? 'bg-brand-green' : 'bg-white'
+                  }`}
+                >
+                  {ackSafety && <Check size={14} color="#0A0A0A" strokeWidth={4} />}
+                </View>
+                <Text className="flex-1 text-[12px] font-bold text-slate-600">
+                  I will <Text className="font-black">wear a helmet on every ride</Text>, keep to New York
+                  City's <Text className="font-black">15 mph</Text> e-bike limit and not tamper with the
+                  limiter, follow all traffic laws, and charge the battery only with the charger Foodyzz
+                  supplies — indoors, never unattended overnight.
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                onPress={() => setAckTerms((v) => !v)}
+                className="flex-row items-start"
+                accessibilityRole="checkbox"
+                accessibilityState={{ checked: ackTerms }}
+              >
+                <View
+                  className={`w-6 h-6 rounded-md border-2 border-black items-center justify-center mr-3 ${
+                    ackTerms ? 'bg-brand-green' : 'bg-white'
+                  }`}
+                >
+                  {ackTerms && <Check size={14} color="#0A0A0A" strokeWidth={4} />}
+                </View>
+                <Text className="flex-1 text-[12px] font-bold text-slate-600">
+                  I am renting this bike <Text className="font-black">mainly for delivery or courier
+                  work</Text>, not mainly for personal, family, or household use, and I accept the Terms
+                  &amp; Conditions and the Protection Plan.
+                </Text>
+              </TouchableOpacity>
+
+              <View className="flex-row mt-3 ml-9">
+                <TouchableOpacity onPress={() => Linking.openURL('https://foodyzz.com/terms')}>
+                  <Text className="text-[11px] font-black text-brand-green-dark underline">Terms</Text>
+                </TouchableOpacity>
+                <Text className="text-[11px] font-black text-slate-300 mx-2">·</Text>
+                <TouchableOpacity onPress={() => Linking.openURL('https://foodyzz.com/protection')}>
+                  <Text className="text-[11px] font-black text-brand-green-dark underline">
+                    Protection Plan
+                  </Text>
+                </TouchableOpacity>
+              </View>
             </View>
 
             <Text className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Notes (optional)</Text>

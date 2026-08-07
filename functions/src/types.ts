@@ -356,8 +356,21 @@ export interface BillingSchedule {
   lastPaymentIntentId?: string;
 }
 
+// What the rider ticked at checkout, captured per order. Kept as data rather than
+// inferred from "they placed an order", so a helmet or speed-limiter dispute is
+// answered with the version of the Terms that was actually on screen.
+export interface OrderAcknowledgements {
+  helmetOnEveryRide: boolean;
+  speedLimitMph: number;
+  batteryChargingRules: boolean;
+  commercialUse: boolean;
+  termsVersion: string;
+  acceptedAt: string;
+}
+
 export interface RentalOrder {
   id: string;
+  acknowledgements?: OrderAcknowledgements;
   // ── Bike rental (Foodyzz) ────────────────────────────────────────────────
   rentalType?: RentalType;
   bikeModel?: number;
