@@ -1,56 +1,116 @@
-# UniHamper — Social Media & Content Engine
+# Foodyzz Marketing — Launch Plan
 
-This folder is the **complete marketing system** for UniHamper's launch (go-live **Aug 1, 2026**;
-first posts start ~**Jul 15, 2026**). It is designed to run with **little to no daily input** from Raj:
-the strategy and templates live here, and four AI subagents generate fresh content on demand.
+Everything needed to take Foodyzz from zero social presence to a working acquisition engine in New York City.
 
-> **Start here:** read [`00-strategy/brand-source-of-truth.md`](00-strategy/brand-source-of-truth.md)
-> — every post must obey it. Nothing gets invented; unverifiable facts get flagged, not published.
+**Target launch: August 15, 2026.** Written Aug 6, 2026.
 
-## Folder map
-```
-socialmedia/
-├── README.md                       ← you are here (index + how to run it)
-├── laundry SM.pdf                  ← the original brief
-├── 00-strategy/
-│   ├── brand-source-of-truth.md    ← MASTER facts. All content obeys this.
-│   ├── competitor-research.md      ← who we're up against + gaps to exploit
-│   ├── keyword-map.md              ← SEO keywords by audience + intent
-│   └── content-pillars-calendar.md ← what to post, when, on which platform
-├── 01-blog/
-│   ├── blog-backlog.md             ← prioritized SEO blog titles
-│   └── drafts/                     ← ready-to-publish long-form blog drafts
-├── 02-social/
-│   ├── launch-calendar.md          ← first 14 days, post-by-post
-│   ├── caption-library.md          ← reusable caption templates per platform
-│   └── posts/                      ← individual ready-to-schedule posts
-├── 03-visuals/
-│   ├── brand-graphic-guidelines.md ← look/feel, safe zones, templates
-│   └── video-scripts.md            ← TikTok / Reels scripts + shot lists
-└── 04-automation/
-    ├── pipeline-architecture.md    ← how it all runs hands-off
-    ├── origami-chat.md             ← target-market automation setup
-    ├── arvow-blog-rss.md           ← blog generation + RSS
-    └── blotato-publishing.md       ← auto-scheduling to IG/FB/TikTok
-```
+---
 
-## The four subagents (re-runnable anytime)
-Defined in `.claude/agents/`. Invoke by asking Claude, e.g. *"use the content-creator to write
-this week's captions"* or *"have the marketing-strategist refresh the keyword map."*
+## Start here
 
-| Agent | Owns | Typical ask |
-|---|---|---|
-| **marketing-strategist** | SEO, keywords, calendar, competitor watch | "Plan next month's content pillars" |
-| **content-creator** | Blogs, captions, hooks, ad copy | "Write 5 IG captions for ambassadors" |
-| **graphic-designer** | Graphic concepts, visual specs, video scripts | "Give me 3 Reel scripts on campus laundry" |
-| **sales-lead** | Ambassador + laundromat acquisition, outreach | "Draft a DM funnel to recruit RAs" |
+| If you have… | Read |
+|---|---|
+| 5 minutes | [OPEN-QUESTIONS.md](OPEN-QUESTIONS.md) — 15 things I need answered, 4 of them blocking |
+| 20 minutes | [01-strategy/brand-source-of-truth.md](01-strategy/brand-source-of-truth.md) then [01-strategy/gtm-launch-plan.md](01-strategy/gtm-launch-plan.md) |
+| An afternoon | Everything below, in order |
 
-## How the weekly cadence works (once live)
-1. **marketing-strategist** picks the week's themes from the calendar.
-2. **content-creator** writes the blog + captions; **graphic-designer** specs the visuals/videos.
-3. **sales-lead** adds the ambassador/laundromat recruitment posts.
-4. Everything is checked against the source-of-truth, then pushed to **Blotato** to auto-schedule.
-5. Raj only reviews/approves — no writing required.
+**Before writing any copy, read [01-strategy/brand-source-of-truth.md](01-strategy/brand-source-of-truth.md).** Every price, spec and claim in this folder traces back to it, and it lists what must never be said.
 
-## Status
-See [`PROGRESS.md`](PROGRESS.md) for what's built and what's blocked on Raj's inputs.
+---
+
+## The plan in one page
+
+**The opening.** Three funded competitors — Whizz, Zoomo, JOCO — all advertise a headline price that isn't the checkout total. Zoomo shows "$20/week" on a site where the standard plan is $59. Nobody publishes a real total. Meanwhile the customer is a rider averaging $366 a week, half of them under a year on the job, 42% of whom report being underpaid by the apps they work for.
+
+**The position.** Not cheapest — trustworthy. Publish every line item, charge only at delivery, and lead with the one number nobody can match.
+
+**That number:** **$887.68 over 8 months and the bike is yours.** Whizz advertises rent-to-own from $169/month over 12 months — about $2,028. We're ~56% less and four months sooner.
+
+**The second weapon:** NYC made UL 2849 and UL 2271 certification mandatory for any bike **rented** or sold in the city. Battery fires are up ~70% this year while deaths fell to one. Foodyzz bikes carry both marks on the frame, tested by TÜV Rheinland, with **certificate numbers anyone can look up on certipedia.com** — and **no competitor markets this at all.** Being checkable beats being trusted when you have no reviews.
+
+**The channels.** Field work first (the Deliverista Hub at 249 Broadway is the single best location in the city), then TikTok (the entire category is under 500 followers — there is no incumbent), then blog SEO on NYC e-bike rules, where page 1 is currently owned by out-of-town DTC brands and, in one case, a German eBay listing.
+
+**The surprise.** 46.5% of NYC delivery workers are **French**-primary — West African, and nearly double the Spanish share. Whizz and Zoomo both built French websites. Neither posts French social content.
+
+---
+
+## Contents
+
+### `00-research/` — the evidence
+| File | What's in it |
+|---|---|
+| [competitors.md](00-research/competitors.md) | Every competitor price found, side by side with ours, plus 10 positioning gaps |
+| [competitor-social-media.md](00-research/competitor-social-media.md) | Handles, follower counts, cadence, and where they're weak |
+| [courier-market-and-economics.md](00-research/courier-market-and-economics.md) | Who the customer is: pay, demographics, theft, batteries, regulation |
+| [language-strategy.md](00-research/language-strategy.md) | The French/Spanish/Chinese/Bengali analysis and what to build |
+| [keyword-research-english.md](00-research/keyword-research-english.md) | Keyword universe with real SERP observations |
+| [nyc-ebike-rules.md](00-research/nyc-ebike-rules.md) | **Compliance fact sheet — check before publishing any legal claim** |
+| [rss-and-blotato-technical.md](00-research/rss-and-blotato-technical.md) | Engineering reference for the automation |
+
+### `01-strategy/`
+| File | |
+|---|---|
+| [brand-source-of-truth.md](01-strategy/brand-source-of-truth.md) | ⭐ **The governing document.** Every verified fact, every forbidden claim |
+| [positioning-and-messaging.md](01-strategy/positioning-and-messaging.md) | Four pillars, voice, objection handling |
+| [gtm-launch-plan.md](01-strategy/gtm-launch-plan.md) | Nine-day critical path, targets, risks |
+
+### `02-seo/`
+| File | |
+|---|---|
+| [keyword-map.md](02-seo/keyword-map.md) | Clusters, page assignments, news-driven content windows |
+| [blog-backlog.md](02-seo/blog-backlog.md) | 24 prioritised posts with briefs, plus Spanish and French sets |
+| [blog-hosting-plan.md](02-seo/blog-hosting-plan.md) | Where to host a blog on a static Hostinger site + local SEO |
+| [drafts/](02-seo/drafts/) | Two complete, publishable drafts |
+
+### `03-social/`
+| File | |
+|---|---|
+| [channel-playbooks.md](03-social/channel-playbooks.md) | How IG, FB and TikTok each get used |
+| [caption-library.md](03-social/caption-library.md) | 30 captions, English + Spanish, with visual briefs |
+| [tiktok-scripts.md](03-social/tiktok-scripts.md) | 20 shot-by-shot scripts |
+| [launch-calendar.md](03-social/launch-calendar.md) | Aug 15 – Sept 30, every slot assigned |
+
+### `04-visuals/`
+| File | |
+|---|---|
+| [brand-kit.md](04-visuals/brand-kit.md) | Colour, type, style rules, and what must never be used |
+| [graphic-templates.md](04-visuals/graphic-templates.md) | 8 reusable templates |
+| [shot-list.md](04-visuals/shot-list.md) | The half-day photo shoot — a launch blocker |
+
+### `05-paid-and-field/`
+| File | |
+|---|---|
+| [field-sales-playbook.md](05-paid-and-field/field-sales-playbook.md) | ⭐ Where the first 50 customers come from |
+| [paid-ads-plan.md](05-paid-and-field/paid-ads-plan.md) | Meta, TikTok, Google — starting ~Sept 8, not launch day |
+| [creator-partnerships.md](05-paid-and-field/creator-partnerships.md) | Creator offers, community alliances, HungryPanda |
+
+### `06-automation/`
+| File | |
+|---|---|
+| [blotato-pipeline.md](06-automation/blotato-pipeline.md) | RSS → n8n → Blotato, with a human approval gate |
+| [measurement-and-analytics.md](06-automation/measurement-and-analytics.md) | ⭐ Nothing is installed. This is the day-one fix. |
+
+---
+
+## The six things blocking launch
+
+1. **No logomark** — profile pictures can't be made from a wide wordmark. Blocks all social account creation.
+2. **No photography** — zero usable marketing images exist. Half a day fixes it.
+3. **No analytics** — no GA4, no pixels, no Search Console. Every day costs retargetable traffic.
+4. **No prices on the website** — while the site claims "no hidden fees."
+5. **Nine site-vs-app contradictions** — including "extend or return any time" against a 4-week minimum, and the app's "21 mph top speed" against the Class 2 designation.
+6. **Insurance fee has no defined coverage** — a $9.99/week line item nobody can explain. A customer will ask in week one.
+
+✅ **Resolved Aug 6:** UL certificates confirmed (UL 2849 `CU 726061660001`, UL 2271 `CU 72303450 0003`, TÜV Rheinland) and the fleet is **Class 2** — which also removes the Intro 244 risk. Two follow-ups remain in [OPEN-QUESTIONS.md](OPEN-QUESTIONS.md) Q1: verify the numbers on Certipedia before the first ad, and confirm NYC accepts TÜV Rheinland certification for Local Law 39.
+
+Detail and owners in [01-strategy/gtm-launch-plan.md](01-strategy/gtm-launch-plan.md) §2.
+
+---
+
+## How this was verified
+
+Product facts come from reading the app source, the Cloud Functions, the Firestore rules and the seeded config — not from a brief. Prices were re-derived by hand from `foodyzz/src/services/logistics.ts` and cross-checked against the App Store screenshots.
+
+Market and regulatory research came from live web research with sources cited inline; every number carries a link and a date. Where something couldn't be confirmed it says `unverified` rather than guessing.
+
+**Search-volume figures are modeled estimates, not tool readings** — there was no Ahrefs or Semrush access. The SERP-composition observations are real and are the more reliable signal. Before committing a quarter of content work, buy one month of a keyword tool and re-validate the top 20 rows.
