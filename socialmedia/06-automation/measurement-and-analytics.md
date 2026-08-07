@@ -115,7 +115,7 @@ One weekly view. If it takes more than five minutes to read, nobody will read it
 
 Paid orders, split by plan · revenue by plan · **rent-to-buy completion rate** · deposit refund rate · average rental term length.
 
-**Rent-to-buy completion rate is the number that decides whether the business model works.** A customer is worth $911.76 over twelve months only if they finish. Track it from the first cohort — the dunning path (retry at 24h, `past_due` after two failures) means the data will exist in `settlements/`.
+**Rent-to-buy completion rate is the number that decides whether the business model works.** A customer is worth $999.00 over twelve months only if they finish. Track it from the first cohort — the dunning path (retry at 24h, `past_due` after two failures) means the data will exist in `settlements/`.
 
 **Social**
 

@@ -125,7 +125,7 @@ HARD RULES — violating any of these is a failure:
 - Never state a range without its qualifier. It is "up to 50 miles in
   eco mode with pedal assist", never "50 mile range".
 - Never say "$22.49/week" without noting the 4-week minimum and the
-  $5.99 fee bundle. The real 4-week charge is $95.95.
+  $9.99 maintenance fee. The real 4-week charge is $99.95.
 - Never use the words "insurance" or "coverage" about the Protection
   Plan. It WAIVES: 50% of eligible repair and damage, and caps theft
   liability at $500 on conditions. It applies to the bike, never the

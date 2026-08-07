@@ -1433,7 +1433,9 @@ export default function OrderWizard() {
                           }`}
                         >
                           {rtoTerms.noFinanceCharge
-                            ? `0% interest — no finance charge. Paying monthly costs $${rtoTerms.difference.toFixed(2)} less than the cash price.`
+                            ? rtoTerms.difference < 0.01
+                              ? '0% interest — no finance charge. You pay exactly the cash price, spread over the term.'
+                              : `0% interest — no finance charge. Paying monthly costs $${rtoTerms.difference.toFixed(2)} less than the cash price.`
                             : `Paying monthly costs $${rtoTerms.difference.toFixed(2)} more than the cash price. There is no interest rate — this is the difference between the two ways to buy.`}
                         </Text>
                         <Text className="text-[11px] font-bold text-slate-400 mt-2">

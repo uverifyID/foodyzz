@@ -24,7 +24,7 @@ Everything needed to take Foodyzz from zero social presence to a working acquisi
 
 **The position.** Not cheapest — trustworthy. Publish every line item, charge only at delivery, and lead with the one number nobody can match.
 
-**That number:** **$911.76 over 12 months and the bike is yours.** Whizz advertises rent-to-own from $169/month over the same 12 months — about $2,028. **We are ~55% less for the same term.** The old "four months sooner" line is dead: rent to buy is now 12 months, not 8.
+**That number:** **$999.00 over 12 months and the bike is yours.** Whizz advertises rent-to-own from $169/month over the same 12 months — about $2,028. **We are ~51% less for the same term.** The old "four months sooner" line is dead: rent to buy is now 12 months, not 8.
 
 **The second weapon:** NYC made UL 2849 and UL 2271 certification mandatory for any bike **rented** or sold in the city. Battery fires are up ~70% this year while deaths fell to one. Foodyzz bikes carry both marks on the frame, tested by TÜV Rheinland, with **certificate numbers anyone can look up on certipedia.com** — and **no competitor markets this at all.** Being checkable beats being trusted when you have no reviews.
 

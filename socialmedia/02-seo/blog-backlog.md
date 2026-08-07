@@ -49,7 +49,7 @@
 ### 6. E-Bike Theft in NYC: Where Bikes Get Taken, How to Lock, and What to Do After
 - **Primary:** ebike theft nyc · **Supporting:** how to lock an ebike, ebike gps tracker, stolen ebike nyc police report
 - **Why now:** Whizz ranks **#1** here with a completely generic post. Not one NYC-specific result on page 1. Easiest theft of a competitor's best-ranking topic available.
-- **Must contain:** the 54%-theft / 30%-assault statistic; NYPD reporting process and why it matters; lock specifics; GPS tracking; **the safety point that recovering a bike yourself has led to violent confrontations — do not do it**. Contextual mention that Foodyzz bikes include a GPS tracker in the $4.99 fee.
+- **Must contain:** the 54%-theft / 30%-assault statistic; NYPD reporting process and why it matters; lock specifics; GPS tracking; **the safety point that recovering a bike yourself has led to violent confrontations — do not do it**. Contextual mention that Foodyzz bikes include a optional GPS tracker for $5.99.
 
 ### 7. Where to Charge or Swap Your E-Bike Battery in NYC (Updated 2026)
 - **Primary:** ebike charging nyc · **Supporting:** battery swap nyc, deliverista hub, popwheels
@@ -59,7 +59,7 @@
 
 ### 8. Rent, Rent-to-Buy, or Buy: The Math for NYC Delivery Riders
 - **Primary:** rent to own ebike nyc · **Supporting:** ebike financing no credit check, buy vs rent ebike delivery
-- **Must contain:** the three-way comparison at real totals — $95.95/4wks vs $911.76 to own in 12 months vs $899 cash; the break-even point where renting costs more than owning; who each option is actually right for (short tenure → rent; committed → rent-to-buy; has cash → buy).
+- **Must contain:** the three-way comparison at real totals — $99.95/4wks vs $999.00 to own in 12 months vs $999 cash; the break-even point where renting costs more than owning; who each option is actually right for (short tenure → rent; committed → rent-to-buy; has cash → buy).
 - **This is the highest commercial-intent post in the backlog.**
 
 ---
@@ -111,7 +111,7 @@
 ### 18. How the NYC Delivery Worker Minimum Pay Rate Actually Works
 ### 19. Battery Care: Making a Delivery E-Bike Battery Last
 ### 20. What Happens If Your Rental Bike Breaks Down
-- ⚠️ Requires a documented maintenance SLA. See Q10 — the $5.99/week maintenance fee has no defined service commitment.
+- ⚠️ Requires a documented maintenance SLA. See Q10 — the $9.99/week maintenance fee has no defined service commitment.
 
 ### 21. Buying a Used E-Bike in NYC: The Checklist That Stops You Losing $1,000
 ### 22. Riding Safely at 15 mph: What the Speed Cap Means Day to Day

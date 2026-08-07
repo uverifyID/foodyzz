@@ -86,7 +86,7 @@ Also secure, even if unused: YouTube (`@foodyzz` — for Shorts repurposing), an
 **Bio template (Instagram / TikTok):**
 ```
 E-bikes for NYC delivery riders 🇺🇸
-Rent from $95.95/4 weeks · Own in 12 months
+Rent from $99.95/4 weeks · Own in 12 months
 UL 2849 certified · Delivered to your door
 Manhattan → Brooklyn soon
 ↓ Get the app
@@ -152,7 +152,7 @@ Ranked by realistic yield in the first 30 days. Full detail in `../05-paid-and-f
 
 ## 6. Field kit
 
-- **Flyer, double-sided.** Front: the price table and "Own it in 12 months — $911.76." Back: a QR to `foodyzz.com/r/hub` (a tracked landing page). **Print in English, Spanish and French** — French is 46.5% of this workforce.
+- **Flyer, double-sided.** Front: the price table and "Own it in 12 months — $999.00." Back: a QR to `foodyzz.com/r/hub` (a tracked landing page). **Print in English, Spanish and French** — French is 46.5% of this workforce.
 - **A demo bike.** Nothing converts like letting someone sit on it.
 - **A phone with the app open** to walk through the itemised checkout screen.
 - **A QR code per location** so you can attribute which spots work.

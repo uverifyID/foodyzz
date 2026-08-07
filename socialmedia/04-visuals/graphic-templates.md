@@ -16,12 +16,12 @@
 │  ▸ FOODYZZ            [kicker]   │  JetBrains Mono 700, 24pt, black
 │                                  │
 │                                  │
-│      $911.76                     │  JetBrains Mono 700, 180pt, black
+│      $999.00                     │  JetBrains Mono 700, 180pt, black
 │                                  │  on #86B54F full-bleed fill
 │      Then the bike is yours.     │  Space Grotesk 500, 44pt, black
 │                                  │
 │                                  │
-│  Model 1 · 12 months · $75.98/mo │  Inter 400, 22pt, black
+│  Model X · 12 months · $83.25/mo │  Inter 400, 22pt, black
 └──────────────────────────────────┘
      ↳ 6px 6px 0 #0A0A0A on the whole card
 ```
@@ -41,11 +41,11 @@ Styled as an actual receipt on `#FAFAF7` with a dashed black rule between sectio
 │  FOODYZZ · MODEL 1 · 4 WEEKS     │
 │  ────────────────────────────    │
 │  Bike  $22.49 × 4 ....... 89.96  │
-│  Maintenance ............. 5.99  │
+│  Maintenance ............. 9.99  │
 │  ────────────────────────────    │
 │  AT DELIVERY ............ 95.95  │  ← green highlight bar
 │  GPS tracker, if you want it,    │
-│  is $4.99. Off unless you ask.   │
+│  is $5.99. Off unless you ask.   │
 │  + sales tax & card fee          │
 │                                  │
 │  Deposit ............... 100.00  │
@@ -68,7 +68,7 @@ Two or three columns, black keylines, brand green fill on the Foodyzz column **o
 ┌───────────┬───────────┬───────────┐
 │   RENT    │RENT TO BUY│    BUY    │
 ├───────────┼───────────┼───────────┤
-│ $95.95   │ $75.98   │   $899    │
+│ $99.95   │ $83.25   │   $999    │
 │ /4 weeks  │ /month    │   once    │
 ├───────────┼───────────┼───────────┤
 │ New/used  │ New       │ New       │

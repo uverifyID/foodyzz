@@ -57,7 +57,7 @@ Run the organic winners. **Do not make ad-specific creative before you know what
 | Ad | Source | Hook |
 |---|---|---|
 | A1 | C09 | "$22.49 a week is our rate. It's not what you'll be charged." |
-| A2 | C01 | "$911.76. Then the bike is yours." |
+| A2 | C01 | "$999.00. Then the bike is yours." |
 | A3 | C16 | "27,000 vehicles seized. Most riders thought they had an e-bike." |
 | A4 | T02 video | The real-number walkthrough |
 | A5 | C12 | "No credit check. No SSN." |
@@ -114,7 +114,7 @@ The tourism SERP overlap is real and expensive — "ebike rental nyc" attracts C
 **Never send paid traffic to the home page.** Three pages are needed before spend starts:
 
 1. **`/plans`** — the full price table, spec block, three plans, one CTA
-2. **`/rent-to-buy`** — the $911.76 story, the month-by-month, the payoff button
+2. **`/rent-to-buy`** — the $999.00 story, the month-by-month, the payoff button
 3. **`/no-credit-check`** — what we need, what we don't, and that buying skips documents entirely
 
 Each must load fast on a mid-range Android on cellular, work one-handed, and put the price above the fold.
@@ -133,7 +133,7 @@ Each must load fast on a mid-range Android on cellular, work one-handed, and put
 | Document → order | App analytics |
 | **Cost per paid order** | Calculated |
 
-**Break-even reference:** a Model 1 rent-to-buy customer is $911.76 over twelve months. Even at a $150 acquisition cost that's a healthy ratio — **provided they complete the plan.** Track completion, not just acquisition, before scaling spend.
+**Break-even reference:** a rent-to-buy customer is $999.00 over twelve months. Even at a $150 acquisition cost that's a healthy ratio — **provided they complete the plan.** Track completion, not just acquisition, before scaling spend.
 
 **Kill rules:**
 - Ad set spends 3× target CPA with zero orders → pause

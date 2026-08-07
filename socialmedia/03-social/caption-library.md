@@ -16,9 +16,9 @@
 ### C01 · Carousel · IG + FB
 **EN**
 ```
-$911.76. Then the bike is yours.
+$999.00. Then the bike is yours.
 
-That's $75.98 a month for 12 months on a Foodyzz Model 1.
+That's $83.25 a month for 12 months on a Foodyzz Model X.
 No credit check. No balloon payment. No penalty if you pay it off early.
 
 Most rent-to-own in this city runs 12 months and costs about
@@ -29,9 +29,9 @@ Manhattan now. Brooklyn, Queens and the Bronx next.
 ```
 **ES**
 ```
-$911.76. Y la bicicleta es tuya.
+$999.00. Y la bicicleta es tuya.
 
-Son $75.98 al mes durante 12 meses con la Foodyzz Model 1.
+Son $83.25 al mes durante 12 meses con la Foodyzz Model X.
 Sin revisión de crédito. Sin pago final sorpresa. Sin penalidad
 si terminas de pagar antes.
 
@@ -41,7 +41,7 @@ incluyendo lo que NO incluimos, porque también debes saberlo.
 
 Manhattan ahora. Brooklyn, Queens y el Bronx pronto.
 ```
-**Visual:** 6-slide carousel. S1 the number `$911.76` huge in JetBrains Mono on `#86B54F` fill, black text. S2–S4 the month-by-month breakdown. S5 the honest comparison table including "battery swaps: not included." S6 CTA.
+**Visual:** 6-slide carousel. S1 the number `$999.00` huge in JetBrains Mono on `#86B54F` fill, black text. S2–S4 the month-by-month breakdown. S5 the honest comparison table including "battery swaps: not included." S6 CTA.
 
 ---
 
@@ -50,7 +50,7 @@ Manhattan ahora. Brooklyn, Queens y el Bronx pronto.
 ```
 Same 12 months. Less than half the money.
 
-$75.98 a month × 12 = $911.76, and the bike is yours.
+$83.25 a month × 12 = $999.00, and the bike is yours.
 The rent-to-own everyone advertises runs about $2,028
 over the same twelve months.
 
@@ -63,7 +63,7 @@ Full price breakdown at foodyzz.com
 ```
 Los mismos 12 meses. Menos de la mitad del dinero.
 
-$75.98 al mes × 12 = $911.76, y la bicicleta es tuya.
+$83.25 al mes × 12 = $999.00, y la bicicleta es tuya.
 El rent-to-own que todos anuncian cuesta unos $2,028
 en esos mismos doce meses.
 
@@ -81,13 +81,13 @@ Precio completo en foodyzz.com
 ```
 Rent, rent-to-buy, or buy. Here's who each one is actually for.
 
-RENT — $95.95 for four weeks. New or used bike.
+RENT — $99.95 for four weeks. New or used bike.
 Best if you're new to delivering and not sure you'll stay.
 
-RENT TO BUY — $75.98/month for 12 months, then it's yours.
+RENT TO BUY — $83.25/month for 12 months, then it's yours.
 Always a new bike. Best if you know you're staying.
 
-BUY — $899, once. Always a new bike. No deposit, no fees,
+BUY — $999, once. Always a new bike. No deposit, no fees,
 no documents needed at all.
 Best if you have the cash today.
 
@@ -103,14 +103,14 @@ The math is on the slides.
 ```
 The break-even math nobody shows you:
 
-Renting a Model 1 costs $23.99/week over four weeks.
-Buying it outright is $899.
+Renting a Model 1 costs $24.99/week over four weeks.
+Buying it outright is $999.
 
-At $23.99/week, you'd pass $899 in about 40 weeks — around
+At $24.99/week, you'd pass $999 in about 40 weeks — around
 seven and a half months of renting.
 
 So if you know you're delivering for more than about twelve months,
-rent-to-buy at $911.76 total is the cheaper road, and you end
+rent-to-buy at $999.00 total is the cheaper road, and you end
 up owning the bike.
 
 If you don't know yet, rent. That's what it's for.
@@ -217,7 +217,7 @@ Model 1, four weeks:
   Bike, $22.49 × 4 weeks ........ $89.96
   Maintenance ................... $5.99
   ─────────────────────────────────────
-  Charged at delivery ........... $95.95
+  Charged at delivery ........... $99.95
   (plus sales tax and card fee)
 
   Deposit ....................... $100.00
@@ -244,7 +244,7 @@ Model 1, cuatro semanas:
   Bicicleta, $22.49 × 4 semanas .. $89.96
   Mantenimiento .................. $5.99
   ──────────────────────────────────────
-  Se cobra en la entrega ......... $95.95
+  Se cobra en la entrega ......... $99.95
   (más impuesto y comisión de tarjeta)
 
   Depósito ....................... $100.00
@@ -272,14 +272,14 @@ bicicleta está en tus manos. Cancela gratis antes de eso.
 ```
 $22.49 a week is our rate. It is not what you'll be charged.
 
-The minimum rental is four weeks, and there's a $5.99 fee
-bundle on top. So the real first charge on a Model 1 is
-$95.95, before tax and card fee. Plus a $100 deposit
-you get back.
+The minimum rental is four weeks, and maintenance is $9.99
+on top, charged once for the whole rental. So the real first
+charge is $99.95, before tax and card fee. Plus a $100
+deposit you get back when the bike comes back.
 
 We'd rather tell you now than at checkout.
 ```
-**Visual:** plain type on `#EFF5E6`. `$22.49` struck through, `$95.95` beneath it. Nothing else. Let it be blunt.
+**Visual:** plain type on `#EFF5E6`. `$22.49` struck through, `$99.95` beneath it. Nothing else. Let it be blunt.
 **Note:** this is the most on-strategy post in the library. It should be in the first week.
 
 ---
@@ -515,9 +515,9 @@ Full winter gear guide going up next week.
 ```
 Foodyzz is live in New York.
 
-E-bikes delivered to your door. Rent from $95.95 for four
-weeks, own one in twelve months for $911.76, or buy it
-outright for $899.
+E-bikes delivered to your door. Rent from $99.95 for four
+weeks, own one in twelve months for $999.00, or buy it
+outright for $999.
 
 UL 2849 certified. UL 2271 battery. The mark is on the frame.
 
@@ -531,8 +531,8 @@ Every price we charge is on our site. Go look before you decide.
 Foodyzz ya está en Nueva York.
 
 Bicicletas eléctricas entregadas en tu puerta. Renta desde
-$95.95 por cuatro semanas, hazla tuya en doce meses por
-$911.76, o cómprala por $899.
+$99.95 por cuatro semanas, hazla tuya en doce meses por
+$999.00, o cómprala por $999.
 
 Certificada UL 2849. Batería UL 2271. La marca está en el cuadro.
 

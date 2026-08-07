@@ -138,7 +138,7 @@ The website has been changed throughout: home page, Terms, Privacy, 404 and the 
 
 ### ~~Q6 — Do both models really share one spec sheet?~~ ✅ RESOLVED Aug 7 — there is only one model
 
-**Model 2 was a test fixture**, used while exercising the wizard, and it was removed from the live config. There is one bike: **Foodyzz Model 1**, $22.49/week, $69.99/month rent to buy, $899 to buy.
+**Model 2 was a test fixture**, used while exercising the wizard, and it was removed from the live config. There is one bike: **Foodyzz Model X**, $22.49/week, $69.99/month rent to buy, $999 to buy.
 
 The pricing question that made this urgent — *what is the customer paying $200 more for?* — disappears with it. Any asset mentioning two models, a $999 bike, or a $109.99 rent-to-buy is describing a product that does not exist.
 
@@ -148,7 +148,7 @@ The pricing question that made this urgent — *what is the customer paying $200
 
 Neither exists. `GlobalConfig.supportPhoneNumber` is a type field referenced nowhere in the app, and the site says only "Foodyzz HQ, New York, NY."
 
-**Consequences:** no Google Business Profile, no map pack, no `LocalBusiness` schema — for a business whose entire market is one city and whose competitors all have local presence. It also means a rider who wants to talk to a person before spending $911.76 can't.
+**Consequences:** no Google Business Profile, no map pack, no `LocalBusiness` schema — for a business whose entire market is one city and whose competitors all have local presence. It also means a rider who wants to talk to a person before spending $999.00 can't.
 
 **Getting a phone number is the single highest-ROI local-SEO action available.** It's a business decision, not a technical one.
 
@@ -178,7 +178,7 @@ Marketing in Spanish and French to a support desk that only speaks English creat
 
 ### Q10 — What is the maintenance SLA?
 
-$5.99/week is charged for "Weekly maintenance." What does a customer actually get? If a bike breaks down mid-shift, what happens, and how fast?
+$9.99/week is charged for "Weekly maintenance." What does a customer actually get? If a bike breaks down mid-shift, what happens, and how fast?
 
 There is no maintenance-request flow in the customer app — only the fee and a `maintenance` bike status. **Downtime is lost income for this customer**, so this is a genuine selling point if the answer is good, and a liability if it isn't. Blog post #20 is blocked on it.
 
@@ -186,7 +186,7 @@ There is no maintenance-request flow in the customer app — only the fee and a 
 
 ### Q11 — Is comparative advertising signed off?
 
-The strongest content in this plan is the honest comparison: **$911.76 over 12 months against Whizz's advertised ~$2,028 over 12.**
+The strongest content in this plan is the honest comparison: **$999.00 over 12 months against Whizz's advertised ~$2,028 over 12.**
 
 Comparative advertising is legal and defensible when every claim is accurate, sourced and current — and this one is built to be scrupulously fair, including a row where we lose on battery swaps. But competitor prices change, and Whizz publishes comparison content about everyone, so expect scrutiny.
 
@@ -214,12 +214,12 @@ The app has a waitlist state, which is good. **What's the actual inventory, and 
 
 Confirmed deliberate — the code comment is explicit and the behaviour is unchanged.
 
-**But the bundle shrank from $20.97 to $5.99**, because insurance was removed and GPS became opt-in. The "your effective weekly price falls the longer you ride" story went with it:
+**But the bundle shrank from $20.97 to one $9.99 maintenance fee**, because insurance was removed and GPS became opt-in. The "your effective weekly price falls the longer you ride" story went with it:
 
 | | Old bundle | Now |
 |---|---|---|
-| 4-week effective $/week | $25.23 | **$23.99** |
-| 12-week effective $/week | $21.74 | **$22.99** |
+| 4-week effective $/week | $25.23 | **$24.99** |
+| 12-week effective $/week | $21.74 | **$23.32** |
 | Spread across the term | **$3.49** | **$1.00** |
 
 **Do not build a graphic on a dollar.** It is still true, still worth a line in a longer explainer, and no longer a headline. Anything already drafted around it needs rewriting — see `03-social/caption-library.md` and `04-visuals/graphic-templates.md`.
@@ -234,13 +234,15 @@ Both are constraints worth being honest about — but if either is about to chan
 
 ---
 
-### Q16 — Will the rent-to-buy rate drop $1.06 so "0% interest" becomes true? 🔴
+### ~~Q16 — Will the rent-to-buy rate drop so "0% interest" becomes true?~~ ✅ DONE Aug 7 — it is true now
 
-At **$69.99 + $5.99 × 12 = $911.76** against a **$899** cash price, rent to buy costs **$12.76 more** than buying outright. New York bars advertising a rent-to-own deal as interest-free or no-cost when total payments exceed the cash price, so the app currently discloses the difference rather than claiming 0%.
+Rent to buy is **$73.26 + $9.99 maintenance = $83.25/month × 12 = $999.00**, against a **$999.00** cash price. Exactly level.
 
-**Drop the rate to $68.93** and the total becomes $898.92 — under the cash price. The claim turns true, the app flips to showing it automatically, and it costs **$12.72 per bike across a full 12-month plan**.
+**"0% interest — no finance charge" is now an accurate, printable claim**, and the app states it automatically: the disclosure is computed from the live config, so it turned itself on when the rate changed. It also says the rider pays exactly the cash price, spread over twelve months.
 
-This is a pricing decision, not a marketing one, but it is the single highest-leverage one available to marketing. A truthful "0% interest, and here are both numbers" is a headline most competitors cannot make.
+**This is now the strongest line in the plan.** Own the bike for what it costs today, paid monthly, with no finance charge and no credit check — against a category where the advertised rent-to-own runs about **$2,028 over the same twelve months**. That is **~51% less** *and* a claim competitors cannot honestly make.
+
+⚠️ **It is exact to the cent, which means it is fragile.** Any increase to the rent-to-buy rate or the maintenance fee — even a dollar — pushes the total above the cash price and makes the claim unlawful to publish. The app will stop showing it on its own, but the graphics and captions will not. **Re-check this before every campaign**, and treat those two numbers as locked together: if maintenance moves, the rate must move the other way.
 
 ---
 

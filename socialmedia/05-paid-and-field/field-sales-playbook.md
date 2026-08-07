@@ -59,7 +59,7 @@ Work the clusters in the current service area: **Upper West Side** (Broadway in 
 
 ## The kit
 
-- **Flyers, double-sided, in English, Spanish and French.** Front: the price table and "Own it in 12 months — $911.76." Back: a QR code and the four things we need to rent.
+- **Flyers, double-sided, in English, Spanish and French.** Front: the price table and "Own it in 12 months — $999.00." Back: a QR code and the four things we need to rent.
 - **A unique QR per location** pointing at `foodyzz.com/r/[location]` so you can measure which spots convert. This is the difference between field work and wandering.
 - **The demo bike.** Nothing sells like letting someone sit on it and feel the weight.
 - **A phone with the app open** to the itemised checkout screen.
@@ -83,8 +83,8 @@ Every rider has a bike opinion. Let them talk. You'll learn whether they own, re
 | Owns a bike, worried about it | The moped question. "How fast does it go?" If ~28, they have a serious problem and you can help. |
 | Bike was stolen | "How soon do you need to be back out? We can have one to you tomorrow evening." |
 | New to delivering | Rent. Don't upsell a first-week rider into an 8-month commitment. |
-| Been doing it 2+ years | Rent-to-buy. $911.76 and it's theirs. |
-| Has cash | $899 outright, no documents, no deposit. |
+| Been doing it 2+ years | Rent-to-buy. $999.00 and it's theirs. |
+| Has cash | $999 outright, no documents, no deposit. |
 
 **Close:** don't ask for a download on the spot — it's a big ask on a street corner with 4% battery. Ask them to **scan the QR**, which opens a page they can come back to. Then give them the flyer.
 

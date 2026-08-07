@@ -204,7 +204,7 @@ Each of these is supported by code, config, or a cited public source.
 
 ## 10. Claims Foodyzz MUST NOT make
 
-❌ **"$22.49/week"** as a standalone price. The minimum commitment is 4 weeks and the fee bundle applies — the real first charge is **$95.95** before tax and card fee. Leading with $22.49 unqualified is the exact bait practice this plan is positioned against.
+❌ **"$22.49/week"** as a standalone price. The minimum commitment is 4 weeks and the fee bundle applies — the real first charge is **$99.95** before tax and card fee. Leading with $22.49 unqualified is the exact bait practice this plan is positioned against.
 ❌ **"No hidden fees"** while the website shows no prices at all. Either publish the full price table or drop the claim. (It is currently on the live site — `website/index.html:380`.)
 ❌ **"Extend or return any time"** — the live site says this; the app enforces a 4-week minimum. Contradiction, fix the site.
 ❌ **Anything about insurance coverage.** Foodyzz charges $9.99/week for a line item labelled "Insurance" with **no coverage terms defined anywhere in the codebase**. Until a policy document exists, never state or imply what it covers. See Q3.

@@ -38,9 +38,9 @@ Every asset should ladder to one of these. If a post ladders to none, it does no
 
 The strongest verifiable number Foodyzz has.
 
-- **$75.98/month × 12 months = $911.76, and the bike is yours.**
+- **$83.25/month × 12 months = $999.00, and the bike is yours.**
 - Whizz advertises rent-to-own from **$169/month for 12 months ≈ $2,028**.
-- That is **~55% less over the same twelve months.** Do not claim a shorter term — ours is 12, the same as theirs. The claim is money, not speed.
+- That is **~51% less over the same twelve months.** Do not claim a shorter term — ours is 12, the same as theirs. The claim is money, not speed.
 - Pay off early any time, no penalty.
 
 **Honesty guardrail:** Whizz's $169 includes unlimited battery swaps; ours does not. Any comparison graphic shows both columns. Being scrupulously fair here is not a compliance chore — it is the proof of the whole positioning.
@@ -63,8 +63,8 @@ The strongest verifiable number Foodyzz has.
 ### Pillar 3 — **The price you see is the price you pay** (the differentiator)
 
 - Publish the full table: base rate, the $5.99 bundle, the deposit, tax and card fee.
-- **$95.95 for four weeks on Model 1.** Say the real number.
-- Fees are charged **once per rental period, not per week** — so a longer term costs a little less per week. 4 weeks = $23.99/wk; 12 weeks = $22.99/wk. **A dollar. Mention it, don't build on it.**
+- **$99.95 for four weeks on Model 1.** Say the real number.
+- Fees are charged **once per rental period, not per week** — so a longer term costs a little less per week. 4 weeks = $24.99/wk; 12 weeks = $23.32/wk. **A dollar. Mention it, don't build on it.**
 - Card is authorised at booking, **charged only at delivery**. Cancel free before then.
 - Deposit is **$100, charged at delivery as a separate transaction and refunded when the bike comes back**, minus damage — and damage can never exceed the deposit. It is charged, not held; say it that way.
 - **The GPS tracker is optional and off by default.** It used to be pre-ticked. "We don't tick boxes for you" is a specific, checkable trust line almost nobody in this category can say.
@@ -101,9 +101,9 @@ New as of Aug 7, and nobody else in this category talks about any of it.
 |---|---|---|---|
 | Unaware | "Is my bike even legal?" | Here is what NYC actually requires in 2026 | The rules content, dated and sourced |
 | Problem-aware | "My bike got stolen / seized / died" | You can be riding again this week, no credit check | 14-day booking window, next-day earliest, door delivery |
-| Solution-aware | "Rent or buy?" | Renting is flexible. Owning is cheaper. Here is the math for both. | $95.95/4 wks vs $911.76 to own vs $899 cash |
+| Solution-aware | "Rent or buy?" | Renting is flexible. Owning is cheaper. Here is the math for both. | $99.95/4 wks vs $999.00 to own vs $999 cash |
 | Comparing | "Foodyzz vs Whizz vs Zoomo?" | Same certification, half the path to ownership, and we publish the total | The comparison table |
-| Ready | "What will I be charged?" | $95.95 today, $100 deposit back when the bike comes back | The itemised checkout screenshot |
+| Ready | "What will I be charged?" | $99.95 today, $100 deposit back when the bike comes back | The itemised checkout screenshot |
 | Post-purchase | "Am I getting value?" | Maintenance is included and the waiver is in the rate — nothing else gets added | The itemised checkout screen |
 
 ---
@@ -113,7 +113,7 @@ New as of Aug 7, and nobody else in this category talks about any of it.
 The audience: ~70,000–80,000 people, ~80% immigrant, working an average 17.4 hours a week for $366.51, half of them less than a year into the job, roughly half having had a bike stolen. They are being marketed to constantly and lied to often.
 
 **Write like this**
-- Lead with the number. "$911.76. Then it's yours."
+- Lead with the number. "$999.00. Then it's yours."
 - Short sentences. Sixth-grade reading level in every language.
 - Show the arithmetic. Never round in our own favour.
 - Name the catch before they find it. "Four-week minimum. Here's why that's still cheaper."
@@ -141,11 +141,11 @@ The audience: ~70,000–80,000 people, ~80% immigrant, working an average 17.4 h
 
 | Objection | Response | Never say |
 |---|---|---|
-| "$22.49 is fake, what's the real price?" | "$95.95 for four weeks. $89.96 bike + $5.99 fees. Deposit is $100 and you get it back." | Anything that dodges the number |
-| "Why a four-week minimum?" | "It's how we price delivery, pickup and the maintenance that comes with it. Fees are charged once per rental, so a longer term is slightly cheaper per week — $23.99 at four weeks, $22.99 at twelve." | "It's just our policy" |
+| "$22.49 is fake, what's the real price?" | "$99.95 for four weeks. $89.96 bike + $9.99 maintenance. Deposit is $100 and you get it back." | Anything that dodges the number |
+| "Why a four-week minimum?" | "It's how we price delivery, pickup and the maintenance that comes with it. Fees are charged once per rental, so a longer term is slightly cheaper per week — $24.99 at four weeks, $23.32 at twelve." | "It's just our policy" |
 | "What does the Protection Plan cover?" | "It waives 50% of eligible repair and damage on the bike, and caps what you owe on a stolen bike at $500 if you meet the conditions. It is not insurance — it is on the bike, not on you, and it does not apply to Rent to Buy. All of it is at foodyzz.com/protection." | The words "insurance" or "coverage"; any suggestion it protects the rider |
 | "Is my bike stolen-covered?" | Same — no theft claim flow exists. Route to chat. | "You're covered" |
-| "Whizz gives free battery swaps" | "True — they do, we don't. If unlimited swaps matter more to you than owning the bike in twelve months for $911.76, they're the better fit." | Pretending we have swaps |
+| "Whizz gives free battery swaps" | "True — they do, we don't. If unlimited swaps matter more to you than owning the bike in twelve months for $999.00, they're the better fit." | Pretending we have swaps |
 | "I don't have credit / an SSN" | "There's no credit check. For a rental we need a driver licence and a utility bill, bank statement or lease. If you're buying outright, we don't need documents at all." | "No documents needed" |
 | "Will this bike get seized?" | "It's a Class 2 e-bike — motor assist to 20 mph — with UL 2849 and UL 2271 certification tested by TÜV Rheinland, and the mark is on the frame. What gets seized are bikes that hit ~28 mph; those are legally mopeds." | Legal advice on a specific summons |
 | "Do you deliver to Brooklyn?" | "Not yet. We're live in Manhattan — Upper West Side, Harlem, Chelsea, SoHo. Brooklyn, Queens and the Bronx are next." | "All five boroughs" |
@@ -167,10 +167,10 @@ The audience: ~70,000–80,000 people, ~80% immigrant, working an average 17.4 h
 
 | Competitor | Their strength | Our line |
 |---|---|---|
-| **Whizz** | 228 blog posts, ~4.5K IG, ES/FR/RU sites, unlimited swaps | "Own it in 12 months for $911.76, not 12 months for $2,028." Fair-play on swaps. |
-| **Zoomo** | Scale, Uber Eats partnership, $20/wk headline | "Ours is $95.95 for four weeks and we'll show you the line items." |
+| **Whizz** | 228 blog posts, ~4.5K IG, ES/FR/RU sites, unlimited swaps | "Own it in 12 months for $999.00, not 12 months for $2,028." Fair-play on swaps. |
+| **Zoomo** | Scale, Uber Eats partnership, $20/wk headline | "Ours is $99.95 for four weeks and we'll show you the line items." |
 | **JOCO** | Free swaps, storage, maintenance; advocacy partnerships | Least price transparency in the market — ask them for a total. |
-| **Fly E-Bike** | Storefronts, DOT trade-in programme | "$899 delivered, no store visit, certified." |
+| **Fly E-Bike** | Storefronts, DOT trade-in programme | "$999 delivered, no store visit, certified." |
 | **PopWheels** | Charging network | **Not a competitor — a partner.** They solve charging, we solve the bike. |
 
 **Rule: never name a competitor in an ad or organic post.** Comparison content lives on the blog, where it can be sourced, dated and fair. Whizz publishes comparison posts about everyone; expect one about Foodyzz within weeks of launch, and let the blog be the thing it has to argue with.

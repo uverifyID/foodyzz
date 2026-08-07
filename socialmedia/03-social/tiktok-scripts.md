@@ -48,7 +48,7 @@
 |---|---|---|---|
 | 0–3 | To camera | "$22.49/week" | "Our rate is $22.49 a week. That is not what you'll be charged." |
 | 3–10 | Phone screen, real checkout | Line items appearing | "Four-week minimum. So $89.96 for the bike, plus $5.99 maintenance. That is the whole list. GPS is $4.99 if you want it — it is off unless you turn it on." |
-| 10–16 | Number lands | "$95.95" | "One hundred dollars and ninety-three cents. Plus tax and card fee. Plus a hundred-dollar deposit you get back." |
+| 10–16 | Number lands | "$99.95" | "One hundred dollars and ninety-three cents. Plus tax and card fee. Plus a hundred-dollar deposit you get back." |
 | 16–22 | To camera | "That's the real number" | "Every company in this city advertises a weekly rate that isn't the total. We'd rather you knew now." |
 
 **Caption:** `The real number, before you tap pay. All of it is on our site. #ebikerental #nycdelivery`
@@ -78,12 +78,12 @@
 
 | Time | Shot | On-screen | VO |
 |---|---|---|---|
-| 0–3 | Number on green | "$911.76" | "Eight hundred eighty-seven sixty-eight. Then the bike is yours." |
-| 3–9 | Breakdown builds | "$75.98 × 12 months" | "A hundred ten ninety-six a month, for twelve months. That's it." |
+| 0–3 | Number on green | "$999.00" | "Eight hundred eighty-seven sixty-eight. Then the bike is yours." |
+| 3–9 | Breakdown builds | "$83.25 × 12 months" | "A hundred ten ninety-six a month, for twelve months. That's it." |
 | 9–16 | Comparison, honest | "Most rent-to-own: 12 months, ~2×" | "Most rent-to-own in this city is twelve months and roughly double. Some of them include battery swaps — we don't. Worth knowing." |
 | 16–22 | App screen, payoff button | "Pay off early, no penalty" | "And there's a button to pay it off early. No penalty." |
 
-**Caption:** `12 months, $911.76, it's yours. #renttobuy #nycdelivery`
+**Caption:** `12 months, $999.00, it's yours. #renttobuy #nycdelivery`
 
 ---
 
@@ -149,7 +149,7 @@ Walk to 249 Broadway. Film the Deliverista Hub cabinets. Say the honest thing: 4
 The minimum pay rate, then the DCWP reality — 17.4 hrs/week, $366.51. The most trust-building video in the set precisely because it undercuts the industry's own marketing.
 
 ### T13 — "Rent or buy? Here's the crossover"
-The break-even math, drawn on paper on camera. Around 40 weeks of renting passes the $899 cash price.
+The break-even math, drawn on paper on camera. Around 40 weeks of renting passes the $999 cash price.
 
 ### T14 — "What the deposit does"
 $100, separate transaction, back when the bike's back, damage capped at the deposit. 15 seconds.
@@ -161,7 +161,7 @@ Pure explainer. Evergreen. Will get watched for years.
 Civil vs criminal, what changed on March 27 2026, and the honest note that 257 criminal summonses were written anyway between March 31 and July 13. Point to Documented and legal aid. **Explicitly not legal advice.**
 
 ### T17 — "The fee bundle is per rental, not per week"
-Why 12 weeks costs $22.99/week and 4 weeks costs $23.99/week. Honest about the size of it — a dollar, not a discount. The real story is that maintenance and the damage/theft waiver are already in the price.
+Why 12 weeks costs $23.32/week and 4 weeks costs $24.99/week. Honest about the size of it — a dollar, not a discount. The real story is that maintenance and the damage/theft waiver are already in the price.
 
 ### T18 — "Before you buy from a marketplace listing"
 The used-bike checklist. Ask for top speed in writing. Check for a certification mark — cTUVus, UL or ETL. No dealer registration means no recourse.
