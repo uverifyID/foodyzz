@@ -8,7 +8,7 @@
 
 ## 🔴 Blocking — a claim can't be made until these are answered
 
-### ~~Q1 — Is there a UL certificate on file?~~ ✅ VERIFIED Aug 7 — two actions remain
+### ~~Q1 — Is there a UL certificate on file?~~ ✅ VERIFIED Aug 7 — one action remains
 
 **Answered Aug 6, 2026**, from the supplier's certification and testing sheet:
 
@@ -25,7 +25,7 @@
 
 **This unblocks C05, C06, T03 and blog post #4** — after action 1 below.
 
-**Two things still to do:**
+**One thing still to do:**
 
 **1. ~~Verify both numbers on Certipedia yourself.~~ ✅ DONE Aug 7, 2026 — both live and valid.**
 
@@ -41,7 +41,11 @@ Both are now linked from the app — **one link per certificate**, next to its o
 
 **What verification surfaced, and what it means for copy:** the certificates belong to the **manufacturers**, not to Foodyzz, and they name **specific models**. So: never imply Foodyzz is certified (the bike is), and **confirm the units and battery packs actually shipped are the E FORWARD X with the LN-IR-5-U pack**. A substituted battery is not a certified battery, and the battery is the part New York City is enforcing on.
 
-**2. Note what you don't have yet.** The supplier's own sheet says: *"we are able to provide the original certification certificates and reports during the final contract confirmation stage; however… we cannot share our company's certificates or reports during the initial quotation phase."*
+**2. ~~Note what you don't have yet.~~ ✅ Confirmed Aug 7 — originals are being sent, and the models match.**
+
+The operator has confirmed the fleet is the **E FORWARD X** with the **LN-IR-5-U** battery pack — the exact models named on both certificates — and that the original certification documents are in transit from the supplier. File them on arrival. Until they land, the verifiable certificate numbers carry the claim, which is sufficient.
+
+Original note, kept for context: The supplier's own sheet says: *"we are able to provide the original certification certificates and reports during the final contract confirmation stage; however… we cannot share our company's certificates or reports during the initial quotation phase."*
 
 So these are **supplier-held certificates you have numbers for, not documents in your possession.** That's normal at this stage and the numbers are verifiable, which is what matters. But get the originals at contract confirmation and file them. If the supplier relationship ever changes, the certification story changes with it.
 

@@ -57,7 +57,7 @@
 ---
 
 ### T03 — "Look for the mark" ✅ *unblocked*
-**Hook:** *[Macro, thumb wiping dust off a UL mark on the frame]* **"This is the only thing you need to check."**
+**Hook:** *[Macro, thumb wiping dust off the cTUVus mark on the frame]* **"This is the only thing you need to check."**
 
 | Time | Shot | On-screen | VO |
 |---|---|---|---|
@@ -164,7 +164,7 @@ Civil vs criminal, what changed on March 27 2026, and the honest note that 257 c
 Why 12 weeks costs $22.99/week and 4 weeks costs $23.99/week. Honest about the size of it — a dollar, not a discount. The real story is that maintenance and the damage/theft waiver are already in the price.
 
 ### T18 — "Before you buy from a marketplace listing"
-The used-bike checklist. Ask for top speed in writing. Check for UL marks. No dealer registration means no recourse.
+The used-bike checklist. Ask for top speed in writing. Check for a certification mark — cTUVus, UL or ETL. No dealer registration means no recourse.
 
 ### T19 — "Manhattan now. Tell us where next."
 Coverage honesty + a genuine ask. The comments are market research.

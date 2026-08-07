@@ -55,11 +55,11 @@ Throttle-only operation with a high-wattage motor pushes a device out of the bic
 
 If yours moves under throttle alone with no pedalling at all, and it's fast, treat that as a strong signal.
 
-### 4. Does it carry a UL mark?
+### 4. Does it carry a certification mark?
 
 Look on the frame and on the battery for a **UL 2849** mark (electrical system) or **UL 2271** mark (battery).
 
-This doesn't decide the moped question by itself — but if there's no UL mark, the bike **should not legally have been sold, leased or rented to you in New York City** under Local Law 39 of 2023, and you're likely dealing with a grey-market import where the specs on the listing mean nothing at all.
+This doesn't decide the moped question by itself — but if there's no certification mark at all — cTUVus, UL or ETL — the bike **should not legally have been sold, leased or rented to you in New York City** under Local Law 39 of 2023, and you're likely dealing with a grey-market import where the specs on the listing mean nothing at all.
 
 ## What "moped" costs you
 
@@ -98,7 +98,7 @@ Three reasons, none of them the rider's fault.
 
 Your bike is your income. A seizure isn't an inconvenience — it's the end of your earnings until you can find another $1,500.
 
-The safe position is straightforward: a bike that stays within the e-bike definition, carries the UL marks, and came from someone who will still be reachable in six months.
+The safe position is straightforward: a bike that stays within the e-bike definition, carries the certification marks, and came from someone who will still be reachable in six months.
 
 ## Sources
 

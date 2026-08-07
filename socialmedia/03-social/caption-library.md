@@ -160,10 +160,10 @@ Las muertes bajaron de 18 en 2023 a 1 en 2025.
 
 Más incendios. Casi cero muertes. La certificación funciona.
 ```
-**Visual:** macro photograph of the actual UL mark on the frame. This shot is the single most valuable image in the shot list. **No fire imagery, ever.**
+**Visual:** macro photograph of the actual **cTUVus mark** on the frame — that is the mark TÜV Rheinland issues, and it is what is physically on our bikes. Do not caption it "UL mark." This shot is the single most valuable image in the shot list. **No fire imagery, ever.**
 
 ✅ **Unblocked** — certificates confirmed: UL 2849 **CU 726061660001**, UL 2271 **CU 72303450 0003**, both tested by **TÜV Rheinland**, verifiable at certipedia.com.
-**One thing first:** verify both numbers on Certipedia and screenshot the results before this runs. That screenshot is the substantiation file. Say "tested by TÜV Rheinland," never "UL Listed."
+**Substantiation:** ✅ both numbers verified live on Certipedia, Aug 7 2026 — screenshot both pages and keep them as the substantiation file. Say "certified to UL 2849 by TÜV Rheinland," never "UL Listed." The mark on the frame is **cTUVus**, not a UL logo — caption it correctly.
 
 ---
 

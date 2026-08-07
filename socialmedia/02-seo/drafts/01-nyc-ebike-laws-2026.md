@@ -105,13 +105,13 @@ The reason for the law is in the FDNY numbers. Battery fires went from 44 in 202
 
 More fires, far fewer deaths. Certified batteries appear to be doing exactly what they were meant to do.
 
-If you want to check your own bike: look for the UL mark on the frame and on the battery. If there isn't one, the bike shouldn't have been rented or sold to you in New York City.
+If you want to check your own bike: look for a **certification mark from an accredited testing laboratory** on the frame and on the battery. It will not always say "UL" — a bike certified to the UL 2849 standard by TÜV Rheinland carries the **cTUVus** mark, one certified by UL Solutions carries the UL mark, and one certified by Intertek carries **ETL**. Any of the three is fine. If there is no mark at all, the bike shouldn't have been rented or sold to you in New York City.
 
 ## What this means if you deliver in NYC
 
 1. **Know your bike's real top speed.** Not the marketing number — the actual one. If it's around 28 mph and throttle-only, you're probably riding an unregistered moped.
 2. **Ride to 15 mph.** The cap applies regardless of what your bike is rated for.
-3. **Look for the UL mark** on the frame and the battery before you buy or rent anything.
+3. **Look for a certification mark** — cTUVus, UL or ETL — on the frame and the battery before you buy or rent anything.
 4. **Keep your paperwork** if you're on a moped. Registration, licence, insurance.
 5. **Read any summons carefully.** Civil and criminal are different documents with very different consequences.
 

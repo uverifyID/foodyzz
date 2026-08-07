@@ -139,4 +139,4 @@ Ranked by demand spike × ease of ranking. These are the moments where a small s
 | `/fr/location-velo-electrique-new-york` | E1 | E2 | French |
 | `/fr/sans-ssn` | **E3** | — | French |
 
-**Internal linking rule:** every rules/risk page ends with a single contextual link to the page that solves the problem it describes. The moped page links to `/plans` with "Every Foodyzz bike is a Class 2 e-bike with the UL mark on the frame." No banner ads, no popups. This audience has excellent instincts for being sold to.
+**Internal linking rule:** every rules/risk page ends with a single contextual link to the page that solves the problem it describes. The moped page links to `/plans` with "Every Foodyzz bike is a Class 2 e-bike, certified to UL 2849 by TÜV Rheinland, with the cTUVus mark on the frame." No banner ads, no popups. This audience has excellent instincts for being sold to.

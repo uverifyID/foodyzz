@@ -98,7 +98,7 @@ This is the online half of the same job, and it has rules that will get you bann
 
 **How to do it:**
 1. Join as **a person** with a real name and a real face. Never as the Page.
-2. **Spend two weeks answering questions before mentioning Foodyzz once.** Answer the rules questions — moped classification, the 15 mph cap, what a summons means now, how to check a UL mark. That's real expertise most members don't have and it costs nothing to give away.
+2. **Spend two weeks answering questions before mentioning Foodyzz once.** Answer the rules questions — moped classification, the 15 mph cap, what a summons means now, how to read a certification mark — cTUVus, UL or ETL, and what each one means. That's real expertise most members don't have and it costs nothing to give away.
 3. Mention the product only when somebody asks what to rent — and **disclose the affiliation every single time.** "Full disclosure, I work for Foodyzz, so take this with that in mind."
 4. **Never post identical text to multiple groups.** Facebook flags it and admins notice.
 5. When you get a hostile reply, answer it with a number and move on. Never argue.

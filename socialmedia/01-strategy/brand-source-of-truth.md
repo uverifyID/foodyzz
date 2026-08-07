@@ -171,7 +171,21 @@ Both pages carry the **cTUVus** mark and state *"The validity of the certificate
 | Shipping docs held | MSDS, UN38.3, Identification and Classification Report for Transport of Goods |
 | Compliance contact | compliance@foodyzz.com |
 
-**Say "UL 2849 certified, tested by TÜV Rheinland."** Not "UL Listed" — that phrasing implies UL Solutions did the listing, which is a different thing and is the kind of distinction that gets picked apart.
+### How to describe the certification — exact wording
+
+**Say: "Certified to UL 2849 by TÜV Rheinland."** Or "tested by TÜV Rheinland." Both are accurate.
+
+| ❌ Never say | Why | ✅ Say instead |
+|---|---|---|
+| "UL Listed" | Implies UL Solutions performed the listing. It didn't — TÜV Rheinland did. | "Certified to UL 2849 by TÜV Rheinland" |
+| "UL Solutions certified" | Wrong laboratory. | "TÜV Rheinland certified" |
+| "the UL mark on the frame" | **The mark on our frames is the cTUVus mark**, TÜV Rheinland's North American mark. A rider looking for a literal UL logo will not find one. | "the cTUVus mark on the frame" |
+| "Foodyzz is UL certified" | Foodyzz is a brand, not a manufacturer, and holds no certificate. The **bike** is certified. | "Foodyzz bikes are certified to UL 2849" |
+| "the bike is UL certified" (blanket) | UL 2849 certifies the **electrical system**. | "the electrical system is certified to UL 2849" |
+
+**UL 2849 and UL 2271 are standard names, not organisations.** Naming the standard is always fine. Naming *who* certified against it is where accuracy matters, and the answer is always TÜV Rheinland.
+
+**Generic consumer advice is different.** When telling a rider how to check *any* bike, name all three accredited marks — **cTUVus (TÜV Rheinland), UL (UL Solutions), ETL (Intertek)** — because all three satisfy Local Law 39 and a rider who only looks for "UL" will wrongly reject a compliant bike.
 
 **The 300 lb figure is rider + cargo combined.** Never publish it as "300 lb frame load" without the qualifier — a 200 lb rider reading that will assume 300 lbs of cargo capacity.
 

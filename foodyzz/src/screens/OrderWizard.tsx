@@ -1002,8 +1002,8 @@ export default function OrderWizard() {
                 <Text className="ml-2 text-xs font-black text-slate-700 uppercase">Certifications</Text>
               </View>
               <Text className="text-[11px] font-bold text-slate-500 leading-4">
-                The bike electrical system is UL 2849 certified — the certification mark is displayed on the frame.{'\n'}
-                The battery is UL 2271 certified.{'\n'}
+                The bike electrical system is certified to UL 2849 by TÜV Rheinland — look for the cTUVus mark on the frame.{'\n'}
+                The battery is certified to UL 2271.{'\n'}
                 IP Rating: IP65 (dust and splash resistant){'\n'}
                 Frame loading: can load 300 lbs (rider + cargo combined)
               </Text>

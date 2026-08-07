@@ -65,7 +65,7 @@
 **How to be in Groups without getting banned or hated**
 - Join as **a person**, not as the Page. Use a real staff account with a real face.
 - **Spend two weeks answering questions before mentioning Foodyzz once.** This audience has excellent instincts for being sold to and Group admins ban brand accounts on sight.
-- Answer the rules questions — moped classification, 15 mph, summonses, UL marks. That's genuine expertise we have and most Group members don't.
+- Answer the rules questions — moped classification, 15 mph, summonses, certification marks. That's genuine expertise we have and most Group members don't.
 - Mention the product only when someone asks what to rent, and disclose the affiliation every single time.
 - **Never post the same message to multiple groups.** Facebook flags it and admins notice.
 
