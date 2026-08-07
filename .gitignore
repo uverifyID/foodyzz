@@ -22,6 +22,9 @@ web-build/
 **/*.xcodeproj/xcuserdata/
 **/android/build/
 **/android/.gradle/
+# Gradle's cache lives outside android/ too (gemini/), and its .bin/.lock files
+# rewrite on every build — a permanently dirty tree that blocks `expo prebuild`.
+**/.gradle/
 **/android/app/build/
 **/android/.cxx/
 *.keystore
