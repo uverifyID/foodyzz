@@ -102,7 +102,7 @@ export interface MoneyMetrics {
   revenueGross: number;
   /** The part of that we keep: no tax, no card fee. */
   revenueEarned: number;
-  /** The fee-table portion (setup/insurance bundle, missed-collection admin fee). */
+  /** The fee-table portion (setup/protection bundle, missed-collection admin fee). */
   feesCollected: number;
   /** The card-processing line item customers paid us. */
   ccFeesCollected: number;

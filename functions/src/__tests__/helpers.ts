@@ -83,7 +83,7 @@ export async function seedLogistics(overrides: any = {}) {
     inventory: { 1: { new: 2, used: 0 } },
     fees: [
       { key: 'deposit', label: 'Deposit', amount: 100, required: true, cadence: 'once', isDeposit: true },
-      { key: 'insurance', label: 'Insurance', amount: 9.99, required: true, cadence: 'weekly' },
+      { key: 'protection', label: 'Protection Plan', amount: 9.99, required: true, cadence: 'weekly' },
     ],
     delivery: { startTime: '17:00', endTime: '21:00', slotMinutes: 60 },
     restockDays: 2,

@@ -535,7 +535,7 @@ const MONEY_DRILL: Record<MoneyCard, {
     title: 'Fees collected',
     subtitle: (m, rows) =>
       `${money(m.feesCollected)} across ${rows.length} charge${rows.length === 1 ? '' : 's'} that carried a fee`,
-    note: 'The fee-table portion of each charge — the setup/insurance bundle plus any missed-collection admin fee. Not the bike itself.',
+    note: 'The fee-table portion of each charge — the setup/protection bundle plus any missed-collection admin fee. Not the bike itself.',
   },
   ccFees: {
     title: 'Card processing collected',

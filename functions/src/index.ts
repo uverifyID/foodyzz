@@ -665,7 +665,7 @@ async function recordSettlement(
 }
 
 /**
- * The fee-table portion of what an order was charged — the setup/insurance bundle,
+ * The fee-table portion of what an order was charged — the setup/protection bundle,
  * never the bike and never the deposit. Amounts come from the order's own accepted-fee
  * snapshot (what the customer agreed to), while the current config is consulted only
  * to tell which key IS the deposit, since the snapshot doesn't carry that flag.
@@ -2876,7 +2876,7 @@ function deliveryReceiptHtml(order: any): string {
   // Accepted, non-deposit fees, itemised once per rental period.
   for (const f of Array.isArray(order.fees) ? order.fees : []) {
     if (f?.accepted && !f?.isDeposit && f?.key !== "deposit") {
-      rows.push(row(String(f.label || "Fee"), money(f.amount)));
+      rows.push(row(escapeHtml(String(f.label || "Fee")), money(f.amount)));
     }
   }
 
@@ -3562,7 +3562,7 @@ function quoteRentalRenewal(order: any, logistics: LogisticsDoc, config: GlobalC
   // customer keeps the bike for another full committed term, so it is priced exactly
   // like a new rental — including the fee bundle. This used to subtract oneTimeFees,
   // which read `once` as "once ever". It means once PER RENTAL PERIOD, and a renewal
-  // starts a new one, so maintenance/tracker/insurance apply again and the platform
+  // starts a new one, so maintenance/tracker/protection apply again and the platform
   // was absorbing them on every missed collection.
   const renewalSubtotal = quote.subtotal;
   const pricing = computePricing(renewalSubtotal, Number(order.taxRate) || 0, config);

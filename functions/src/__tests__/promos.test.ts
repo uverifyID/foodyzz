@@ -33,7 +33,7 @@ async function seedPromo(data: any = {}) {
   await db.doc(`promos/${PROMO_ID}`).set(doc);
 }
 
-// A rent-model-1 order: 19.99/wk × 4 weeks + the 9.99 insurance bundle = 89.95 subtotal.
+// A rent-model-1 order: 19.99/wk × 4 weeks + the 9.99 protection bundle = 89.95 subtotal.
 const orderData = (overrides: any = {}) => ({
   orderId: 'promo-order-1',
   currency: 'usd',

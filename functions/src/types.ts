@@ -217,7 +217,7 @@ export interface Settlement {
   subtotal: number;
   tax: number;
   chargedCcFee: number; // the card-processing line item the customer paid us
-  // The fee-table portion of `subtotal` — setup/insurance/whatever the fee bundle
+  // The fee-table portion of `subtotal` — setup/protection/whatever the fee bundle
   // holds, plus the missed-collection admin fee. The bike itself is subtotal − this.
   serviceFees: number;
   // What Stripe ACTUALLY took, and what it actually paid us, from the charge's
