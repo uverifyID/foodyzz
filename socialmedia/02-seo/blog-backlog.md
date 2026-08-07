@@ -59,7 +59,7 @@
 
 ### 8. Rent, Rent-to-Buy, or Buy: The Math for NYC Delivery Riders
 - **Primary:** rent to own ebike nyc · **Supporting:** ebike financing no credit check, buy vs rent ebike delivery
-- **Must contain:** the three-way comparison at real totals — $100.93/4wks vs $887.68 to own in 8 months vs $799 cash; the break-even point where renting costs more than owning; who each option is actually right for (short tenure → rent; committed → rent-to-buy; has cash → buy).
+- **Must contain:** the three-way comparison at real totals — $95.95/4wks vs $911.76 to own in 12 months vs $899 cash; the break-even point where renting costs more than owning; who each option is actually right for (short tenure → rent; committed → rent-to-buy; has cash → buy).
 - **This is the highest commercial-intent post in the backlog.**
 
 ---
@@ -83,7 +83,7 @@
 ### 12. E-Bike Insurance in New York: What's Required, What Isn't, and What's Coming
 - **Primary:** ebike insurance nyc
 - **Must contain:** no statewide mandate today; A.4083/S.2528 would require $25K liability in NYC but is **not law**; what DoorDash/Uber occupational accident coverage does and doesn't do; moped insurance requirements.
-- ⚠️ **Blocked on Q3.** Foodyzz charges $9.99/week for an "Insurance" line with no defined coverage. Writing this post while that is unresolved invites the exact question we cannot answer.
+- ✅ **Unblocked Aug 7.** The $9.99 line is gone. Write the honest version: no NY mandate today, what platform occupational-accident cover does and does not do, and that a Foodyzz **rental** includes a damage and theft **waiver on the bike** — not insurance, not on the rider, not on Rent to Buy. Link foodyzz.com/protection. Never use the word insurance about our own product.
 
 ### 13. Winter and Rain Gear for NYC Delivery Riders
 - **Primary:** winter gear for delivery riders nyc · **Supporting:** ebike cold weather range

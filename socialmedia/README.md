@@ -24,7 +24,7 @@ Everything needed to take Foodyzz from zero social presence to a working acquisi
 
 **The position.** Not cheapest — trustworthy. Publish every line item, charge only at delivery, and lead with the one number nobody can match.
 
-**That number:** **$887.68 over 8 months and the bike is yours.** Whizz advertises rent-to-own from $169/month over 12 months — about $2,028. We're ~56% less and four months sooner.
+**That number:** **$911.76 over 12 months and the bike is yours.** Whizz advertises rent-to-own from $169/month over the same 12 months — about $2,028. **We are ~55% less for the same term.** The old "four months sooner" line is dead: rent to buy is now 12 months, not 8.
 
 **The second weapon:** NYC made UL 2849 and UL 2271 certification mandatory for any bike **rented** or sold in the city. Battery fires are up ~70% this year while deaths fell to one. Foodyzz bikes carry both marks on the frame, tested by TÜV Rheinland, with **certificate numbers anyone can look up on certipedia.com** — and **no competitor markets this at all.** Being checkable beats being trusted when you have no reviews.
 
@@ -99,7 +99,7 @@ Everything needed to take Foodyzz from zero social presence to a working acquisi
 3. **No analytics** — no GA4, no pixels, no Search Console. Every day costs retargetable traffic.
 4. **No prices on the website** — while the site claims "no hidden fees."
 5. **Nine site-vs-app contradictions** — including "extend or return any time" against a 4-week minimum, and the app's "21 mph top speed" against the Class 2 designation.
-6. **Insurance fee has no defined coverage** — a $9.99/week line item nobody can explain. A customer will ask in week one.
+6. ~~**Insurance fee has no defined coverage**~~ ✅ **Fixed Aug 7** — the fee was removed, not renamed. What it paid for is a damage and theft waiver folded into the rent rate, published at foodyzz.com/protection. Never call it insurance.
 
 ✅ **Resolved Aug 6:** UL certificates confirmed (UL 2849 `CU 726061660001`, UL 2271 `CU 72303450 0003`, TÜV Rheinland) and the fleet is **Class 2** — which also removes the Intro 244 risk. Two follow-ups remain in [OPEN-QUESTIONS.md](OPEN-QUESTIONS.md) Q1: verify the numbers on Certipedia before the first ad, and confirm NYC accepts TÜV Rheinland certification for Local Law 39.
 

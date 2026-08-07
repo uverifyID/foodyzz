@@ -112,7 +112,7 @@ Sources: [amNY — 70% increase in 2026](https://www.amny.com/new-york/nyc-lithi
 | Helmet | Required for Class 3 riders and for riders under 18. Commercial cyclists in NYC are subject to helmet requirements. **`Verify before publishing`** — get the current DOT rule text rather than citing this table. |
 | Minimum age | 16 to operate a Class 3. **`Verify before publishing`.** |
 
-**⚠️ The Foodyzz app has no minimum-age check, no helmet policy and no rider-insurance coverage terms anywhere in code.** Marketing must not imply any of these exist. See `../OPEN-QUESTIONS.md` Q2 and Q3.
+**Updated Aug 7.** A **helmet policy now exists** — required on every ride by contract, ticked at checkout, and Foodyzz does **not** supply the helmet. There are still **no rider-protection terms of any kind**: the Protection Plan waives costs on the bike and never covers the rider. **There is still no automated minimum-age check**; Terms require 18+ and the ID document check is the control in practice. Marketing must not imply rider protection exists. See `../OPEN-QUESTIONS.md` Q2.
 
 ---
 
@@ -204,7 +204,7 @@ Each of these is supported by code, config, or a cited public source.
 
 ## 10. Claims Foodyzz MUST NOT make
 
-❌ **"$19.99/week"** as a standalone price. The minimum commitment is 4 weeks and the fee bundle applies — the real first charge is **$100.93** before tax and card fee. Leading with $19.99 unqualified is the exact bait practice this plan is positioned against.
+❌ **"$22.49/week"** as a standalone price. The minimum commitment is 4 weeks and the fee bundle applies — the real first charge is **$95.95** before tax and card fee. Leading with $22.49 unqualified is the exact bait practice this plan is positioned against.
 ❌ **"No hidden fees"** while the website shows no prices at all. Either publish the full price table or drop the claim. (It is currently on the live site — `website/index.html:380`.)
 ❌ **"Extend or return any time"** — the live site says this; the app enforces a 4-week minimum. Contradiction, fix the site.
 ❌ **Anything about insurance coverage.** Foodyzz charges $9.99/week for a line item labelled "Insurance" with **no coverage terms defined anywhere in the codebase**. Until a policy document exists, never state or imply what it covers. See Q3.

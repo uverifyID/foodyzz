@@ -1,5 +1,8 @@
 # Caption Library — Instagram & Facebook
 
+> **Reconciled against the live product on Aug 7, 2026.** Pricing, the Protection Plan, the single bike model and the 15 mph limit all changed that day — see `OPEN-QUESTIONS.md` Q3, Q4b, Q6 and Q16.
+
+
 > 30 ready-to-publish captions, English + Spanish, each with its visual brief and pillar. **Every number is verified against `../01-strategy/brand-source-of-truth.md`.** Nothing here needs fact-checking before it ships — but re-verify prices against live Firestore config before a campaign, because they're admin-editable.
 >
 > **Blocked captions are marked ⛔.** Do not publish those until the named question in `../OPEN-QUESTIONS.md` is resolved.
@@ -8,14 +11,14 @@
 
 ---
 
-## Pillar 1 — Own it in 8 months
+## Pillar 1 — Own it in 12 months
 
 ### C01 · Carousel · IG + FB
 **EN**
 ```
-$887.68. Then the bike is yours.
+$911.76. Then the bike is yours.
 
-That's $110.96 a month for 8 months on a Foodyzz Model 1.
+That's $75.98 a month for 12 months on a Foodyzz Model 1.
 No credit check. No balloon payment. No penalty if you pay it off early.
 
 Most rent-to-own in this city runs 12 months and costs about
@@ -26,9 +29,9 @@ Manhattan now. Brooklyn, Queens and the Bronx next.
 ```
 **ES**
 ```
-$887.68. Y la bicicleta es tuya.
+$911.76. Y la bicicleta es tuya.
 
-Son $110.96 al mes durante 8 meses con la Foodyzz Model 1.
+Son $75.98 al mes durante 12 meses con la Foodyzz Model 1.
 Sin revisión de crédito. Sin pago final sorpresa. Sin penalidad
 si terminas de pagar antes.
 
@@ -38,17 +41,18 @@ incluyendo lo que NO incluimos, porque también debes saberlo.
 
 Manhattan ahora. Brooklyn, Queens y el Bronx pronto.
 ```
-**Visual:** 6-slide carousel. S1 the number `$887.68` huge in JetBrains Mono on `#86B54F` fill, black text. S2–S4 the month-by-month breakdown. S5 the honest comparison table including "battery swaps: not included." S6 CTA.
+**Visual:** 6-slide carousel. S1 the number `$911.76` huge in JetBrains Mono on `#86B54F` fill, black text. S2–S4 the month-by-month breakdown. S5 the honest comparison table including "battery swaps: not included." S6 CTA.
 
 ---
 
 ### C02 · Reel/Post · IG + FB
 **EN**
 ```
-8 months of payments, or 12?
+Same 12 months. Less than half the money.
 
-Model 1: $110.96/month × 8 = $887.68, and it's yours.
-Model 2: $130.96/month × 10 = $1,309.60, and it's yours.
+$75.98 a month × 12 = $911.76, and the bike is yours.
+The rent-to-own everyone advertises runs about $2,028
+over the same twelve months.
 
 Pay it off early any time. No penalty, no paperwork —
 there's a button in the app.
@@ -57,10 +61,11 @@ Full price breakdown at foodyzz.com
 ```
 **ES**
 ```
-¿8 meses de pagos, o 12?
+Los mismos 12 meses. Menos de la mitad del dinero.
 
-Model 1: $110.96/mes × 8 = $887.68, y es tuya.
-Model 2: $130.96/mes × 10 = $1,309.60, y es tuya.
+$75.98 al mes × 12 = $911.76, y la bicicleta es tuya.
+El rent-to-own que todos anuncian cuesta unos $2,028
+en esos mismos doce meses.
 
 Termina de pagar cuando quieras. Sin penalidad, sin papeleo —
 hay un botón en la app.
@@ -76,13 +81,13 @@ Precio completo en foodyzz.com
 ```
 Rent, rent-to-buy, or buy. Here's who each one is actually for.
 
-RENT — $100.93 for four weeks. New or used bike.
+RENT — $95.95 for four weeks. New or used bike.
 Best if you're new to delivering and not sure you'll stay.
 
-RENT TO BUY — $110.96/month for 8 months, then it's yours.
+RENT TO BUY — $75.98/month for 12 months, then it's yours.
 Always a new bike. Best if you know you're staying.
 
-BUY — $799, once. Always a new bike. No deposit, no fees,
+BUY — $899, once. Always a new bike. No deposit, no fees,
 no documents needed at all.
 Best if you have the cash today.
 
@@ -98,14 +103,14 @@ The math is on the slides.
 ```
 The break-even math nobody shows you:
 
-Renting a Model 1 costs $25.23/week over four weeks.
-Buying it outright is $799.
+Renting a Model 1 costs $23.99/week over four weeks.
+Buying it outright is $899.
 
-At $25.23/week, you'd pass $799 in about 32 weeks — around
+At $23.99/week, you'd pass $899 in about 40 weeks — around
 seven and a half months of renting.
 
-So if you know you're delivering for more than about eight months,
-rent-to-buy at $887.68 total is the cheaper road, and you end
+So if you know you're delivering for more than about twelve months,
+rent-to-buy at $911.76 total is the cheaper road, and you end
 up owning the bike.
 
 If you don't know yet, rent. That's what it's for.
@@ -209,21 +214,24 @@ since October 2025, whatever your bike is rated for.
 Here's every line on a Foodyzz checkout. All of it.
 
 Model 1, four weeks:
-  Bike, $19.99 × 4 weeks ........ $79.96
+  Bike, $22.49 × 4 weeks ........ $89.96
   Maintenance ................... $5.99
-  GPS tracker ................... $4.99
-  Insurance ..................... $9.99
   ─────────────────────────────────────
-  Charged at delivery ........... $100.93
+  Charged at delivery ........... $95.95
   (plus sales tax and card fee)
 
   Deposit ....................... $100.00
   Charged separately at delivery. Refunded when
   the bike comes back, minus any damage.
 
-The fees are charged once per rental — not per week.
-So four weeks is $25.23/week. Twelve weeks is $21.74/week.
-The longer you ride, the less it costs you weekly.
+The GPS tracker is $4.99 if you want it. It is off unless
+you turn it on — we don't tick boxes for you.
+
+Every rental includes the Protection Plan: a damage and theft
+waiver on the bike. It is not insurance and it does not cover
+you as a rider. foodyzz.com/protection has all of it.
+
+A helmet is required on every ride. We don't supply one.
 
 Your card is authorized when you book and charged when the
 bike is in your hands. Cancel free any time before that.
@@ -233,21 +241,24 @@ bike is in your hands. Cancel free any time before that.
 Aquí está cada línea de un cobro de Foodyzz. Todas.
 
 Model 1, cuatro semanas:
-  Bicicleta, $19.99 × 4 semanas .. $79.96
+  Bicicleta, $22.49 × 4 semanas .. $89.96
   Mantenimiento .................. $5.99
-  Rastreador GPS ................. $4.99
-  Seguro ......................... $9.99
   ──────────────────────────────────────
-  Se cobra en la entrega ......... $100.93
+  Se cobra en la entrega ......... $95.95
   (más impuesto y comisión de tarjeta)
 
   Depósito ....................... $100.00
   Se cobra aparte en la entrega. Se devuelve cuando
   regresas la bicicleta, menos cualquier daño.
 
-Las cuotas se cobran una vez por renta — no por semana.
-Cuatro semanas = $25.23/semana. Doce semanas = $21.74/semana.
-Mientras más tiempo, menos pagas por semana.
+El rastreador GPS cuesta $4.99 si lo quieres. Viene apagado
+hasta que tú lo actives — no marcamos casillas por ti.
+
+Cada renta incluye el Protection Plan: una exoneración por
+daño y robo de la bicicleta. No es un seguro y no te cubre
+a ti. Todo está en foodyzz.com/protection.
+
+El casco es obligatorio en cada viaje. No lo proporcionamos.
 
 Autorizamos tu tarjeta al reservar y cobramos cuando la
 bicicleta está en tus manos. Cancela gratis antes de eso.
@@ -259,16 +270,16 @@ bicicleta está en tus manos. Cancela gratis antes de eso.
 ### C09 · Post · IG + FB
 **EN**
 ```
-$19.99 a week is our rate. It is not what you'll be charged.
+$22.49 a week is our rate. It is not what you'll be charged.
 
-The minimum rental is four weeks, and there's a $20.97 fee
+The minimum rental is four weeks, and there's a $5.99 fee
 bundle on top. So the real first charge on a Model 1 is
-$100.93, before tax and card fee. Plus a $100 deposit
+$95.95, before tax and card fee. Plus a $100 deposit
 you get back.
 
 We'd rather tell you now than at checkout.
 ```
-**Visual:** plain type on `#EFF5E6`. `$19.99` struck through, `$100.93` beneath it. Nothing else. Let it be blunt.
+**Visual:** plain type on `#EFF5E6`. `$22.49` struck through, `$95.95` beneath it. Nothing else. Let it be blunt.
 **Note:** this is the most on-strategy post in the library. It should be in the first week.
 
 ---
@@ -504,9 +515,9 @@ Full winter gear guide going up next week.
 ```
 Foodyzz is live in New York.
 
-E-bikes delivered to your door. Rent from $100.93 for four
-weeks, own one in eight months for $887.68, or buy it
-outright for $799.
+E-bikes delivered to your door. Rent from $95.95 for four
+weeks, own one in twelve months for $911.76, or buy it
+outright for $899.
 
 UL 2849 certified. UL 2271 battery. The mark is on the frame.
 
@@ -520,8 +531,8 @@ Every price we charge is on our site. Go look before you decide.
 Foodyzz ya está en Nueva York.
 
 Bicicletas eléctricas entregadas en tu puerta. Renta desde
-$100.93 por cuatro semanas, hazla tuya en ocho meses por
-$887.68, o cómprala por $799.
+$95.95 por cuatro semanas, hazla tuya en doce meses por
+$911.76, o cómprala por $899.
 
 Certificada UL 2849. Batería UL 2271. La marca está en el cuadro.
 

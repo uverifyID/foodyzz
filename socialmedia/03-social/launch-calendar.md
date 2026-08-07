@@ -1,5 +1,8 @@
 # Launch Calendar — Aug 15 to Sept 30, 2026
 
+> **Reconciled against the live product on Aug 7, 2026.** Pricing, the Protection Plan, the single bike model and the 15 mph limit all changed that day — see `OPEN-QUESTIONS.md` Q3, Q4b, Q6 and Q16.
+
+
 > Every slot references an asset by ID from [caption-library.md](caption-library.md) (`C##`), [tiktok-scripts.md](tiktok-scripts.md) (`T##`), or [../02-seo/blog-backlog.md](../02-seo/blog-backlog.md) (`#N`).
 >
 > ⛔ marks an asset blocked on an open question. If the block isn't cleared by its slot, **pull it and move the next item up** — do not publish a blocked claim to fill a hole.
@@ -36,7 +39,7 @@
 | Sat 16 | T01 moped test | C16 seizure carousel | — | — | Restaurant clusters, dinner rush |
 | Sun 17 | — | Story: behind the scenes | — | — | — |
 | Mon 18 | T07 we're new | C22 no reason to trust us | C22 | — | — |
-| Tue 19 | T05 15 mph | C09 $19.99 isn't the price | — | **#1** NYC laws | Deliverista Hub |
+| Tue 19 | T05 15 mph | C09 $22.49 isn't the price | — | **#1** NYC laws | Deliverista Hub |
 | Wed 20 | T04 own it in 8 | C08 **every line item** | C08 | — | — |
 | Thu 21 | T06 what we need | Story: Q&A sticker | C14 coverage honesty | — | Restaurant clusters |
 

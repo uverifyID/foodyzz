@@ -1,5 +1,8 @@
 # Graphic Templates — Per-Post Visual Briefs
 
+> **Reconciled against the live product on Aug 7, 2026.** Pricing, the Protection Plan, the single bike model and the 15 mph limit all changed that day — see `OPEN-QUESTIONS.md` Q3, Q4b, Q6 and Q16.
+
+
 > Eight reusable templates. Build each once in Canva or Figma, then the whole caption library becomes a fill-in-the-blanks job. Every template uses the neubrutalist system from [brand-kit.md](brand-kit.md): flat fills, `4px 4px 0` hard black shadows, 14px radius, heavy black keylines.
 
 ---
@@ -13,12 +16,12 @@
 │  ▸ FOODYZZ            [kicker]   │  JetBrains Mono 700, 24pt, black
 │                                  │
 │                                  │
-│      $887.68                     │  JetBrains Mono 700, 180pt, black
+│      $911.76                     │  JetBrains Mono 700, 180pt, black
 │                                  │  on #86B54F full-bleed fill
 │      Then the bike is yours.     │  Space Grotesk 500, 44pt, black
 │                                  │
 │                                  │
-│  Model 1 · 8 months · $110.96/mo │  Inter 400, 22pt, black
+│  Model 1 · 12 months · $75.98/mo │  Inter 400, 22pt, black
 └──────────────────────────────────┘
      ↳ 6px 6px 0 #0A0A0A on the whole card
 ```
@@ -37,12 +40,12 @@ Styled as an actual receipt on `#FAFAF7` with a dashed black rule between sectio
 ┌──────────────────────────────────┐
 │  FOODYZZ · MODEL 1 · 4 WEEKS     │
 │  ────────────────────────────    │
-│  Bike  $19.99 × 4 ....... 79.96  │
+│  Bike  $22.49 × 4 ....... 89.96  │
 │  Maintenance ............. 5.99  │
-│  GPS tracker ............. 4.99  │
-│  Insurance ............... 9.99  │
 │  ────────────────────────────    │
-│  AT DELIVERY ........... 100.93  │  ← green highlight bar
+│  AT DELIVERY ............ 95.95  │  ← green highlight bar
+│  GPS tracker, if you want it,    │
+│  is $4.99. Off unless you ask.   │
 │  + sales tax & card fee          │
 │                                  │
 │  Deposit ............... 100.00  │
@@ -65,13 +68,13 @@ Two or three columns, black keylines, brand green fill on the Foodyzz column **o
 ┌───────────┬───────────┬───────────┐
 │   RENT    │RENT TO BUY│    BUY    │
 ├───────────┼───────────┼───────────┤
-│ $100.93   │ $110.96   │   $799    │
+│ $95.95   │ $75.98   │   $899    │
 │ /4 weeks  │ /month    │   once    │
 ├───────────┼───────────┼───────────┤
 │ New/used  │ New       │ New       │
 │ Deposit ✓ │ Deposit ✓ │ None      │
 │ Docs ✓    │ Docs ✓    │ None      │
-│ Own it ✗  │ 8 months  │ Day one   │
+│ Own it ✗  │ 12 months  │ Day one   │
 └───────────┴───────────┴───────────┘
 ```
 

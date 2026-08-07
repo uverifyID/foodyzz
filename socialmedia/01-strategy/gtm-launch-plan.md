@@ -86,7 +86,7 @@ Also secure, even if unused: YouTube (`@foodyzz` — for Shorts repurposing), an
 **Bio template (Instagram / TikTok):**
 ```
 E-bikes for NYC delivery riders 🇺🇸
-Rent from $100.93/4 weeks · Own in 8 months
+Rent from $95.95/4 weeks · Own in 12 months
 UL 2849 certified · Delivered to your door
 Manhattan → Brooklyn soon
 ↓ Get the app
@@ -152,7 +152,7 @@ Ranked by realistic yield in the first 30 days. Full detail in `../05-paid-and-f
 
 ## 6. Field kit
 
-- **Flyer, double-sided.** Front: the price table and "Own it in 8 months — $887.68." Back: a QR to `foodyzz.com/r/hub` (a tracked landing page). **Print in English, Spanish and French** — French is 46.5% of this workforce.
+- **Flyer, double-sided.** Front: the price table and "Own it in 12 months — $911.76." Back: a QR to `foodyzz.com/r/hub` (a tracked landing page). **Print in English, Spanish and French** — French is 46.5% of this workforce.
 - **A demo bike.** Nothing converts like letting someone sit on it.
 - **A phone with the app open** to walk through the itemised checkout screen.
 - **A QR code per location** so you can attribute which spots work.
@@ -168,7 +168,7 @@ Ranked by realistic yield in the first 30 days. Full detail in `../05-paid-and-f
 | UL certificate not on file | Medium | **High** | Pull Pillar 2 from all creative until it is. Do not soften it — remove it. |
 | Whizz publishes a "Foodyzz vs" post | High | Low | Good for us. Have our own comparison page live first so we rank alongside it. |
 | Fleet sells out | Medium | Medium | 32 seeded bikes. The app has a waitlist state — use it as social proof, not an apology. |
-| Insurance question goes viral in comments | Medium | High | Do not answer publicly. Route to chat. Get the policy document. |
+| "What does the Protection Plan cover?" in comments | Medium | Medium | Answer it — foodyzz.com/protection is public. Say waiver, never insurance; bike, never rider; not on Rent to Buy. |
 | English-only support meets a French-speaking market | **High** | **High** | See Q8. At minimum, a bilingual contractor for chat during launch month. |
 
 ---

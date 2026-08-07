@@ -1,5 +1,8 @@
 # TikTok Scripts
 
+> **Reconciled against the live product on Aug 7, 2026.** Pricing, the Protection Plan, the single bike model and the 15 mph limit all changed that day — see `OPEN-QUESTIONS.md` Q3, Q4b, Q6 and Q16.
+
+
 > 20 shootable scripts. Each has a hook, shot list, on-screen text, spoken VO, and a caption. Written to be filmed on a phone in under 20 minutes each.
 >
 > **Why this channel gets the most effort:** the entire category's TikTok presence is under 500 followers per brand — Whizz ~259, Fly E-Bike ~454, and Zoomo and PopWheels have no confirmed account. Riders already make this content organically and no brand is amplifying any of it. There is no incumbent to displace.
@@ -38,14 +41,14 @@
 
 ---
 
-### T02 — "$19.99 is not what you'll pay"
-**Hook:** **"Our price is $19.99 a week. That's not what you'll be charged, and I'm going to tell you why."**
+### T02 — "$22.49 is not what you'll pay"
+**Hook:** **"Our price is $22.49 a week. That's not what you'll be charged, and I'm going to tell you why."**
 
 | Time | Shot | On-screen | VO |
 |---|---|---|---|
-| 0–3 | To camera | "$19.99/week" | "Our rate is $19.99 a week. That is not what you'll be charged." |
-| 3–10 | Phone screen, real checkout | Line items appearing | "Four-week minimum. So $79.96 for the bike, plus a $20.97 fee bundle — maintenance, GPS, insurance." |
-| 10–16 | Number lands | "$100.93" | "One hundred dollars and ninety-three cents. Plus tax and card fee. Plus a hundred-dollar deposit you get back." |
+| 0–3 | To camera | "$22.49/week" | "Our rate is $22.49 a week. That is not what you'll be charged." |
+| 3–10 | Phone screen, real checkout | Line items appearing | "Four-week minimum. So $89.96 for the bike, plus $5.99 maintenance. That is the whole list. GPS is $4.99 if you want it — it is off unless you turn it on." |
+| 10–16 | Number lands | "$95.95" | "One hundred dollars and ninety-three cents. Plus tax and card fee. Plus a hundred-dollar deposit you get back." |
 | 16–22 | To camera | "That's the real number" | "Every company in this city advertises a weekly rate that isn't the total. We'd rather you knew now." |
 
 **Caption:** `The real number, before you tap pay. All of it is on our site. #ebikerental #nycdelivery`
@@ -70,17 +73,17 @@
 
 ---
 
-### T04 — "Own it in 8 months"
+### T04 — "Own it in 12 months"
 **Hook:** **"Eight hundred and eighty-seven dollars. Then the bike is yours."**
 
 | Time | Shot | On-screen | VO |
 |---|---|---|---|
-| 0–3 | Number on green | "$887.68" | "Eight hundred eighty-seven sixty-eight. Then the bike is yours." |
-| 3–9 | Breakdown builds | "$110.96 × 8 months" | "A hundred ten ninety-six a month, for eight months. That's it." |
+| 0–3 | Number on green | "$911.76" | "Eight hundred eighty-seven sixty-eight. Then the bike is yours." |
+| 3–9 | Breakdown builds | "$75.98 × 12 months" | "A hundred ten ninety-six a month, for twelve months. That's it." |
 | 9–16 | Comparison, honest | "Most rent-to-own: 12 months, ~2×" | "Most rent-to-own in this city is twelve months and roughly double. Some of them include battery swaps — we don't. Worth knowing." |
 | 16–22 | App screen, payoff button | "Pay off early, no penalty" | "And there's a button to pay it off early. No penalty." |
 
-**Caption:** `8 months, $887.68, it's yours. Model 2 is 10 months. #renttoown #nycdelivery`
+**Caption:** `12 months, $911.76, it's yours. #renttobuy #nycdelivery`
 
 ---
 
@@ -146,7 +149,7 @@ Walk to 249 Broadway. Film the Deliverista Hub cabinets. Say the honest thing: 4
 The minimum pay rate, then the DCWP reality — 17.4 hrs/week, $366.51. The most trust-building video in the set precisely because it undercuts the industry's own marketing.
 
 ### T13 — "Rent or buy? Here's the crossover"
-The break-even math, drawn on paper on camera. Around 32 weeks of renting passes the $799 cash price.
+The break-even math, drawn on paper on camera. Around 40 weeks of renting passes the $899 cash price.
 
 ### T14 — "What the deposit does"
 $100, separate transaction, back when the bike's back, damage capped at the deposit. 15 seconds.
@@ -158,7 +161,7 @@ Pure explainer. Evergreen. Will get watched for years.
 Civil vs criminal, what changed on March 27 2026, and the honest note that 257 criminal summonses were written anyway between March 31 and July 13. Point to Documented and legal aid. **Explicitly not legal advice.**
 
 ### T17 — "The fee bundle is per rental, not per week"
-Why 12 weeks costs $21.74/week and 4 weeks costs $25.23/week. Retention mechanic explained as a benefit, which it genuinely is.
+Why 12 weeks costs $22.99/week and 4 weeks costs $23.99/week. Honest about the size of it — a dollar, not a discount. The real story is that maintenance and the damage/theft waiver are already in the price.
 
 ### T18 — "Before you buy from a marketplace listing"
 The used-bike checklist. Ask for top speed in writing. Check for UL marks. No dealer registration means no recourse.

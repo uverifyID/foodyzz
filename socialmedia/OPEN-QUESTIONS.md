@@ -1,6 +1,6 @@
 # Open Questions — Answers Needed Before Launch
 
-> Ordered by urgency. **Q1–Q4 block published claims.** Q5–Q9 block launch mechanics. Q10+ shape the plan but don't stop it.
+> Ordered by urgency. **Q1–Q6 are now resolved or mostly resolved** — the Aug 7 product changes answered the insurance question by removing the fee, settled the speed and naming conflicts, and left one bike instead of two. What still blocks published claims is Q1's three verification actions. **Q16 is the highest-leverage open decision in the folder.**
 >
 > Where an answer isn't available, the relevant asset is marked ⛔ in the caption library and calendar and simply doesn't ship. Nothing gets published on a guess.
 
@@ -43,28 +43,42 @@ The law requires certification to UL 2849 / UL 2271 by an accredited testing lab
 
 ---
 
-### Q2 — What is the minimum age to rent, and is there a helmet policy?
+### ~~Q2 — Is there a helmet policy?~~ ✅ ANSWERED Aug 7 — yes, and it is enforced at checkout
 
-The app enforces **neither**. No age check exists anywhere in the code; no helmet policy or provision exists.
+**There is now a helmet policy, and marketing should lead with it.**
 
-Every photograph and video in the plan shows a helmet, because that's the right call regardless. But if there's no policy, marketing shouldn't imply one — and if there *should* be an age minimum, that's a product gap worth knowing about before a 16-year-old rents a bike.
+- A properly fitted helmet is required on **every ride, every time**, as a condition of the rental — stricter than New York law, which does not require one for an adult on a Class 2 bike.
+- The rider **ticks a box at checkout** confirming it, alongside the 15 mph limit and the battery charging rules. What they ticked is stored on the order.
+- Riding without one is a breach and can cost the rider the Protection Plan waiver for that incident.
+- **Foodyzz does not supply the helmet.** Terms and the /protection page both say so.
+
+**Copy rule:** show a helmet in every photograph and video — that was already the plan and it is now also policy. **Never imply a helmet comes with the bike.** If anything, "bring your own helmet, we require it" is a more honest and more distinctive line than the industry's silence.
+
+**Age is still open.** Terms require **18+**, and ID documents are checked for Rent and Rent to Buy, but no automated age gate exists in the code. The document check is the control in practice.
 
 ---
 
-### Q3 — What does the $9.99/week "Insurance" fee actually cover?
+### ~~Q3 — What does the $9.99/week "Insurance" fee actually cover?~~ ✅ RESOLVED Aug 7 — the fee is gone
 
-**This is the most serious gap in the entire audit.**
+**The answer was: nothing, because it was not insurance.** There was no policy, no insurer, no limits and no claims flow — which is exactly what the audit found and exactly why it could not be marketed.
 
-Foodyzz charges every rental and every rent-to-buy installment a required $9.99 line item labelled "Insurance." **There are no coverage terms defined anywhere in the codebase** — no policy, no limits, no exclusions, no claims flow. There is also no theft claim flow, despite 54% of NYC riders having had a bike stolen.
+**What happened instead of a rename:**
 
-Three questions:
-1. Is there an actual insurance policy behind it?
-2. If so, what does it cover, and what are the limits?
-3. If not, should the line item be renamed?
+1. **The $9.99 line item was removed entirely.** Not renamed, not reduced.
+2. **What it paid for became a documented damage and theft waiver on the bike**, folded into the rent rate at no separate charge, published in full at **https://foodyzz.com/protection**.
+3. **Rent to Buy lost it altogether** — an owner-in-waiting carries their own risk.
+4. **The word "insurance" was removed from the product, the app, the website and the Terms**, because a separately priced charge against a fortuitous event is the thing New York insurance law regulates. A waiver written into the rental is not the same thing.
 
-**Until answered:** no marketing may mention insurance or coverage at all. Blog post #12 is blocked. Any comment or DM asking about it routes to chat, never to a public answer.
+**The blocker is lifted, with strict rules.** Marketing may now discuss the Protection Plan. It may never:
 
-**A customer will ask this in week one.** It's the obvious question about a $9.99 weekly charge, and "we'll get back to you" is a bad answer to give in public.
+- call it **insurance** or **coverage** — it *waives*, it does not cover
+- suggest it protects **the rider** — injuries, medical bills, lost earnings and third-party claims are never waived
+- suggest it applies to **Rent to Buy** — it does not
+- state it without the **helmet requirement** beside it
+
+Blog post #12 stays blocked in its old form. The honest version — *"no, your delivery e-bike rental does not come with insurance, and here is what it does come with"* — is now writeable, and is a better post.
+
+**See `01-strategy/brand-source-of-truth.md` §3b before writing a word of it.**
 
 ---
 
@@ -80,41 +94,33 @@ Three questions:
 
 ---
 
-### 🔴 Q4b — Class 2 caps motor assist at 20 mph. The app says 21 mph. Which is right?
+### ~~Q4b — Class 2 caps motor assist at 20 mph. The app says 21 mph.~~ ✅ RESOLVED Aug 7 — the question is moot at 15
 
-Class 2 under NY VTL §121-b is throttle-capable with **motor assist cutting off at 20 mph**. The app's spec block states **"Top speed: 21 mph"** (`OrderWizard.tsx:907`).
+**New York City capped every e-bike at 15 mph on October 24, 2025**, citywide, all classes, streets and bike lanes. The fleet is configured to that limit, so what the motor could theoretically do stopped being the interesting number.
 
-Those two statements cannot both be describing the same thing.
+- The app's spec block now reads **"Class 2 e-bike with a throttle — motor assist to 15 mph, New York City's limit."** The 21 mph string, and the 19 mph string that briefly replaced it, are both gone.
+- Every bike listing shows the limit next to the UL certificates.
+- Tampering with the limiter is an explicit breach of the Terms and voids the Protection Plan.
 
-**Most likely explanation:** 21 mph is the speed the bike can *reach* — a rider can always pedal past the motor cutoff — while the motor stops assisting at 20. That's normal and legal. But "top speed 21 mph" published next to "Class 2" invites exactly the wrong question from exactly the wrong reader.
+**This is a marketing asset, not a compromise.** Every rider in this city is being limited to 15 whether they like it or not. Foodyzz ships limited and says so on the listing; anyone renting 20–25 mph bikes into NYC has an unsolved problem. Lead with compliance, not with speed.
 
-**What's needed:** the manufacturer's spec sheet showing the **motor cutoff speed**, for both models.
-
-**Why this matters more than it looks.** The certification and classification story is Pillar 2 of the whole positioning. If a rider, a competitor, or an inspector spots "21 mph" against a Class 2 claim, the credibility cost lands on the one thing this brand is selling — being the company that tells you the truth about numbers.
-
-**Recommendation, pending the answer:** stop publishing "21 mph" as a headline spec. Say **"Class 2 e-bike — motor assist to 20 mph, throttle included."** It's more accurate, more useful, and it surfaces the throttle as the feature it is. The app's spec string should change too.
-
-**Until answered:** the 21 mph figure has been pulled from all marketing copy in this folder.
+**Still to do:** set and **log the limiter per bike at intake**, and check it at every return inspection. "Our policy is 15" is weak evidence after a collision; a dated per-bike record is not.
 
 ---
 
 ## 🟠 Blocking launch mechanics
 
-### Q5 — "Rent to Buy" or "Rent-to-Own"?
+### ~~Q5 — "Rent to Buy" or "Rent-to-Own"?~~ ✅ RESOLVED Aug 7 — **Rent to Buy**
 
-The app says **Rent to Buy**. The website says **Rent-to-Own**. Two names for one product, and the mismatch appears at the point of payment.
-
-**Recommendation: standardise on "Rent to Buy"** — the app is what the customer sees at checkout, and changing HTML is cheaper than changing an app. Every asset in this folder uses Rent to Buy.
+The website has been changed throughout: home page, Terms, Privacy, 404 and the Protection Plan page. The app was already right. **Never write "rent-to-own" again**, in copy, in a caption, or in a blog title.
 
 ---
 
-### Q6 — Do both models really share one spec sheet?
+### ~~Q6 — Do both models really share one spec sheet?~~ ✅ RESOLVED Aug 7 — there is only one model
 
-The spec block — 21 mph, 50 miles, IP65, 300 lb, UL 2849, UL 2271 — is a **single hardcoded UI string applied to both models**, not per-model data.
+**Model 2 was a test fixture**, used while exercising the wizard, and it was removed from the live config. There is one bike: **Foodyzz Model 1**, $22.49/week, $69.99/month rent to buy, $899 to buy.
 
-But Model 2 costs $200 more to buy and $20/month more to rent-to-buy. **If the specs are identical, what is the customer paying more for?** Either there's a real difference that should be in the marketing, or the pricing needs an explanation.
-
-This is a marketing question and a product question at once. A rider will ask it in the comments.
+The pricing question that made this urgent — *what is the customer paying $200 more for?* — disappears with it. Any asset mentioning two models, a $999 bike, or a $109.99 rent-to-buy is describing a product that does not exist.
 
 ---
 
@@ -122,7 +128,7 @@ This is a marketing question and a product question at once. A rider will ask it
 
 Neither exists. `GlobalConfig.supportPhoneNumber` is a type field referenced nowhere in the app, and the site says only "Foodyzz HQ, New York, NY."
 
-**Consequences:** no Google Business Profile, no map pack, no `LocalBusiness` schema — for a business whose entire market is one city and whose competitors all have local presence. It also means a rider who wants to talk to a person before spending $887.68 can't.
+**Consequences:** no Google Business Profile, no map pack, no `LocalBusiness` schema — for a business whose entire market is one city and whose competitors all have local presence. It also means a rider who wants to talk to a person before spending $911.76 can't.
 
 **Getting a phone number is the single highest-ROI local-SEO action available.** It's a business decision, not a technical one.
 
@@ -160,7 +166,7 @@ There is no maintenance-request flow in the customer app — only the fee and a 
 
 ### Q11 — Is comparative advertising signed off?
 
-The strongest content in this plan is the honest comparison: **$887.68 over 8 months against Whizz's advertised ~$2,028 over 12.**
+The strongest content in this plan is the honest comparison: **$911.76 over 12 months against Whizz's advertised ~$2,028 over 12.**
 
 Comparative advertising is legal and defensible when every claim is accurate, sourced and current — and this one is built to be scrupulously fair, including a row where we lose on battery swaps. But competitor prices change, and Whizz publishes comparison content about everyone, so expect scrutiny.
 
@@ -178,17 +184,25 @@ This audience runs on word of mouth. A working referral programme is probably th
 
 ### Q13 — What's the fleet size, and what happens when it sells out?
 
-Seeded config has **32 bikes** — 15 Model 1, 17 Model 2. If that's close to reality, marketing could exhaust supply in a fortnight.
+Live config lists **15 bikes** — 10 new and 5 used, Model 1 only, now that the test model is gone. If that's close to reality, marketing could exhaust supply in a week, not a fortnight.
 
 The app has a waitlist state, which is good. **What's the actual inventory, and what's the restock lead time?** The answer changes how hard to push, and whether "sold out" becomes social proof or an apology.
 
 ---
 
-### Q14 — Is the fee bundle intentionally billed once per period?
+### ~~Q14 — Is the fee bundle intentionally billed once per period?~~ ✅ CONFIRMED, but it now matters far less
 
-Three fees labelled with a weekly cadence — maintenance $5.99, GPS $4.99, insurance $9.99 — are charged **once per rental period, not per week**. A 12-week rental pays the same $20.97 as a 4-week one.
+Confirmed deliberate — the code comment is explicit and the behaviour is unchanged.
 
-The code comment says this is deliberate, and it's a genuinely good retention mechanic that this plan markets as a headline benefit. **Confirming it's intended and not a bug** matters, because "your effective weekly price drops the longer you ride" is about to be printed on a lot of graphics.
+**But the bundle shrank from $20.97 to $5.99**, because insurance was removed and GPS became opt-in. The "your effective weekly price falls the longer you ride" story went with it:
+
+| | Old bundle | Now |
+|---|---|---|
+| 4-week effective $/week | $25.23 | **$23.99** |
+| 12-week effective $/week | $21.74 | **$22.99** |
+| Spread across the term | **$3.49** | **$1.00** |
+
+**Do not build a graphic on a dollar.** It is still true, still worth a line in a longer explainer, and no longer a headline. Anything already drafted around it needs rewriting — see `03-social/caption-library.md` and `04-visuals/graphic-templates.md`.
 
 ---
 
@@ -197,6 +211,36 @@ The code comment says this is deliberate, and it's a genuinely good retention me
 Marketing says Manhattan (UWS, Harlem, Chelsea, SoHo) with other boroughs "soon," and delivery 5–9 PM with nothing same-day.
 
 Both are constraints worth being honest about — but if either is about to change, the messaging should anticipate it rather than get rewritten in week three.
+
+---
+
+### Q16 — Will the rent-to-buy rate drop $1.06 so "0% interest" becomes true? 🔴
+
+At **$69.99 + $5.99 × 12 = $911.76** against a **$899** cash price, rent to buy costs **$12.76 more** than buying outright. New York bars advertising a rent-to-own deal as interest-free or no-cost when total payments exceed the cash price, so the app currently discloses the difference rather than claiming 0%.
+
+**Drop the rate to $68.93** and the total becomes $898.92 — under the cash price. The claim turns true, the app flips to showing it automatically, and it costs **$12.72 per bike across a full 12-month plan**.
+
+This is a pricing decision, not a marketing one, but it is the single highest-leverage one available to marketing. A truthful "0% interest, and here are both numbers" is a headline most competitors cannot make.
+
+---
+
+### Q17 — Who charges the batteries before delivery, and where? 🟠
+
+Terms now state that **charging is the rider's responsibility** and that Foodyzz operates no charging stations, swap stations or battery storage for customers. That is a deliberate position and it keeps Foodyzz out of the FDNY commercial charging regime.
+
+But the site says every bike arrives **"checked and charged"**, which means someone charges batteries somewhere before handover. That is not a contradiction in the Terms — it is an unanswered operational question, and it is the one an insurer or FDNY would ask first.
+
+**Needed:** how many batteries are on charge at once, on whose premises, and whether that triggers FDNY requirements. Marketing should not describe the charging operation at all until this is answered.
+
+---
+
+### Q18 — Should the § 504-a hardship right be marketed? 🟡
+
+Rent to Buy now carries a disclosed right: once a rider has paid **half** the total, if their income drops **25% or more** through involuntary job loss, reduced work, illness, pregnancy or disability, they can ask for the payment to be cut by that percentage or 50%, whichever is less — **and the total to own does not increase**, the term extends.
+
+For a customer base whose income is variable by definition, this is a genuinely strong trust signal, and almost nobody in this category talks about it. It is also a legal right rather than a Foodyzz invention, so the copy has to be careful not to present it as generosity.
+
+**Worth testing as a message.** "If your income drops, your payment drops" is close to the truth, needs the conditions attached, and speaks directly to the fear that stops a courier committing to twelve months.
 
 ---
 

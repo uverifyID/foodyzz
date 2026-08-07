@@ -1,6 +1,6 @@
 # Competitor Landscape — NYC E-Bike Rental for Delivery Riders
 
-> Compiled Aug 2026. Prices below were captured from competitor page titles, meta descriptions and landing-page copy surfaced in search. **Treat every competitor price as a headline "from" price, not a checkout total** — the same trap Foodyzz has with its own $19.99/week. Where a number could not be confirmed twice, it is marked `unverified`.
+> Compiled Aug 2026. Prices below were captured from competitor page titles, meta descriptions and landing-page copy surfaced in search. **Treat every competitor price as a headline "from" price, not a checkout total** — the same trap Foodyzz has with its own $22.49/week. Where a number could not be confirmed twice, it is marked `unverified`.
 >
 > Companion file: [competitor-social-media.md](competitor-social-media.md) has follower counts, cadence and content-format analysis.
 
@@ -105,8 +105,7 @@ Foodyzz numbers are computed from `foodyzz/src/services/logistics.ts` and the se
 
 | Offer | Headline | Real 4-week cost | Effective $/week | Notes |
 |---|---|---|---|---|
-| **Foodyzz Model 1** | $19.99/wk | **$100.93** | **$25.23** | 4-week minimum; +$100 refundable deposit |
-| **Foodyzz Model 2** | $29.99/wk | **$140.93** | **$35.23** | 4-week minimum; +$100 refundable deposit |
+| **Foodyzz Model 1** | $22.49/wk | **$95.95** | **$23.99** | 4-week minimum; +$100 refundable deposit |
 | Zoomo (headline) | $20/wk | `unverified` | — | "from" price |
 | Zoomo Zero | $39/wk | `unverified` | — | |
 | Zoomo standard | $59/wk | `unverified` | — | $49 + $10 mandatory theft insurance; `unverified` |
@@ -114,13 +113,13 @@ Foodyzz numbers are computed from `foodyzz/src/services/logistics.ts` and the se
 | Whizz | $169/mo | — | ~$39/wk equivalent | Includes unlimited battery swaps |
 | JOCO | `unverified` | — | — | Includes unlimited swaps, storage, maintenance |
 
-**Foodyzz's effective weekly price drops the longer the term**, because the $20.97 fee bundle is charged once per rental period rather than per week:
+**Foodyzz's effective weekly price drops the longer the term**, because the $5.99 fee bundle is charged once per rental period rather than per week:
 
 | Term (Model 1) | Base | Fee bundle | Total | Effective $/week |
 |---|---|---|---|---|
-| 4 weeks | $79.96 | $20.97 | **$100.93** | $25.23 |
-| 8 weeks | $159.92 | $20.97 | **$180.89** | $22.61 |
-| 12 weeks | $239.88 | $20.97 | **$260.85** | $21.74 |
+| 4 weeks | $89.96 | $5.99 | **$95.95** | $23.99 |
+| 8 weeks | $159.92 | $5.99 | **$180.89** | $22.61 |
+| 12 weeks | $269.88 | $5.99 | **$275.87** | $22.99 |
 
 This is a genuine, defensible retention mechanic and nobody else in the market has an equivalent. It should be a headline message, not a footnote.
 
@@ -128,26 +127,24 @@ This is a genuine, defensible retention mechanic and nobody else in the market h
 
 | Offer | Monthly | Term | **Total to own** | Bike is yours? |
 |---|---|---|---|---|
-| **Foodyzz Model 1** | $110.96 ($89.99 + $20.97 fees) | **8 months** | **$887.68** | Yes |
-| **Foodyzz Model 2** | $130.96 ($109.99 + $20.97 fees) | **10 months** | **$1,309.60** | Yes |
+| **Foodyzz Model 1** | $75.98 ($89.99 + $5.99 fees) | **12 months** | **$911.76** | Yes |
 | Whizz | $169 | 12 months | **~$2,028** | Yes |
 | Whizz (Spanish page) | $179 | 12 months | **~$2,148** | Yes |
 | Zoomo | from $45/mo | `unverified` | `unverified` | `unverified` |
 
-**Foodyzz Model 1 rent-to-buy is ~56% cheaper than Whizz's advertised rent-to-own and finishes 4 months sooner.** Model 2 is ~35% cheaper. This is the single most powerful, verifiable, defensible number in the entire marketing plan.
+**Foodyzz rent to buy is ~55% cheaper than Whizz's advertised rent-to-own over the same 12 months** — $911.76 against ~$2,028. This is the single most powerful, verifiable, defensible number in the entire marketing plan. It no longer finishes sooner: the term is 12 months, the same as theirs. Compete on total cost and on owning the bike, not on speed.
 
-**Be fair when you say it.** Whizz's $169 includes unlimited battery swaps and free maintenance; Foodyzz's $110.96 includes maintenance and GPS and insurance but **not** battery swaps. Any comparison graphic must show both columns honestly or it will be picked apart in the comments — by Whizz, who monitors this category closely enough to publish comparison posts about it.
+**Be fair when you say it.** Whizz's $169 includes unlimited battery swaps and free maintenance; Foodyzz's $75.98 includes maintenance but **not** battery swaps, **not** GPS (optional, $4.99), and **not** the damage/theft waiver — that comes with Rent, not with Rent to Buy. Any comparison graphic must show both columns honestly or it will be picked apart in the comments — by Whizz, who monitors this category closely enough to publish comparison posts about it.
 
 ### Outright purchase
 
 | Offer | Price | Notes |
 |---|---|---|
-| **Foodyzz Model 1** | **$799** | No deposit, no fees, no document check |
-| **Foodyzz Model 2** | **$999** | No deposit, no fees, no document check |
+| **Foodyzz Model 1** | **$899** | No deposit, no fees, no document check |
 | Typical courier e-bike (market) | $1,000–$3,000 | Range cited across 2025–26 reporting |
 | Plus spare batteries | ~$580 for extras | One documented worker case: $1,800 bike + $580 batteries |
 
-**$799 for a UL 2849 certified bike delivered to the door is below the bottom of the market range.** That deserves its own campaign.
+**$899 for a UL 2849 certified bike delivered to the door is below the bottom of the market range.** That deserves its own campaign.
 
 ---
 
@@ -186,9 +183,9 @@ These are the documented complaints and conditions this market runs on. They com
 
 Each of these is a positioning opening backed by evidence above.
 
-1. **Nobody publishes the all-in price.** Every competitor leads with a "from" headline that is not the checkout total. Foodyzz publishing "$100.93 for four weeks, here is the line-by-line" is a differentiator that costs nothing and builds the exact trust this audience lacks.
+1. **Nobody publishes the all-in price.** Every competitor leads with a "from" headline that is not the checkout total. Foodyzz publishing "$95.95 for four weeks, here is the line-by-line" is a differentiator that costs nothing and builds the exact trust this audience lacks.
 
-2. **Rent-to-own is wildly overpriced and nobody has undercut it.** Whizz at ~$2,028/12 months is the market anchor. Foodyzz Model 1 at $887.68/8 months is a category-breaking number.
+2. **Rent-to-own is wildly overpriced and nobody has undercut it.** Whizz at ~$2,028/12 months is the market anchor. Foodyzz Model 1 at $911.76/12 months is a category-breaking number.
 
 3. **No competitor markets the UL certification story.** NYC is in the middle of a 70%-increase battery-fire year, Local Law 39 makes certification mandatory for rentals, and Foodyzz rents UL 2849 / UL 2271 certified bikes with the mark on the frame. Whizz has exactly one blog post on UL 2849 — on their *Russian* subdirectory. This is the largest unclaimed trust position in the market.
 
@@ -214,4 +211,4 @@ Each of these is a positioning opening backed by evidence above.
 - Zoomo's deposit, its true standard checkout total, and its rent-to-own term length.
 - Whizz's deposit and outright purchase price.
 - Direct review-site complaint text attributable to a named competitor.
-- Whether any competitor's "insurance" line defines actual coverage terms — **note Foodyzz has the same gap and it is worse for us, because we charge $9.99/week for it.** See the open question in `../OPEN-QUESTIONS.md`.
+- Whether any competitor's "insurance" line defines actual coverage terms. ✅ **Foodyzz no longer has this gap** — the $9.99 line was removed on Aug 7 and replaced by a published waiver at foodyzz.com/protection. If a competitor charges for "insurance" without terms, that is now a contrast we can draw and they cannot.

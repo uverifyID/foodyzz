@@ -1007,7 +1007,7 @@ export default function OrderWizard() {
               </View>
               <Text className="text-[11px] font-bold text-slate-500 leading-4">
                 The battery is removable.{'\n'}
-                Top speed: 19 mph{'\n'}
+                Class 2 e-bike with a throttle — motor assist to 15 mph, New York City's limit{'\n'}
                 Distance per charge: 80 km (50 miles) with pedal assistance in eco mode{'\n'}
                 Integrated battery management system (BMS)
               </Text>

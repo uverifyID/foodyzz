@@ -2,7 +2,9 @@
 
 > **Read this before writing a single line of copy.** Everything here is verified against the app source, the Cloud Functions, the seeded config, or the live website — with file references so it can be re-checked. If a fact is not in this document, do not publish it.
 >
-> Last verified: **Aug 6, 2026**, against branch `sdk-54-android-36`.
+> Last verified: **Aug 7, 2026**, against branch `sdk-54-android-36` and the live `apiConfig/logistics` document.
+>
+> ⚠️ **Everything about pricing, fees and the Protection Plan changed on Aug 7.** The insurance line item is gone, the rent rate absorbed it, rent to buy lost it entirely, Model 2 was a test fixture and no longer exists, and the deposit is charged rather than held. If you are working from anything written before Aug 7, re-read sections 2–4.
 > Owner: whoever is publishing. Re-verify prices before every campaign — they live in an admin-editable Firestore doc and can change without a code deploy.
 
 ---
@@ -21,16 +23,17 @@ Foodyzz rents, rent-to-buys, and sells delivery-grade e-bikes to riders in New Y
 
 ## 2. The three offerings — exact names and mechanics
 
-The app calls them **Rent**, **Rent to Buy**, and **Buy**. The website currently says "Rent-to-Own." **Pick one and change the other.** Recommendation: standardise on **Rent to Buy** everywhere, because that is what the customer sees at checkout and mismatched names at the point of payment kill conversion. (See `../OPEN-QUESTIONS.md` Q5.)
+The app calls them **Rent**, **Rent to Buy**, and **Buy**. ✅ **Resolved Aug 7** — the website said "Rent-to-Own" and now says Rent to Buy everywhere. Use **Rent to Buy**. Never write "rent-to-own."
 
 | | Rent | Rent to Buy | Buy |
 |---|---|---|---|
 | App blurb (verbatim) | "Weekly rental. New or used bike." | "Monthly payments, the bike is yours at the end. Always a new bike." | "One-time purchase. Always a new bike." |
 | Billed | Weekly rate, whole term up front at delivery | Monthly installments | Once |
-| Term | Customer picks, **4-week minimum** | **Fixed** at 8 months (Model 1) or 10 months (Model 2) | — |
+| Term | Customer picks, **4-week minimum** | **Fixed at 12 months** | — |
 | Bike condition | **New or used** | Always new | Always new |
-| Deposit | $100 | $100 | **None** |
-| Fee bundle | Yes | Yes, every month | **None** |
+| Deposit | $100, **charged** at delivery | $100, **charged** at delivery | **None** |
+| Required fee | Maintenance $5.99 per period | Maintenance $5.99 per month | **None** |
+| Protection Plan | **Included in the rate** | **Does not apply** | — |
 | ID documents required | Yes | Yes | **No** |
 | Ownership | No | **Yes, at final payment** | Yes, day one |
 
@@ -45,81 +48,103 @@ The app calls them **Rent**, **Rent to Buy**, and **Buy**. The website currently
 
 ## 3. Prices — the numbers, and the numbers behind the numbers
 
-**Source of truth is the Firestore doc `apiConfig/logistics`, editable by admins.** The values below are the seeded defaults, mirrored as a client fallback in `foodyzz/src/services/logistics.ts:17-45` and `functions/scripts/seed-logistics.js:30-81`. **Re-check them against live config before any campaign.**
+**Source of truth is the Firestore doc `apiConfig/logistics`, editable by admins.** Verified against the live document on **Aug 7, 2026**. **Re-check before any campaign.**
 
-### Base rates
+### Base rates — one model
 
 | Model | Rent | Rent to Buy | Buy | Minimum commitment |
 |---|---|---|---|---|
-| **Foodyzz Model 1** | $19.99/week | $89.99/month | **$799** | 4 weeks · 8 months |
-| **Foodyzz Model 2** | $29.99/week | $109.99/month | **$999** | 4 weeks · 10 months |
+| **Foodyzz Model 1** | **$22.49/week** | **$69.99/month** | **$899** | 4 weeks · 12 months |
 
-### The fee bundle
+**Model 2 does not exist.** It was a test fixture and was removed from the live config on Aug 7. Anything referencing a $999 model, a $109.99 rent-to-buy, or "two models" is wrong. This also answers the old Q6 — there was never a second bike to justify a price difference for.
 
-Four fees exist and **all four are marked required** — nothing is opt-out in practice.
+### Fees
 
-| Fee | Amount | Cadence |
-|---|---|---|
-| Deposit | **$100.00** | Once, refundable |
-| Weekly maintenance | $5.99 | per rental period |
-| GPS tracker | $4.99 | per rental period |
-| Insurance | $9.99 | per rental period |
-| **Bundle total (excl. deposit)** | **$20.97** | **per rental period** |
+| Fee | Amount | Cadence | Optional? |
+|---|---|---|---|
+| Deposit | **$100.00** | Once, **charged** at delivery, refunded on return | No |
+| Maintenance | **$5.99** | per rental period | No |
+| GPS tracker | $4.99 | per rental period | **Yes — off by default** |
 
-**The mechanic that matters most:** the fee bundle is charged **once per rental period, not per week.** A 4-week rent pays the base rate ×4 and the bundle ×1. Confirmed at `foodyzz/src/services/logistics.ts:328-340` — the code comment is explicit: *"Fees are billed once per rental period — NOT per week/month of the term."*
+**Three things changed on Aug 7 and every one of them is a copy change:**
 
-A rent-to-buy installment re-bills the whole bundle every month.
+1. **The $9.99 "Insurance" line is gone.** It is not renamed, not reduced — removed. What it paid for is now a damage and theft waiver built into the rent rate. See §3b.
+2. **GPS is opt-in.** It used to be pre-selected and the rider had to find it to decline. It is now off until tapped. "We don't tick boxes for you" is a true and unusually specific trust line.
+3. **The deposit is charged, not held.** The old copy said held. It is taken as a separate transaction at delivery and refunded on return, minus documented damage. Never write "we only hold it."
+
+**The mechanic that still matters:** fees are charged **once per rental period, not per week** (`foodyzz/src/services/logistics.ts` — *"Fees are billed once per rental period"*). But it is now a much smaller effect than the old plan assumed, because only $5.99 sits in that bundle instead of $5.99. See the effective-weekly column below before printing anything about it.
+
+### 3b. The Protection Plan — read this before writing a word about it
+
+A damage and theft waiver on **the bike**, included in every rental at no separate charge.
+
+- Waives **50% of eligible repair and damage costs**
+- Caps liability for a stolen or lost bike at **$500**, conditional on a working battery returned, a police report within 24 hours, and the bike having been locked
+- **Never applies to Rent to Buy** — an owner-in-waiting carries their own risk there
+- **Never covers the rider** — no injuries, no medical bills, no lost earnings, no third-party liability
+
+**Hard rules for copy:**
+- **Never call it insurance, or coverage.** It waives, it does not cover. It is not an insurance policy and Foodyzz is not an insurer.
+- **Never claim it protects the rider.** It protects the bike.
+- **Never imply it applies to Rent to Buy.**
+- Always pair it with the helmet requirement.
+
+Full terms: https://foodyzz.com/protection
 
 ### What a customer actually pays
 
-All figures **exclude sales tax and the card-processing fee**, both added at checkout. The deposit is charged as a **separate second transaction at delivery** and is never on the rental invoice.
+Excludes sales tax and the card-processing fee, both added at checkout. The deposit is a **separate second transaction at delivery**.
 
-**Rent — Model 1**
+**Rent — Model 1** (maintenance included; GPS adds $4.99 once per period if selected)
 
-| Term | Base | Bundle | **Charged at delivery** | Effective $/week |
+| Term | Base | Maintenance | **Charged at delivery** | Effective $/week |
 |---|---|---|---|---|
-| 4 weeks (minimum) | $79.96 | $20.97 | **$100.93** | $25.23 |
-| 8 weeks | $159.92 | $20.97 | **$180.89** | $22.61 |
-| 12 weeks | $239.88 | $20.97 | **$260.85** | $21.74 |
+| 4 weeks (minimum) | $89.96 | $5.99 | **$95.95** | $23.99 |
+| 8 weeks | $179.92 | $5.99 | **$185.91** | $23.24 |
+| 12 weeks | $269.88 | $5.99 | **$275.87** | $22.99 |
 
-**Rent — Model 2**
+⚠️ **The "your weekly price drops the longer you ride" angle is now weak.** It moves $1.00 across a 4-to-12-week stretch, where the old bundle moved $3.49. It is still true and still worth a line, but it cannot carry a graphic on its own.
 
-| Term | Base | Bundle | **Charged at delivery** | Effective $/week |
-|---|---|---|---|---|
-| 4 weeks (minimum) | $119.96 | $20.97 | **$140.93** | $35.23 |
-| 8 weeks | $239.92 | $20.97 | **$260.89** | $32.61 |
-| 12 weeks | $359.88 | $20.97 | **$380.85** | $31.74 |
+**Rent to Buy — Model 1**
 
-**Rent to Buy**
+| Monthly (base + maintenance) | Months | **Total to own** | vs. the $899 cash price |
+|---|---|---|---|
+| $69.99 + $5.99 = **$75.98** | 12 | **$911.76** | **+$12.76** |
 
-| Model | Monthly (base + bundle) | Months | **Total to own** | vs. buying outright |
-|---|---|---|---|---|
-| Model 1 | $89.99 + $20.97 = **$110.96** | 8 | **$887.68** | +$88.68 over the $799 cash price |
-| Model 2 | $109.99 + $20.97 = **$130.96** | 10 | **$1,309.60** | +$310.60 over the $999 cash price |
+🔴 **You cannot call this 0% interest today.** New York bars advertising a rent-to-own deal as interest-free or no-cost when total payments exceed the cash price. At $911.76 against $899, they do. The app already shows the honest difference instead of a 0% badge.
 
-**Buy** — $799 (Model 1) / $999 (Model 2). No deposit, no fee bundle, no document check, no return leg.
+**One dollar and six cents fixes it.** Drop the rent-to-buy rate to **$68.93** and the total lands at $898.92 — under the cash price, and the claim becomes true and printable. That is $12.72 per bike over a whole plan for a headline competitors cannot honestly make. This is the single highest-leverage pricing decision on the table for marketing.
+
+**Rent to Buy repairs:** normal wear and tear is included, with a **$9.99 service fee per repair request**. Damage beyond ordinary wear is billed in full — there is no 50% split on Rent to Buy.
+
+**Buy** — $899. No deposit, no fees, no document check, no return leg.
 
 ### Other money facts
 
-- **Delivery is free.** `deliveryFee` is hardcoded to 0 — "delivery is bundled into the rental rate."
-- **No platform fee, no commission, no rush surcharge.** All hardcoded to 0.
-- **Sales tax** comes from the assigned store record, not hardcoded. Applied to the service subtotal only.
-- **Card-processing fee** is passed through to the customer and shown combined with tax as a single **"Taxes and fees"** line.
-- **Missed collection: $25 admin fee + the rental renews for another full term**, charged to the saved card. Disclosed twice before it can happen (in the "on our way" push and in the due-soon email).
+- **Delivery is free.** `deliveryFee` is hardcoded to 0.
+- **No platform fee, no commission, no rush surcharge.**
+- **Sales tax** comes from the assigned store record. **Card-processing fee** is passed through, shown with tax as one **"Taxes and fees"** line.
+- **Missed collection: a $49.99 admin fee** *(live config, not the $25 in older drafts)* **plus the rental renews for another full term.** Disclosed twice before it can happen.
 - **Tips** are optional, post-delivery, untaxed, commission-free.
+- **The all-in total is now shown on the fees step** before the rider continues — the screen used to list the parts without ever summing them.
 
 ---
 
 ## 4. The bike — specs
 
-⚠️ The in-app spec block is a **single hardcoded string applied to both models** (`OrderWizard.tsx:882-911`), not per-model data. Confirm both models match before publishing a spec sheet. See `../OPEN-QUESTIONS.md` Q6.
+✅ There is one model, so the single spec block is now correct rather than a warning. *(Old Q6 closed.)*
 
-**Class: Class 2** *(confirmed Aug 6, 2026)*
+**Class: Class 2, limited to 15 mph** *(confirmed Aug 7, 2026)*
 
-Class 2 under NY VTL §121-b means **throttle-capable, with motor assist cutting off at 20 mph**. Two consequences worth knowing:
+Class 2 under NY VTL means **throttle-capable**. The fleet is configured to **15 mph**, which is New York City's citywide e-bike limit in force since **October 24, 2025**. The app's spec block and the certification card on each bike listing both say so.
 
-- **The throttle is a selling point nobody is using.** A rider pulling away from a light with a loaded bag on a Manhattan hill cares about this. It is currently mentioned in no marketing anywhere.
-- **City Council Intro 244 would ban the sale and rental of Class 3 e-bikes. A Class 2 fleet is outside its scope.** A real business risk that turned out not to apply.
+Three consequences worth knowing:
+
+- **The throttle is a selling point nobody is using.** A rider pulling away from a light with a loaded bag on a Manhattan hill cares about this. It is mentioned in no marketing anywhere.
+- **City Council Intro 244 would ban the sale and rental of Class 3 e-bikes. A Class 2 fleet is outside its scope.**
+- **15 mph is a compliance story, not an apology.** Every rider in this city is about to be limited to it. Foodyzz ships limited already, and says so on the listing. Competitors renting 20–25 mph bikes into NYC have a problem they have not solved.
+
+⚠️ Do not publish "top speed" figures. The app used to say 21 mph, then 19; both conflicted with the configured limit and both are gone. Say **"Class 2 with a throttle, motor assist to 15 mph — New York City's limit."**
 
 **Certifications** *(supplier certification sheet, Aug 2026)*
 
@@ -141,11 +166,9 @@ Class 2 under NY VTL §121-b means **throttle-capable, with motor assist cutting
 
 **Battery & performance**
 - Battery is **removable**
-- **Motor assist to 20 mph** (Class 2)
+- **Motor assist to 15 mph** — Class 2, configured to the NYC limit
 - Range: **up to 80 km / 50 miles** with pedal assistance in eco mode
 - Integrated **battery management system (BMS)**
-
-⚠️ **The app currently states "Top speed: 21 mph," which conflicts with the Class 2 designation.** Probably the difference between what the bike can reach and where the motor cuts off — but it should not be published next to a Class 2 claim. **The 21 mph figure has been pulled from all marketing copy in this folder.** See Q4b.
 
 **Not stated anywhere, so do not claim:** motor wattage, battery Wh/Ah, weight, charge time, brake type, tyre size, warranty length.
 
@@ -255,22 +278,35 @@ A launch nine days out with no baseline, no attribution and no retargeting audie
 
 ---
 
-## 11. Facts that contradict each other — fix before launch
+## 11. Site vs app — what was fixed, and what is left
 
-| # | Website says | App does | Fix |
+Most of the list that lived here was fixed on **Aug 7**.
+
+| # | Was | Now |
+|---|---|---|
+| 1 | Site: "Rent-to-Own" · App: "Rent to Buy" | ✅ **Rent to Buy** everywhere |
+| 2 | Site: deposit "held, not charged" · App: charged | ✅ Site says **charged at delivery, refunded on return** |
+| 3 | "Insurance $9.99" with no defined coverage | ✅ Removed; a documented waiver at **/protection** |
+| 4 | App listed fees without ever summing them | ✅ **All-in total** on the fees step |
+| 5 | GPS pre-selected | ✅ **Off by default** |
+| 6 | App: "Top speed 21 mph" against a Class 2 claim | ✅ **"Motor assist to 15 mph"** |
+| 7 | No certification anywhere customer-facing | ✅ Lab, both standards, **both certificate numbers** and a verify link on the bike listing |
+| 8 | No helmet policy | ✅ Required by contract every ride, **ticked at checkout**; Foodyzz does **not** supply one |
+
+**Still open:**
+
+| # | Site says | App does | Fix |
 |---|---|---|---|
-| 1 | "Rent by the week **or month**" | Rent is weekly only; monthly is rent-to-buy | Reword the site |
-| 2 | "Extend or return **any time**" | 4-week minimum commitment | Reword the site |
-| 3 | "**Rent-to-Own**" | "**Rent to Buy**" | Standardise on Rent to Buy |
-| 4 | "**No hidden fees**" | $20.97 bundle + deposit, no prices published on site | Publish the price table |
-| 5 | Rent card implies same bike as other plans | Rent may be a **used** bike | Say so — it is a legitimate reason rent is cheap |
-| 6 | No specs anywhere | Class 2, UL 2849, UL 2271, IP65, 300 lbs rider+cargo, up to 50 mi | Put the specs on the site — they are the best asset we have |
-| 9 | — | App says "Top speed: 21 mph", which conflicts with Class 2 | Change the app string to "Motor assist to 20 mph (Class 2)" |
-| 7 | No prices anywhere | Real prices exist and are already public in the App Store screenshots | Publish them |
-| 8 | `compliance@foodyzz.com` absent | Shown in-app | Add to the site |
+| A | "Rent by the week **or month**" | Rent is weekly only | Reword the site |
+| B | "Extend or return **any time**" | 4-week minimum | Reword the site |
+| C | "**No hidden fees**" | True now, but no prices published on the site at all | Publish the price table — it is finally clean enough to show |
+| D | Rent card implies the same bike as other plans | Rent may be a **used** bike | Say so; it is a legitimate reason rent is cheaper |
+| E | No specs anywhere | Class 2, 15 mph, UL 2849, UL 2271, IP65, 300 lb, up to 50 mi | Put the specs on the site — best asset we have |
+| F | `compliance@foodyzz.com` absent | Shown in-app | Add to the site |
+| G | Home page still says bikes are "delivered checked and **charged**" | Terms now say charging is the rider's job and Foodyzz runs no charging stations | Not a contradiction, but decide what the pre-delivery charging operation is and whether FDNY rules touch it |
 
 ---
 
 ## 12. The one-paragraph brief
 
-> Foodyzz rents and sells UL-certified delivery e-bikes to New York City riders and brings the bike to their door. A rider can rent from $19.99 a week on a four-week minimum, pay $110.96 a month and own the bike outright in eight months, or buy it for $799. There is no credit check and no store visit. The card is authorised when the rider books and charged only when the bike is in their hands, and the $100 deposit comes back when the bike does. Certification matters here: New York made UL 2849 and UL 2271 mandatory for any bike rented or sold in the city, battery fires are up 70% this year, and the Foodyzz mark is on the frame where an inspector — or a landlord — can see it.
+> Foodyzz rents and sells UL-certified delivery e-bikes to New York City riders and brings the bike to their door. A rider can rent for $22.49 a week on a four-week minimum, pay $75.98 a month and own the bike outright in twelve, or buy it for $899. There is no credit check and no store visit. The card is authorised when the rider books and charged only when the bike is in their hands, and the $100 deposit comes back when the bike does. Certification matters here: New York made UL 2849 and UL 2271 mandatory for any bike rented or sold in the city, and Foodyzz publishes both certificate numbers and the lab that issued them — TÜV Rheinland — on the bike's listing, where a rider can check them before paying. Every bike ships limited to 15 mph, the city's new limit, and every rental includes a damage and theft waiver on the bike.

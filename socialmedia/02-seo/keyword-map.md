@@ -37,7 +37,7 @@ Three things shape this map:
 | B1 | ebike theft nyc / how to lock an ebike | 300–1,000 | **Low** ⭐ | Informational → commercial | Whizz ranks **#1** with a *generic* post. Not one NYC-specific result on page 1. Beat them by localising: precinct data, where bikes get cut, how to file a report. |
 | B2 | how much do doordash drivers make nyc | 400–1,200 | High | Informational | Indeed/Glassdoor own salary SERPs. Attack via the calculator, not the article. |
 | B3 | nyc delivery worker minimum pay / $22.13 | 800–2,500, spikes every Apr 1 | Med | Informational | nyc.gov holds #1–2; positions 3–10 are beatable law-firm blogs. |
-| B4 | ebike insurance nyc | 200–700 | Low–Med | Informational → commercial | Law-firm posts are thin and hedged. **⚠️ We cannot write this one until our own insurance line is documented.** |
+| B4 | ebike insurance nyc | 200–700 | Low–Med | Informational → commercial | Law-firm posts are thin and hedged. ✅ **Unblocked Aug 7.** Write the honest version: no NY mandate today, what platform occupational-accident cover does and doesn't do, and that a Foodyzz rental includes a damage/theft **waiver on the bike** — never called insurance, never covering the rider. |
 | B5 | ebike charging nyc / battery swap nyc | 400–1,200 | Med | Local ⭐ | Every page-1 result is a **2024 press release about a pilot**. Reality moved on. A current map is pure freshness arbitrage. |
 | B6 | winter gear for delivery riders nyc | 100–400 | **Very low** ⭐⭐ | Informational | Page 1 includes **Wikipedia** and a **German eBay listing**. Google has nothing good. Publish by late September. |
 

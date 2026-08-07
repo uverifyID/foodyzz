@@ -40,7 +40,7 @@ Social creative uses the green system. Do not colour-match the screenshots.
 | Body | **Inter** | 400, 600, 700 |
 | Numbers, labels, kickers | **JetBrains Mono** | 400, 700 |
 
-**Set every price in JetBrains Mono.** Monospaced figures are the visual signature of the price-transparency position — they read as a receipt, not a promotion. `$887.68` in mono says something different from `$887.68` in a display face, and the difference is exactly the brand.
+**Set every price in JetBrains Mono.** Monospaced figures are the visual signature of the price-transparency position — they read as a receipt, not a promotion. `$911.76` in mono says something different from `$911.76` in a display face, and the difference is exactly the brand.
 
 ⚠️ `assets/fonts/` contains **Space Mono**, which is neither Space Grotesk nor JetBrains Mono. Orphaned. Don't use it.
 
