@@ -8,7 +8,7 @@
 
 ## 🔴 Blocking — a claim can't be made until these are answered
 
-### ~~Q1 — Is there a UL certificate on file?~~ ✅ VERIFIED Aug 7 — one action remains
+### ~~Q1 — Is there a UL certificate on file?~~ ✅ CLOSED Aug 7 — verified, accepted, models confirmed
 
 **Answered Aug 6, 2026**, from the supplier's certification and testing sheet:
 
@@ -25,7 +25,7 @@
 
 **This unblocks C05, C06, T03 and blog post #4** — after action 1 below.
 
-**One thing still to do:**
+**Status of the three follow-ups:**
 
 **1. ~~Verify both numbers on Certipedia yourself.~~ ✅ DONE Aug 7, 2026 — both live and valid.**
 
@@ -49,10 +49,15 @@ Original note, kept for context: The supplier's own sheet says: *"we are able to
 
 So these are **supplier-held certificates you have numbers for, not documents in your possession.** That's normal at this stage and the numbers are verifiable, which is what matters. But get the originals at contract confirmation and file them. If the supplier relationship ever changes, the certification story changes with it.
 
-**3. Confirm NYC accepts TÜV Rheinland certification for Local Law 39.** ⚠️
-The law requires certification to UL 2849 / UL 2271 by an accredited testing laboratory. TÜV Rheinland is a major, widely recognised lab — but "certified to the UL 2849 standard by TÜV Rheinland" and "UL Listed by UL Solutions" are different statements, and some enforcement reads that distinction narrowly.
+**3. ~~Confirm NYC accepts TÜV Rheinland certification for Local Law 39.~~ ✅ ANSWERED Aug 7 — yes, on three independent grounds.**
 
-**This is worth one email to FDNY or DCWP, or twenty minutes with a compliance lawyer.** It's almost certainly fine. But you are about to build a marketing position on it in a city that is actively enforcing, and "almost certainly" is not the standard you want when the whole pitch is that you tell the truth about numbers.
+1. **DCWP wrote the definition broadly on purpose.** In the Local Law 39 rulemaking, DCWP accepted laboratories accredited under **ISO 17025 and ISO 17065** — deliberately wider than "NRTL only," and it did so over comment from UL Solutions on the accredited-lab definition. TÜV Rheinland holds both accreditations.
+2. **TÜV Rheinland of North America, Inc. is an OSHA-recognised NRTL, expanded specifically to cover e-bikes and personal e-mobility devices.** That is the federal recognition NRTL status turns on, and it names our exact product category.
+3. **DCWP's own published list names it.** DCWP, *Accredited Testing Laboratory List for Micromobility Devices and Batteries*, rev. **4/28/2025**, page 2 — [nyc.gov/assets/dca/downloads/pdf/businesses/Accredited-Testing-Laboratory-List.pdf](https://www.nyc.gov/assets/dca/downloads/pdf/businesses/Accredited-Testing-Laboratory-List.pdf). Listed as **“TUV Rheinland of North America, Inc.”** with the TÜV Rheinland logo, alongside UL LLC. DCWP notes the list "should not be considered a complete listing," so presence is confirmatory and absence would not have been disqualifying — but presence is what we have.
+
+**The entity matches, which is the part worth checking and easy to miss.** DCWP names TÜV Rheinland *of North America, Inc.* specifically, and our certificates carry the **cTUVus** mark — which is precisely that entity's NRTL mark. A certificate from a different TÜV Rheinland legal entity would have been a weaker fit.
+
+✅ **Primary source obtained Aug 7.** Keep the PDF with the two Certipedia screenshots as the substantiation file. **Re-check it before each campaign** — the list carries a revision date and DCWP updates it.
 
 **Copy guidance meanwhile:** say **"UL 2849 certified, tested by TÜV Rheinland"** rather than implying UL Solutions did the listing. It's accurate, it names a lab riders' landlords will recognise, and it can't be picked apart.
 

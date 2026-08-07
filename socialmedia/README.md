@@ -101,7 +101,7 @@ Everything needed to take Foodyzz from zero social presence to a working acquisi
 5. **Nine site-vs-app contradictions** — including "extend or return any time" against a 4-week minimum, and the app's "21 mph top speed" against the Class 2 designation.
 6. ~~**Insurance fee has no defined coverage**~~ ✅ **Fixed Aug 7** — the fee was removed, not renamed. What it paid for is a damage and theft waiver folded into the rent rate, published at foodyzz.com/protection. Never call it insurance.
 
-✅ **Resolved Aug 6:** UL certificates confirmed (UL 2849 `CU 726061660001`, UL 2271 `CU 72303450 0003`, TÜV Rheinland) and the fleet is **Class 2** — which also removes the Intro 244 risk. Two follow-ups remain in [OPEN-QUESTIONS.md](OPEN-QUESTIONS.md) Q1: verify the numbers on Certipedia before the first ad, and confirm NYC accepts TÜV Rheinland certification for Local Law 39.
+✅ **Resolved Aug 6:** UL certificates confirmed (UL 2849 `CU 726061660001`, UL 2271 `CU 72303450 0003`, TÜV Rheinland) and the fleet is **Class 2** — which also removes the Intro 244 risk. ✅ **Q1 closed Aug 7:** both certificates verified live on Certipedia, the fleet models match what the certificates name (E FORWARD X, pack LN-IR-5-U), originals in transit, and DCWP accepts TÜV Rheinland of North America — ISO-accredited, OSHA-recognised NRTL for e-bikes, on DCWP's published list.
 
 Detail and owners in [01-strategy/gtm-launch-plan.md](01-strategy/gtm-launch-plan.md) §2.
 

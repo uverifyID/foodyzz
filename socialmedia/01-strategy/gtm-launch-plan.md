@@ -29,7 +29,7 @@ Spending on ads on Aug 15 with no pixel history, no creative library and no iOS 
 | **B1** | **Logomark** — a square icon that is not the wordmark | Design | Cannot create IG/FB/TikTok profiles without a profile picture. Blocks everything social. |
 | **B2** | **Photo shoot** — real bike, real rider, real street | You | Zero usable marketing photography exists. Every post needs an image. |
 | **B3** | **GA4 + Meta Pixel + TikTok Pixel on foodyzz.com** | Dev | No baseline, no attribution, no retargeting audience. Every day without it is lost data. |
-| **B4** | **UL certificate on file** | You | Pillar 2 of the positioning is unsubstantiated until the certificate exists. |
+| ~~**B4**~~ | ✅ **Certification substantiated Aug 7** | — | Both certificates verified live on Certipedia; DCWP accepts TÜV Rheinland of North America. Pillar 2 is cleared to run. Originals in transit. |
 | **B5** | **Publish prices on the website** | Dev | The site says "no hidden fees" and shows no prices. Prices are already public in the App Store screenshots. |
 | **B6** | **Fix the 8 site/app contradictions** in `brand-source-of-truth.md` §11 | Dev | "Extend or return any time" against a 4-week minimum is a refund dispute waiting to happen. |
 
@@ -165,7 +165,7 @@ Ranked by realistic yield in the first 30 days. Full detail in `../05-paid-and-f
 |---|---|---|---|
 | iOS not approved by Aug 15 | High | Medium | Android-first creative; site CTA detects platform; iOS added without re-cutting |
 | No logomark by Aug 12 | Medium | **Blocking** | Ship a text-only lockup as a placeholder rather than delay accounts |
-| UL certificate not on file | Medium | **High** | Pull Pillar 2 from all creative until it is. Do not soften it — remove it. |
+| A certificate lapses or a substituted battery pack is not the certified LN-IR-5-U | Low | **High** | Re-check both Certipedia pages before each campaign, and confirm the pack model at every intake. A substituted battery is not a certified battery. |
 | Whizz publishes a "Foodyzz vs" post | High | Low | Good for us. Have our own comparison page live first so we rank alongside it. |
 | Fleet sells out | Medium | Medium | 32 seeded bikes. The app has a waitlist state — use it as social proof, not an apology. |
 | "What does the Protection Plan cover?" in comments | Medium | Medium | Answer it — foodyzz.com/protection is public. Say waiver, never insurance; bike, never rider; not on Rent to Buy. |

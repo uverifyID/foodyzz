@@ -39,7 +39,7 @@
 - **Primary:** ul 2849 certified ebike · **Supporting:** local law 39 nyc, ul 2271 battery, is my ebike battery legal
 - **Why now:** Whizz's only UL 2849 post sits on their *Russian* subdirectory. Battery fires +70% in 2026 while deaths fell to 1 — a genuinely interesting, under-told story.
 - **Must contain:** what LL39 requires of sellers **and renters** (effective Sept 16 2023); where the certification mark appears; UL 2849 vs UL 2271 vs UL 2272; the FDNY fire/death table; how to check a bike you already own.
-- ⚠️ **Blocked on B4** — do not publish until the Foodyzz UL certificate is on file.
+- ✅ **Unblocked Aug 7** — both certificates verified on Certipedia and DCWP accepts the laboratory. Say "certified to UL 2849 by TÜV Rheinland"; the mark on the frame is cTUVus, not a UL logo.
 
 ### 5. You Got an E-Bike Ticket in NYC. Here's What Happens Now (2026 Rules)
 - **Primary:** ebike ticket nyc · **Supporting:** ebike summons nyc, nypd ebike enforcement
