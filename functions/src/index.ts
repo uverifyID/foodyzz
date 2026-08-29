@@ -20,6 +20,7 @@ import {
 import {randomInt} from "crypto";
 import Stripe from "stripe";
 import * as nodemailer from "nodemailer";
+import {Logging} from "@google-cloud/logging";
 import * as path from "path";
 import * as fs from "fs";
 import {setGlobalOptions} from "firebase-functions/v2";
@@ -319,6 +320,13 @@ async function sendExpoPush(messages: ExpoMessage[], outTickets?: Array<{ id: st
         title: m.title,
         body: m.body,
         data: m.data,
+        // ANDROID DELIVERY: Expo defaults to "default" priority, which it relays to
+        // FCM as NORMAL. Doze / App Standby may hold a normal-priority message until
+        // the next maintenance window, so an alert can land minutes late — or never,
+        // while the handset sits idle. APNs has no equivalent throttle, which is why
+        // this only ever showed on Android. Every push here is a time-critical order,
+        // delivery or chat alert, so ask FCM to wake the device now.
+        priority: "high",
       };
       if (typeof m.badge === "number") msg.badge = m.badge;
       if (m.soundName === null) {
@@ -2501,31 +2509,63 @@ export const onOrderCreatedNotify = onDocumentCreated("orders/{orderId}", async 
   }
 });
 
+// PAGED on purpose. This used to read every expired promo in one unbounded .get()
+// and stage all of them into a SINGLE db.batch(). A Firestore batch is hard-capped
+// at 500 writes, so the day the backlog crossed 500 the commit would throw, NOTHING
+// would be deactivated, and expired promos would keep being redeemable — the failure
+// got worse the longer it went unnoticed. The notify fan-out was unbounded too:
+// Promise.all over every expired promo, each doing a read plus a push.
+const PROMO_CLEANUP_PAGE = 400;      // < the 500-write batch cap
+const PROMO_NOTIFY_CONCURRENCY = 10; // bound the push fan-out per page
+
 export const cleanupExpiredPromos = onSchedule({schedule: "every 24 hours", timeoutSeconds: 300}, async (_event) => {
   const todayISO = new Date().toISOString().split("T")[0];
-  const expiredPromosSnap = await db.collection("promos").where("expirationDate", "<=", todayISO).where("isActive", "==", true).get();
-  if (expiredPromosSnap.empty) return;
-  const batch = db.batch();
-  expiredPromosSnap.forEach((doc) => batch.update(doc.ref, {isActive: false, deactivatedAt: FieldValue.serverTimestamp()}));
-  await batch.commit();
-  // Tell each owning provider their promo expired — the provider app deep-links
-  // to the Promos screen using the promoId. Best-effort, in parallel.
-  await Promise.all(expiredPromosSnap.docs.map(async (doc) => {
-    const promo = doc.data();
-    if (!promo?.providerId) return;
-    try {
-      await notifyProvider(
-        promo.providerId,
-        "Promo Expired",
-        `Your promo "${promo.text || doc.id}" has expired and is no longer active.`,
-        "PROMO_DEACTIVATED",
-        undefined,
-        doc.id
-      );
-    } catch (e) {
-      console.warn(`cleanupExpiredPromos: notify failed for promo ${doc.id}`, e);
+  let deactivated = 0;
+  let notified = 0;
+
+  // Re-querying (rather than paging with a cursor) is correct here: each pass flips
+  // isActive to false, so the matching set shrinks and the next query returns the
+  // NEXT unprocessed page. Loop-bounded so a runaway backlog can't spin forever —
+  // the leftovers are picked up by tomorrow's run.
+  for (let pass = 0; pass < 25; pass++) {
+    const page = await db.collection("promos")
+      .where("expirationDate", "<=", todayISO)
+      .where("isActive", "==", true)
+      .limit(PROMO_CLEANUP_PAGE)
+      .get();
+    if (page.empty) break;
+
+    const batch = db.batch();
+    page.forEach((doc) => batch.update(doc.ref, {isActive: false, deactivatedAt: FieldValue.serverTimestamp()}));
+    await batch.commit();
+    deactivated += page.size;
+
+    // Tell each owning provider their promo expired — the provider app deep-links
+    // to the Promos screen using the promoId. Best-effort, in bounded waves.
+    const targets = page.docs.filter((d) => d.data()?.providerId);
+    for (let i = 0; i < targets.length; i += PROMO_NOTIFY_CONCURRENCY) {
+      await Promise.all(targets.slice(i, i + PROMO_NOTIFY_CONCURRENCY).map(async (doc) => {
+        const promo = doc.data();
+        try {
+          await notifyProvider(
+            promo.providerId,
+            "Promo Expired",
+            `Your promo "${promo.text || doc.id}" has expired and is no longer active.`,
+            "PROMO_DEACTIVATED",
+            undefined,
+            doc.id
+          );
+          notified++;
+        } catch (e) {
+          console.warn(`cleanupExpiredPromos: notify failed for promo ${doc.id}`, e);
+        }
+      }));
     }
-  }));
+
+    if (page.size < PROMO_CLEANUP_PAGE) break;
+  }
+
+  if (deactivated) console.log(`cleanupExpiredPromos: deactivated ${deactivated} promo(s), notified ${notified} provider(s)`);
   return;
 });
 
@@ -5866,3 +5906,172 @@ export const onProviderDeletedCleanupMembers = onDocumentDeleted("providers/{pro
     console.error(`onProviderDeletedCleanupMembers failed for ${event.params.providerId}:`, err);
   }
 });
+
+// ── Function error monitoring ───────────────────────────────────────────────
+// Watches EVERY deployed function for errors and emails the admin a digest.
+//
+// This POLLS CLOUD LOGGING rather than asking each function to report its own
+// failures. That choice is the whole point: a reporter helper only ever fires
+// from inside a catch block somebody remembered to write, so it misses exactly
+// the failures that matter most — an unhandled promise rejection, a function
+// killed at its timeout, an OOM, a crash during cold start, or a throw in one of
+// the 50+ handlers nobody touched. Cloud Logging sees all of those, so this
+// covers functions added later with no extra wiring.
+//
+// Deploy note: the runtime service account needs `roles/logging.viewer` on the
+// project. The default compute service account normally has it via Editor; if
+// the digest logs a permissions error, grant that role explicitly.
+
+// How far back a first run (or one with a lost checkpoint) reaches.
+const ERROR_MONITOR_LOOKBACK_MS = 15 * 60 * 1000;
+// Never replay more than a day, so a long outage can't produce a huge digest.
+const ERROR_MONITOR_MAX_LOOKBACK_MS = 24 * 60 * 60 * 1000;
+// Hard bounds — an error storm must cost one capped email, not thousands.
+const ERROR_MONITOR_MAX_ENTRIES = 200; // pulled from Logging
+const ERROR_MONITOR_MAX_SHOWN = 20;    // rendered into the email
+const ERROR_MONITOR_STATE_DOC = "apiConfigSecret/errorMonitor";
+
+let loggingClient: Logging | null = null;
+function getLoggingClient(): Logging {
+  if (!loggingClient) loggingClient = new Logging();
+  return loggingClient;
+}
+
+// Cloud Run (gen-2 functions) reports the service name lowercased; gen-1 uses
+// function_name. Check both so the label is right whichever generation deployed.
+function entryFunctionName(entry: any): string {
+  const labels = entry?.metadata?.resource?.labels ?? {};
+  return String(labels.function_name || labels.service_name || "unknown");
+}
+
+// A log entry's payload is a string (textPayload) or an object (jsonPayload).
+function entryMessage(entry: any): string {
+  const d = entry?.data;
+  if (typeof d === "string") return d;
+  if (d && typeof d === "object") {
+    return String(d.message || d.msg || d.error || JSON.stringify(d));
+  }
+  return String(entry?.metadata?.textPayload || "(no message)");
+}
+
+export const monitorFunctionErrors = onSchedule(
+  {schedule: "every 15 minutes", timeoutSeconds: 120, memory: "256MiB", retryCount: 0},
+  async () => {
+    const stateRef = db.doc(ERROR_MONITOR_STATE_DOC);
+    const now = Date.now();
+
+    let from: Date;
+    try {
+      const prev = (await stateRef.get()).data()?.lastCheckedAt;
+      from = prev ? new Date(String(prev)) : new Date(now - ERROR_MONITOR_LOOKBACK_MS);
+      if (!Number.isFinite(from.getTime())) from = new Date(now - ERROR_MONITOR_LOOKBACK_MS);
+    } catch {
+      from = new Date(now - ERROR_MONITOR_LOOKBACK_MS);
+    }
+    const floor = new Date(now - ERROR_MONITOR_MAX_LOOKBACK_MS);
+    if (from < floor) from = floor;
+
+    // Excluding this function's OWN logs is load-bearing, not tidiness: without it
+    // a failure in here (bad SMTP, missing IAM) would be picked up by the next run,
+    // emailed, fail again, and alert about itself forever.
+    const filter = [
+      `timestamp > "${from.toISOString()}"`,
+      "severity >= \"ERROR\"",
+      "(resource.type = \"cloud_function\" OR resource.type = \"cloud_run_revision\")",
+      "resource.labels.function_name != \"monitorFunctionErrors\"",
+      "resource.labels.service_name != \"monitorfunctionerrors\"",
+    ].join(" AND ");
+
+    let entries: any[] = [];
+    try {
+      const [found] = await getLoggingClient().getEntries({
+        filter,
+        orderBy: "timestamp desc",
+        pageSize: ERROR_MONITOR_MAX_ENTRIES,
+        autoPaginate: false,
+      });
+      entries = found ?? [];
+    } catch (err) {
+      // Don't advance the checkpoint — a transient Logging failure should let the
+      // next run cover the same window rather than silently drop it.
+      console.error("monitorFunctionErrors: could not read Cloud Logging:", err);
+      return;
+    }
+
+    // Advance the checkpoint BEFORE emailing. If the send fails we'd rather skip one
+    // digest than have every subsequent run re-report the same backlog forever.
+    await stateRef.set(
+      {lastCheckedAt: new Date(now).toISOString(), lastRunFoundErrors: entries.length},
+      {merge: true},
+    ).catch((e) => console.error("monitorFunctionErrors: checkpoint write failed:", e));
+
+    if (entries.length === 0) return;
+
+    // Group by function so the digest reads "which functions are unhealthy",
+    // not an undifferentiated wall of lines.
+    const byFunction = new Map<string, { count: number; samples: Array<{ ts: string; msg: string }> }>();
+    for (const entry of entries) {
+      const name = entryFunctionName(entry);
+      const slot = byFunction.get(name) ?? {count: 0, samples: []};
+      slot.count++;
+      if (slot.samples.length < 3) {
+        slot.samples.push({
+          ts: String(entry?.metadata?.timestamp ?? ""),
+          msg: entryMessage(entry).slice(0, 500),
+        });
+      }
+      byFunction.set(name, slot);
+    }
+
+    const ranked = [...byFunction.entries()].sort((a, b) => b[1].count - a[1].count);
+    const shown = ranked.slice(0, ERROR_MONITOR_MAX_SHOWN);
+    const truncated = ranked.length - shown.length;
+
+    const rows = shown.map(([name, {count, samples}]) => `
+      <tr>
+        <td style="padding:10px 12px;border-bottom:1px solid #e2e8f0;vertical-align:top">
+          <div style="font-weight:bold;color:#0f172a;font-size:13px">${escapeHtml(name)}</div>
+          <div style="color:#64748b;font-size:11px;margin-top:2px">${count} error${count === 1 ? "" : "s"}</div>
+        </td>
+        <td style="padding:10px 12px;border-bottom:1px solid #e2e8f0">
+          ${samples.map((s) => `
+            <div style="margin-bottom:6px">
+              <div style="color:#94a3b8;font-size:10px">${escapeHtml(s.ts)}</div>
+              <code style="display:block;white-space:pre-wrap;word-break:break-word;color:#b91c1c;font-size:11px;font-family:monospace">${escapeHtml(s.msg)}</code>
+            </div>`).join("")}
+        </td>
+      </tr>`).join("");
+
+    const windowLabel = `${from.toISOString()} → ${new Date(now).toISOString()}`;
+    const html = `
+    <div style="background:#f1f5f9;padding:24px 0;font-family:Arial,Helvetica,sans-serif">
+      <div style="max-width:720px;margin:auto;background:#fff;border-radius:16px;overflow:hidden;border:1px solid #e2e8f0">
+        <div style="background:#7f1d1d;padding:16px 24px">
+          <h2 style="margin:0;color:#fff;font-size:18px">Foodyzz · Cloud Function errors</h2>
+          <p style="margin:4px 0 0;color:#fecaca;font-size:12px">${entries.length} error log${entries.length === 1 ? "" : "s"} across ${ranked.length} function${ranked.length === 1 ? "" : "s"}</p>
+        </div>
+        <div style="padding:16px 24px">
+          <p style="margin:0 0 14px;color:#64748b;font-size:12px">Window: ${escapeHtml(windowLabel)}</p>
+          <table style="width:100%;border-collapse:collapse">
+            <tr style="background:#f8fafc">
+              <th align="left" style="padding:8px 12px;font-size:11px;color:#475569;text-transform:uppercase">Function</th>
+              <th align="left" style="padding:8px 12px;font-size:11px;color:#475569;text-transform:uppercase">Sample errors</th>
+            </tr>
+            ${rows}
+          </table>
+          ${truncated > 0 ? `<p style="margin:14px 0 0;color:#94a3b8;font-size:12px">…and ${truncated} more function(s) not shown.</p>` : ""}
+          ${entries.length >= ERROR_MONITOR_MAX_ENTRIES ? `<p style="margin:6px 0 0;color:#b91c1c;font-size:12px">Entry cap of ${ERROR_MONITOR_MAX_ENTRIES} reached — there may be more errors than listed.</p>` : ""}
+          <p style="margin:18px 0 0;color:#94a3b8;font-size:11px">Automated digest from monitorFunctionErrors. Runs every 15 minutes and only sends when errors are found.</p>
+        </div>
+      </div>
+    </div>`;
+
+    try {
+      const admin = await getAdminNotifyEmail();
+      await sendEmail(admin, `[Foodyzz] ${entries.length} function error(s) in the last 15 min`, html);
+      console.log(`monitorFunctionErrors: emailed ${admin} about ${entries.length} error(s) across ${ranked.length} function(s)`);
+    } catch (err) {
+      console.error("monitorFunctionErrors: digest email failed:", err);
+    }
+  },
+);
