@@ -347,6 +347,12 @@ export interface BillingSchedule {
   perPeriodAmount: number;
   unit: "weeks" | "months";
   cadence?: "daily" | "weekly" | "monthly"; // billing interval; defaults to 'monthly'
+  // Day-of-month the plan is anchored to (from deliveredAt), 1-31. Monthly advances
+  // clamp to the target month's last day but keep measuring from THIS day, so a
+  // Jan-31 plan runs Feb 28 → Mar 31 → Apr 30 instead of drifting onto the 28th.
+  // Absent on schedules written before anchoring existed; the advance then falls
+  // back to the current date's own day, which is the old behaviour minus the overflow.
+  anchorDay?: number;
   nextChargeAt: string | null; // null once completed or handed to manual follow-up
   status: "active" | "past_due" | "completed" | "canceled";
   paymentMethodId: string; // the card retained at delivery

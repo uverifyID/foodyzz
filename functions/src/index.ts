@@ -901,16 +901,44 @@ export const syncStripeSettlements = onCall({timeoutSeconds: 300, memory: "512Mi
 });
 
 // One rent-to-buy billing interval forward from an ISO timestamp, honoring the model's
-// configured cadence. Month math uses setMonth so a Jan-31 start lands correctly.
+// configured cadence. Month math clamps (see addMonthsClamped) — setMonth alone
+// overflowed a Jan-31 start into March.
 // 'daily'/'weekly' are testing conveniences; 'monthly' is the production default.
 const normCadence = (c: any): "daily" | "weekly" | "monthly" =>
   c === "daily" || c === "weekly" ? c : "monthly";
-const advanceByCadence = (iso: string, cadence: string): string => {
+// Add `months` calendar months, CLAMPING to the last valid day of the target month
+// and anchoring on `anchorDay` — the plan's original day-of-month.
+//
+// JS setMonth OVERFLOWS rather than clamping: Jan 31 + 1 month is "Feb 31", which
+// normalises to Mar 3. Every rent-to-buy plan delivered on the 29th–31st therefore
+// skipped February outright and moved its billing anniversary permanently.
+//
+// Anchoring matters as much as clamping. Clamping alone would step Jan 31 → Feb 28
+// → Mar 28 and park on the 28th forever; carrying the anchor gives the intended
+// Jan 31 → Feb 28 → Mar 31 → Apr 30, i.e. the month's own last day whenever the
+// anchor overshoots it.
+const addMonthsClamped = (d: Date, months: number, anchorDay?: number): Date => {
+  const day = anchorDay ?? d.getDate();
+  const target = new Date(d.getTime());
+  target.setDate(1); // never overflow while the month is being changed
+  target.setMonth(target.getMonth() + months);
+  const daysInTarget = new Date(target.getFullYear(), target.getMonth() + 1, 0).getDate();
+  target.setDate(Math.min(day, daysInTarget));
+  return target;
+};
+
+const advanceByCadence = (iso: string, cadence: string, anchorDay?: number): string => {
   const d = new Date(iso);
-  if (cadence === "daily") d.setDate(d.getDate() + 1);
-  else if (cadence === "weekly") d.setDate(d.getDate() + 7);
-  else d.setMonth(d.getMonth() + 1);
-  return d.toISOString();
+  // Day arithmetic never overflows, so daily/weekly need no clamping.
+  if (cadence === "daily") {
+    d.setDate(d.getDate() + 1);
+    return d.toISOString();
+  }
+  if (cadence === "weekly") {
+    d.setDate(d.getDate() + 7);
+    return d.toISOString();
+  }
+  return addMonthsClamped(d, 1, anchorDay).toISOString();
 };
 const addDaysIso = (iso: string, n: number): string => {
   const d = new Date(iso);
@@ -3444,13 +3472,18 @@ export const markRentalDelivered = onCall(async (request) => {
     const cadence = plan.cadence || "monthly";
     const paymentMethodId = rentalPaymentMethodId || updates.depositPaymentMethodId || "";
     const fullyPaid = plan.periodsTotal <= 1;
+    // Anchor every future installment to the delivery day-of-month, so a plan that
+    // starts on the 31st bills the 31st (or that month's last day) every period
+    // rather than sliding earlier the first time it meets a short month.
+    const anchorDay = new Date(updates.deliveredAt).getDate();
     updates.billingSchedule = {
       periodsTotal: plan.periodsTotal,
       periodsCharged: 1,
       perPeriodAmount: plan.perPeriodAmount,
       unit,
       cadence,
-      nextChargeAt: fullyPaid ? null : advanceByCadence(updates.deliveredAt, cadence),
+      anchorDay,
+      nextChargeAt: fullyPaid ? null : advanceByCadence(updates.deliveredAt, cadence, anchorDay),
       status: fullyPaid ? "completed" : "active",
       paymentMethodId,
       retryCount: 0,
@@ -3527,12 +3560,13 @@ const formatRentalDay = (d: Date): string => {
   const p = (n: number) => String(n).padStart(2, "0");
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
 };
-// One more committed term past `day`. Weeks are exact; months use setMonth so a
-// 31st lands correctly.
+// One more committed term past `day`. Weeks are exact; months CLAMP to the target
+// month's last day (see addMonthsClamped) — plain setMonth overflowed a 31st into
+// the month after next, pushing a renewed due-back date past the term it charged for.
 const extendRentalDay = (day: string, periods: number, unit: "weeks" | "months"): string => {
   const d = parseRentalDay(day);
-  if (unit === "months") d.setMonth(d.getMonth() + periods);
-  else d.setDate(d.getDate() + periods * 7);
+  if (unit === "months") return formatRentalDay(addMonthsClamped(d, periods));
+  d.setDate(d.getDate() + periods * 7);
   return formatRentalDay(d);
 };
 
@@ -4520,7 +4554,7 @@ export const chargeRentToBuyInstallments = onSchedule({schedule: "0 * * * *", me
         } else {
           await doc.ref.update({
             "billingSchedule.periodsCharged": periodJustPaid,
-            "billingSchedule.nextChargeAt": advanceByCadence(sched.nextChargeAt || nowIso, sched.cadence || "monthly"),
+            "billingSchedule.nextChargeAt": advanceByCadence(sched.nextChargeAt || nowIso, sched.cadence || "monthly", sched.anchorDay),
             "billingSchedule.retryCount": 0,
             "billingSchedule.lastError": "",
             "billingSchedule.lastChargedAt": nowIso,

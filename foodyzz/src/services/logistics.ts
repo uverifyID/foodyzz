@@ -98,9 +98,19 @@ export const expectedEndDate = (
   unit: 'weeks' | 'months',
 ): string => {
   if (unit === 'weeks') return addDays(startDate, value * 7 - 1);
+  // Months CLAMP to the target month's last day. Plain setMonth OVERFLOWS — a
+  // 1-month rental starting Jan 31 became "Feb 31" → Mar 3, so the customer was
+  // shown an end date two days into the following month and `modelAvailability`
+  // held the bike off the market for it. Mirrors addMonthsClamped in
+  // functions/src/index.ts; the two must agree or the quote and the invoice
+  // disagree about when the term ends.
   const d = parseDay(startDate);
+  const anchorDay = d.getDate();
+  d.setDate(1); // never overflow while the month is being changed
   d.setMonth(d.getMonth() + value);
-  d.setDate(d.getDate() - 1);
+  const daysInTarget = new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate();
+  d.setDate(Math.min(anchorDay, daysInTarget));
+  d.setDate(d.getDate() - 1); // last day of the term, start counted as day 1
   return formatDay(d);
 };
 
