@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useLayoutEffect } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, Modal, ActivityIndicator, Alert, TextInput } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, Modal, ActivityIndicator, Alert, TextInput, KeyboardAvoidingView } from 'react-native';
 import QRCode from 'react-native-qrcode-svg';
 import { Calendar, Clock, X, CheckCircle, AlertTriangle, ChevronRight, MapPin, Star, MessageCircle } from 'lucide-react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -878,7 +878,11 @@ export default function OrdersScreen() {
 
             {/* Order Detail Modal */}
             <Modal visible={!!selectedOrder} animationType="slide" transparent={true}>
-                <View className="flex-1 bg-black/60 justify-end">
+                {/* An Android Modal is its OWN window, so it does NOT inherit the
+                    activity's adjustResize or its KeyboardAvoidingView — nothing there lifts
+                    the sheet clear of it (iOS modals render in-window, which is why this only
+                    ever showed on Android). The avoidance has to live INSIDE the Modal. */}
+                <KeyboardAvoidingView behavior="padding" className="flex-1 bg-black/60 justify-end">
                     <View className="bg-white border-t-4 border-black rounded-t-[44px] p-6 h-[75%]" style={{ paddingBottom: bottom + 24 }}>
                         <View className="flex-row justify-between items-start mb-6">
                             <View>
@@ -892,7 +896,7 @@ export default function OrdersScreen() {
                             </TouchableOpacity>
                         </View>
 
-                        <ScrollView showsVerticalScrollIndicator={false} className="space-y-4">
+                        <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled" className="space-y-4">
                             {/* Real-time Order Tracking Visualization */}
                             {selectedOrder?.providerLocation && LIVE_TRACKING_STATUSES.includes(selectedOrder?.status) && (
                                 <View className="bg-slate-900 h-48 rounded-3xl border-2 border-black overflow-hidden">
@@ -1254,7 +1258,7 @@ export default function OrdersScreen() {
                             <View className="h-10" />
                         </ScrollView>
                     </View>
-                </View>
+                </KeyboardAvoidingView>
             </Modal>
         </ScrollView>
     );

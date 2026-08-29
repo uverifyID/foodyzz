@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useLayoutEffect } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, TextInput, Alert, Switch, Modal, ActivityIndicator, Linking } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, TextInput, Alert, Switch, Modal, ActivityIndicator, Linking, KeyboardAvoidingView } from 'react-native';
 import { User, Mail, MapPin, MessageSquare, CreditCard, AlertTriangle, ChevronRight, Edit2, X, Trash2, ShieldCheck, LogOut, Bell, Volume2 } from 'lucide-react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Constants from 'expo-constants';
@@ -503,7 +503,11 @@ export default function ProfileScreen() {
 
             {/* Edit Modal */}
             <Modal visible={isEditing} animationType="slide" transparent={true}>
-                <View className="flex-1 bg-black/60 justify-end">
+                {/* An Android Modal is its OWN window, so it does NOT inherit the
+                    activity's adjustResize or its KeyboardAvoidingView — nothing there lifts
+                    the sheet clear of it (iOS modals render in-window, which is why this only
+                    ever showed on Android). The avoidance has to live INSIDE the Modal. */}
+                <KeyboardAvoidingView behavior="padding" className="flex-1 bg-black/60 justify-end">
                     <View className="bg-white rounded-t-[44px] border-t-4 border-black p-6 h-[85%]" style={{ paddingBottom: bottom + 24 }}>
                         <View className="flex-row justify-between items-center mb-6">
                             <Text className="text-xl font-black uppercase">Edit Details</Text>
@@ -512,7 +516,7 @@ export default function ProfileScreen() {
                             </TouchableOpacity>
                         </View>
 
-                        <ScrollView showsVerticalScrollIndicator={false} className="space-y-5">
+                        <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled" className="space-y-5">
                             <View>
                                 <Text className="text-[10px] font-black text-slate-400 uppercase mb-2 ml-1">Full Name</Text>
                                 <TextInput
@@ -551,7 +555,7 @@ export default function ProfileScreen() {
                             <View className="h-12" />
                         </ScrollView>
                     </View>
-                </View>
+                </KeyboardAvoidingView>
             </Modal>
 
             {/* Delete Confirm Modal */}

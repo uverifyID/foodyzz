@@ -22,7 +22,6 @@ import {
     TextInput,
     ActivityIndicator,
     KeyboardAvoidingView,
-    Platform,
     Alert,
 } from 'react-native';
 import { ArrowLeft, Send, MessageSquare, Clock } from 'lucide-react-native';
@@ -320,8 +319,11 @@ export default function ChatScreen() {
     return (
         <View className="flex-1 bg-slate-50">
             {header}
+            {/* `padding` on both platforms: under enforced edge-to-edge (targetSdk 36)
+                the window is no longer resized for the keyboard, so `height` measured an
+                unchanged frame and the composer stayed under the keyboard on Android. */}
             <KeyboardAvoidingView
-                behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+                behavior="padding"
                 // The header is now a sibling above this view, so this view's bottom edge
                 // IS the screen bottom — the keyboard overlap is exactly its own height
                 // and needs no header offset.

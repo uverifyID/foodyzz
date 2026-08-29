@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity, ActivityIndicator, Alert,
-  KeyboardAvoidingView, Platform, ScrollView
+  KeyboardAvoidingView, ScrollView
 } from 'react-native';
 import { db, signOutClean, getFunctionsInstance } from '../services/firebase';
 import { geocodeAddress } from '../services/geo';
@@ -214,8 +214,12 @@ export default function OnboardingWizard({
   const isFinalStep = step === TOTAL_STEPS;
 
   return (
+    // `padding` on Android too, not `height`. The app is edge-to-edge (targetSdk
+    // 36) and enforced edge-to-edge no longer resizes the window for the keyboard,
+    // so `height` — which measures that resized frame — collapses to a no-op and
+    // left the input rows sitting under the keyboard. Matches AuthScreen.
     <KeyboardAvoidingView
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      behavior="padding"
       className="flex-1 bg-white"
     >
       <ScrollView
