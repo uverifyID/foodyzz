@@ -3,7 +3,7 @@
     "name": "Foodyzz",
     "slug": "foodyzz",
     "scheme": "com.rajshrestha.foodyzz",
-    "version": "1.1.4",
+    "version": "1.1.5",
     "orientation": "portrait",
     "userInterfaceStyle": "light",
     "icon": "./assets/images/logo/icon/appicon.png",
