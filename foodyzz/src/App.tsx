@@ -307,11 +307,17 @@ export default function App() {
 
   return (
     <SafeAreaProvider>
-      <StripeProvider
-        publishableKey={stripeKey || STRIPE_PLACEHOLDER_KEY}
-        // The key prop forces re-initialization once the real publishableKey is fetched from Firestore
-        key={stripeKey}
-      >
+      {/* No `key` here. StripeProvider is a pass-through that renders <>{children}</>
+          and re-runs NativeStripeSdk.initialise from a useEffect keyed on
+          publishableKey — so it ALREADY re-initialises when the real key arrives.
+          Adding key={stripeKey} additionally remounted this whole subtree (the
+          NavigationContainer and every screen under it) about a second into launch,
+          when apiConfig/global resolved and the key flipped from null to the real
+          value: a visible flicker, every screen listener torn down and re-subscribed,
+          and any in-progress navigation reset. It also re-fired for every live user
+          whenever an admin edited the Stripe key, since that config is a snapshot
+          listener. */}
+      <StripeProvider publishableKey={stripeKey || STRIPE_PLACEHOLDER_KEY}>
       <StripeReadyContext.Provider value={stripeReady}>
       <NavigationContainer ref={navigationRef}>
         {/* Catch render errors in the whole navigation tree and show a recoverable fallback. */}

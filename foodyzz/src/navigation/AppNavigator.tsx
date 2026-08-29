@@ -26,8 +26,13 @@ const Stack = createNativeStackNavigator();
 function useHqChatUnread(): boolean {
   const { profile } = useUserProfile();
   const [latestHqAt, setLatestHqAt] = useState(0);
+  // Read the phone during RENDER and key the effect on it. It used to be read inside
+  // an effect with a [] dep list, so a null currentUser at mount meant the early
+  // return ran once and the listener was never opened again — the unread dot would
+  // stay dark for the whole session with nothing to retry it. As a primitive dep it
+  // also re-subscribes correctly if the signed-in number ever changes under us.
+  const phone = authNative().currentUser?.phoneNumber ?? null;
   useEffect(() => {
-    const phone = authNative().currentUser?.phoneNumber;
     if (!phone) return;
     // Latest message NOT sent by the customer = latest FoodyzzHQ (admin/bot) reply.
     const unsubMsg = db
@@ -41,7 +46,7 @@ function useHqChatUnread(): boolean {
         setLatestHqAt(latestHq?.timestamp ? Date.parse(latestHq.timestamp) || 0 : 0);
       });
     return () => { unsubMsg(); };
-  }, []);
+  }, [phone]);
   const lastReadAt = profile?.supportLastReadAt ? Date.parse(profile.supportLastReadAt) || 0 : 0;
   return latestHqAt > 0 && latestHqAt > lastReadAt;
 }
