@@ -324,13 +324,18 @@ export default function ProfileScreen() {
                                         disabled={isRemovingCard}
                                         className={`flex-row items-center gap-1 border px-3 py-1.5 rounded-xl ${isRemovingCard ? 'bg-slate-100 border-slate-200' : 'bg-red-50 border-red-200'}`}
                                     >
-                                        {isRemovingCard ? (
-                                            <ActivityIndicator size="small" color="#94a3b8" />
-                                        ) : (
-                                            <>
-                                                <Trash2 size={11} color="#dc2626" />
-                                                <Text className="text-red-600 font-black text-[10px] uppercase">Remove</Text>
-                                            </>
+                                        {/* Kept FLAT — no <>…</> here. NativeWind v2 polyfills `gap-1`
+                                            by cloning every direct child with an injected `style`
+                                            (withStyledChildren), and a React.Fragment accepts only
+                                            `key`/`children`, so wrapping these two in a fragment logged
+                                            "Invalid prop `style` supplied to `React.Fragment`" on every
+                                            render of this screen. As direct children they also finally
+                                            get the gap-1 spacing the class was asking for. */}
+                                        {isRemovingCard
+                                            ? <ActivityIndicator size="small" color="#94a3b8" />
+                                            : <Trash2 size={11} color="#dc2626" />}
+                                        {!isRemovingCard && (
+                                            <Text className="text-red-600 font-black text-[10px] uppercase">Remove</Text>
                                         )}
                                     </TouchableOpacity>
                                 </View>
