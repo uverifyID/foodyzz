@@ -21,7 +21,7 @@
   --shadow: 6px 6px 0 0 var(--black);
   --shadow-sm: 4px 4px 0 0 var(--black);
   --radius: 14px;
-  --nav-height: 168px;   /* fits the 136px logo with breathing room */
+  --nav-height: 140px;   /* fits the 112px logo with breathing room */
 }
 
 * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -76,7 +76,7 @@ a { color: var(--green-dark); }
   display: flex; align-items: center; justify-content: space-between;
   height: var(--nav-height);
 }
-.nav-logo img { height: 136px; width: auto; display: block; }
+.nav-logo img { height: 112px; width: auto; display: block; }
 .nav-links { display: flex; align-items: center; gap: 28px; list-style: none; }
 .nav-links a {
   color: var(--black); text-decoration: none; font-weight: 600; font-size: .95rem;
@@ -253,7 +253,7 @@ a { color: var(--green-dark); }
 /* ── Footer ──────────────────────────────────────────────── */
 .site-footer { background: var(--black); color: #C9C6C0; border-top: 3px solid var(--black); padding: 64px 0 34px; }
 .footer-grid { display: grid; grid-template-columns: 1.4fr 1fr 1fr 1fr 1fr; gap: 28px; margin-bottom: 48px; }
-.footer-brand img { height: 30px; margin-bottom: 16px; }
+.footer-brand img { height: 64px; width: auto; margin-bottom: 16px; }
 .footer-brand p { font-size: .9rem; max-width: 20rem; }
 .site-footer h4 {
   font-family: 'JetBrains Mono', monospace; color: var(--white); font-size: .78rem;
@@ -317,6 +317,8 @@ a { color: var(--green-dark); }
   .footer-grid { grid-template-columns: 1fr 1fr; }
 }
 @media (max-width: 640px) {
+  :root { --nav-height: 96px; }
+  .nav-logo img { height: 72px; }
   .nav-links {
     display: none; position: absolute; top: var(--nav-height); left: 0; right: 0;
     background: var(--paper); border-bottom: 3px solid var(--black);
@@ -329,3 +331,27 @@ a { color: var(--green-dark); }
   .hero { padding: 48px 0 64px; }
   .section { padding: 60px 0; }
 }
+
+/* ---- App-download QR (Get the App band) -------------------------------
+   Desktop-only: a phone scanning a code on its own screen is pointless, and
+   the store badges directly above already cover touch devices. */
+.store-qr {
+  display: inline-block;
+  margin-top: 28px;
+  padding: 16px 16px 12px;
+  background: var(--white);
+  border: 2px solid var(--black);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-sm);
+}
+.store-qr img { display: block; width: 150px; height: 150px; border-radius: 6px; }
+.store-qr p {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: .62rem;
+  font-weight: 700;
+  letter-spacing: .14em;
+  text-transform: uppercase;
+  color: var(--green-dark);
+  margin-top: 10px;
+}
+@media (hover: none) and (pointer: coarse) { .store-qr { display: none; } }
