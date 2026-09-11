@@ -5180,10 +5180,35 @@ function getTransporter(cfg: any): nodemailer.Transporter {
   return smtpTransporter;
 }
 
+// The wordmark is "foodyzz" — never "FoodyZZ". The Hostinger mailbox carries its
+// own display name, which mail clients show whenever the From header has no name of
+// its own, so we always send an explicit `Foodyzz <address>` rather than a bare
+// address. brandCase() is the belt-and-braces half: it repairs a mis-cased brand
+// anywhere in an outgoing subject/body (or in a From name set from the smtp doc),
+// leaving the deliberate all-caps FOODYZZ of legal copy and the HQ suffix alone.
+const BRAND_NAME = "Foodyzz";
+function brandCase(text: string): string {
+  return text.replace(/(F|f)oody(?:ZZ|Zz|zZ)/g, "$1oodyzz");
+}
+
+// Builds the From header. Accepts either a bare address or a `Name <address>` pair
+// in the smtp doc's `from`, and always emits a display name in canonical casing.
+function brandedFrom(raw: string): string {
+  const match = /^\s*(.*?)\s*<([^>]+)>\s*$/.exec(raw);
+  const address = (match ? match[2] : raw).trim();
+  const rawName = match ? match[1].trim().replace(/^"|"$/g, "") : "";
+  // A name that is some spelling of the brand (or absent) becomes the canonical
+  // wordmark; a genuinely different name (e.g. "Foodyzz Support") is kept, cased.
+  const name = !rawName || /^foodyzz$/i.test(rawName) ? BRAND_NAME : brandCase(rawName);
+  return `"${name.replace(/"/g, "")}" <${address}>`;
+}
+
 async function sendEmail(to: string, subject: string, html: string): Promise<void> {
   const cfg = await loadSmtpConfig();
   const transporter = getTransporter(cfg);
-  const from = cfg.from || cfg.user;
+  const from = brandedFrom(String(cfg.from || cfg.user));
+  subject = brandCase(subject);
+  html = brandCase(html);
   // Inline the brand logo as a CID attachment (reliable across clients; unlike
   // data: URIs which Gmail strips) only when the HTML actually references it, so
   // plain emails don't carry a dangling attachment. Existence is resolved once at
@@ -5201,11 +5226,13 @@ async function sendEmail(to: string, subject: string, html: string): Promise<voi
 }
 
 // Where "new provider joined" admin notices go. Overridable via the smtp doc's
-// adminEmail field; falls back to the platform owner's address.
+// adminEmail field (the live doc spells the key `adminemail`, so accept both);
+// falls back to the platform owner's address.
 async function getAdminNotifyEmail(): Promise<string> {
   try {
     const cfg = await loadSmtpConfig();
-    if (cfg.adminEmail) return String(cfg.adminEmail);
+    const adminEmail = cfg.adminEmail || cfg.adminemail;
+    if (adminEmail) return String(adminEmail);
   } catch {/* fall through to default */}
   return "rajshrestha@gmail.com";
 }
