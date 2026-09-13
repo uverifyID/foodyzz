@@ -158,6 +158,45 @@ fresh build is the safe default if you're unsure whether native deps drifted.
 
 ---
 
+## Stripe live cutover (test → live keys)
+
+Everything paid before the switch was paid in Stripe **test mode** and can't be captured,
+refunded or re-charged with the live key. Do this in one sitting, in order.
+
+- [ ] ⚙️ Deploy functions first (`firebase deploy --only functions`) — ships the
+      `payment_failed` guard (a declined deposit/renewal/installment/tip no longer cancels
+      the rental) and the stale-saved-card clear at checkout.
+- [ ] Stripe Dashboard (**live mode**) → Developers → Webhooks → Add endpoint:
+  - URL: `https://us-central1-foodyzz-27b3e.cloudfunctions.net/stripeWebhook`
+  - API version: `2024-04-10`
+  - Events: `payment_intent.amount_capturable_updated`, `payment_intent.succeeded`,
+    `payment_intent.payment_failed` — nothing else.
+- [ ] ⚙️ 🔴 Back up Firestore:
+  ```bash
+  gcloud firestore export gs://foodyzz-27b3e.firebasestorage.app/backups/pre-live-$(date +%Y%m%d) \
+    --project foodyzz-27b3e --account=rajshrestha@gmail.com
+  ```
+- [ ] ⚙️ Dry-run the cleanup and review every order/bike it lists — confirm each listed bike
+      is physically back in the shop:
+  ```bash
+  cd functions
+  GOOGLE_APPLICATION_CREDENTIALS=/path/to/sa.json GCLOUD_PROJECT=foodyzz-27b3e node scripts/stripe-live-cutover.js
+  ```
+- [ ] Put the live keys in: `apiConfigSecret/stripe` → `secretKey: sk_live_…`,
+      `webSecret: whsec_…` (the **live** endpoint's signing secret); the admin console →
+      `pk_live_…`. Also replace any inline `apiConfig/global.stripe.secretKey`. Takes
+      effect within 60s (config cache).
+- [ ] ⚙️ Apply the cleanup (same command + `--apply`; add `--reset-ratings` to also wipe
+      test ratings/reviews). Closes open orders, stops rent-to-buy billing, checks every
+      test bike back in (reserved/rented/test-sold → stock; a model no longer offered →
+      maintenance), clears test-mode customers/cards and test promo claims, clears
+      stats/settlements/provider analytics, and recomputes `platformCounts`. Cancelling orders pushes a cancellation notice to the
+      assigned store.
+- [ ] ✅ Place one real order with a live card → confirm the hold, then cancel it; Stripe
+      Dashboard → the webhook endpoint shows 200s.
+
+---
+
 ## Rollback notes
 
 - **Functions:** redeploy the previous code (`firebase deploy --only functions` from the prior

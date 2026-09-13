@@ -1323,6 +1323,10 @@ export const createPaymentIntent = onCall(async (request) => {
       const userRef = db.collection("users").doc(String(buyerPhone));
       const existing = (await userRef.get()).data()?.stripeCustomerId;
       verifiedCustomerId = await verifyCustomerId(stripe, existing || "");
+      // A customer from the other Stripe mode takes its saved card with it — the app
+      // would confirm with a card this mode can't see — so drop the card and let the
+      // payment sheet collect a new one.
+      const replacingStale = !verifiedCustomerId && !!existing;
       if (!verifiedCustomerId) {
         const created = await stripe.customers.create({
           phone: String(buyerPhone),
@@ -1330,7 +1334,16 @@ export const createPaymentIntent = onCall(async (request) => {
         });
         verifiedCustomerId = created.id;
       }
-      await userRef.set({stripeCustomerId: verifiedCustomerId}, {merge: true});
+      await userRef.set({
+        stripeCustomerId: verifiedCustomerId,
+        ...(replacingStale ? {
+          billingPaymentMethodId: FieldValue.delete(),
+          billingCardLast4: FieldValue.delete(),
+          billingCardBrand: FieldValue.delete(),
+          billingCardExpMonth: FieldValue.delete(),
+          billingCardExpYear: FieldValue.delete(),
+        } : {}),
+      }, {merge: true});
     }
 
     // Manual capture: nothing is charged until the bike is actually delivered.
@@ -1531,13 +1544,36 @@ export const stripeWebhook = onRequest(async (req, res) => {
     }
     break;
   }
-  case "payment_intent.payment_failed":
-    await db.collection("orders").doc(orderId).update({
-      status: "cancelled",
+  case "payment_intent.payment_failed": {
+    // Only the BASE rental charge can cancel an order. Deposits, renewals and
+    // rent-to-buy installments (`kind`) are off-session charges whose failure is
+    // handled at their call site (dunning, retries, notices), and a tip (`tip`) just
+    // stays unpaid — cancelling on any of those would kill a live rental.
+    if (intent.metadata.kind || intent.metadata.tip === "true") break;
+    // The customer app writes the order only AFTER checkout succeeds, so a decline at
+    // checkout has no order yet — and the customer may retry on this same intent.
+    const orderRef = db.collection("orders").doc(orderId);
+    const orderSnap = await orderRef.get();
+    if (!orderSnap.exists) break;
+    const order = orderSnap.data() as RentalOrder;
+    if (order.paymentIntentId !== intent.id || order.paymentCaptured) break;
+    // Events can arrive late or be redelivered: if the intent has since been
+    // authorized or paid, this failure is stale.
+    const live = await stripe.paymentIntents.retrieve(intent.id);
+    if (live.status === "requires_capture" || live.status === "succeeded" || live.status === "processing") break;
+    const upd: Record<string, any> = {
       paymentError: intent.last_payment_error?.message || "Payment failed",
       updatedAt: new Date().toISOString(),
-    });
+    };
+    // Once staff have claimed the order, a payment problem is theirs to resolve —
+    // only an unclaimed order is cancelled outright.
+    if (order.status === OrderStatus.REQUESTED) {
+      upd.status = OrderStatus.CANCELLED;
+      upd.expiryReason = "Payment failed";
+    }
+    await orderRef.update(upd);
     break;
+  }
   }
 
   res.json({received: true});
