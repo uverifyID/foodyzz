@@ -12,7 +12,7 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity, Alert, ActivityIndicator, Image, TextInput,
-  KeyboardAvoidingView, Linking,
+  KeyboardAvoidingView, Linking, Platform,
 } from 'react-native';
 import { Bike as BikeIcon, Calendar, Clock, MapPin, ShieldCheck, Check, CreditCard, Info, Ticket, X } from 'lucide-react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -50,6 +50,12 @@ import type { Bike, LogisticsConfig, PromoCampaign, RentalType } from '../types'
 import { useUserProfile } from '../context/UserProfileContext';
 import { useStripeReady } from '../context/StripeReadyContext';
 import { friendlyError, friendlyPaymentError, friendlyServerMessage, logHandledError } from '../services/errors';
+import {
+  DELIVER_SAFELY_URL,
+  COMPLETION_ID_MAX_LENGTH,
+  sanitizeCompletionId,
+  isValidCompletionId,
+} from '../services/bikeSafety';
 
 const RENTAL_TYPES: { key: RentalType; label: string; blurb: string }[] = [
   { key: 'rent', label: 'Rent', blurb: 'Weekly rental. New or used bike.' },
@@ -118,10 +124,15 @@ export default function OrderWizard() {
   // Optional fees the customer switched ON. Only possible for `required: false` fees,
   // and always an affirmative tap — an optional recurring charge is never pre-selected.
   const [selectedFees, setSelectedFees] = useState<string[]>([]);
-  // Checkout acknowledgements. Both are conditions of the rental, so both gate the pay
-  // button rather than sitting under it as text the rider can scroll past.
+  // Checkout acknowledgements. All three are conditions of the rental, so all gate the
+  // pay button rather than sitting under it as text the rider can scroll past.
   const [ackSafety, setAckSafety] = useState(false);
   const [ackTerms, setAckTerms] = useState(false);
+  // NYC's bicycle safety course for delivery workers. Ticking it asks for the
+  // Completion ID, prefilled from the profile once one has been given.
+  const [ackSafetyCourse, setAckSafetyCourse] = useState(false);
+  const [completionId, setCompletionId] = useState('');
+  const completionIdSeeded = useRef(false);
   // Committed term. Seeded from the model's minimum and never allowed below it.
   const [durationValue, setDurationValue] = useState<number>(0);
   const [selectedProviderId, setSelectedProviderId] = useState<string | null>(null);
@@ -446,6 +457,16 @@ export default function OrderWizard() {
     }
   }, [appliedPromo, rentalType, redeemedPromoIds]);
 
+  // Seed once — the profile listener re-fires on unrelated writes and must not
+  // overwrite what the rider is typing.
+  useEffect(() => {
+    if (completionIdSeeded.current || !userProfile) return;
+    completionIdSeeded.current = true;
+    if (userProfile.bikeSafetyCompletionId) setCompletionId(userProfile.bikeSafetyCompletionId);
+  }, [userProfile]);
+
+  const completionIdValid = isValidCompletionId(completionId);
+
   const canProceed = (): boolean => {
     switch (step) {
       case 1: return !!startDate && startDate > todayDay();
@@ -453,7 +474,9 @@ export default function OrderWizard() {
       case 3: return !!rentalType;
       case 4: return !!bikeModel && (availabilityFor(bikeModel)?.available ?? 0) > 0;
       case 5: return true;
-      case 6: return !!selectedProviderId && !!userProfile?.address && ackSafety && ackTerms;
+      case 6:
+        return !!selectedProviderId && !!userProfile?.address && ackSafety && ackTerms
+          && ackSafetyCourse && completionIdValid;
       default: return false;
     }
   };
@@ -477,6 +500,8 @@ export default function OrderWizard() {
       return;
     }
     if (!selectedProviderId || !rentalType || !bikeModel || !quote) return;
+    // Mirrors canProceed's step-6 gate — the disabled CTA is the real guard.
+    if (!ackSafety || !ackTerms || !ackSafetyCourse || !completionIdValid) return;
 
     setSubmitting(true);
     if (!orderIdRef.current) orderIdRef.current = generateOrderId();
@@ -534,6 +559,14 @@ export default function OrderWizard() {
 
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
 
+      // Keep the Completion ID on the profile so it shows in Account and prefills the
+      // next checkout. Best-effort: it is also recorded on the order below.
+      if (user?.phoneNumber && completionId !== userProfile?.bikeSafetyCompletionId) {
+        db.collection('users').doc(user.phoneNumber)
+          .set({ bikeSafetyCompletionId: completionId }, { merge: true })
+          .catch((e) => console.warn('Failed to save bike safety Completion ID:', e));
+      }
+
       const total = pricing.total ?? quote.total;
       await db.collection('orders').doc(orderId).set({
         id: orderId,
@@ -583,6 +616,8 @@ export default function OrderWizard() {
           speedLimitMph: 15,
           batteryChargingRules: true,
           commercialUse: true,
+          bikeSafetyCourse: true,
+          bikeSafetyCompletionId: completionId,
           termsVersion: TERMS_VERSION,
           acceptedAt: new Date().toISOString(),
         },
@@ -1557,6 +1592,61 @@ export default function OrderWizard() {
                     Protection Plan
                   </Text>
                 </TouchableOpacity>
+              </View>
+
+              <TouchableOpacity
+                onPress={() => setAckSafetyCourse((v) => !v)}
+                className="flex-row items-start mt-4"
+                accessibilityRole="checkbox"
+                accessibilityState={{ checked: ackSafetyCourse }}
+              >
+                <View
+                  className={`w-6 h-6 rounded-md border-2 border-black items-center justify-center mr-3 ${
+                    ackSafetyCourse ? 'bg-brand-green' : 'bg-white'
+                  }`}
+                >
+                  {ackSafetyCourse && <Check size={14} color="#0A0A0A" strokeWidth={4} />}
+                </View>
+                <Text className="flex-1 text-[12px] font-bold text-slate-600">
+                  I have completed the <Text className="font-black">Bicycle Safety Course for delivery
+                  workers</Text>. It is required for bike delivery work in New York City.
+                </Text>
+              </TouchableOpacity>
+
+              <View className="mt-2 ml-9">
+                <TouchableOpacity onPress={() => Linking.openURL(DELIVER_SAFELY_URL)}>
+                  <Text className="text-[11px] font-black text-brand-green-dark underline">
+                    Haven't completed it? Take the course at nyc.gov/DeliverSafely
+                  </Text>
+                </TouchableOpacity>
+
+                {ackSafetyCourse && (
+                  <View className="mt-3">
+                    <Text className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">
+                      Completion ID
+                    </Text>
+                    <TextInput
+                      value={completionId}
+                      onChangeText={(t) => setCompletionId(sanitizeCompletionId(t))}
+                      placeholder="e.g. 1234567-89012"
+                      placeholderTextColor="#94a3b8"
+                      maxLength={COMPLETION_ID_MAX_LENGTH}
+                      keyboardType={Platform.OS === 'ios' ? 'numbers-and-punctuation' : 'phone-pad'}
+                      autoCorrect={false}
+                      onFocus={() => setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 150)}
+                      className={`border-2 rounded-xl bg-white px-3 py-2.5 font-mono font-black text-slate-800 ${
+                        completionId && !completionIdValid ? 'border-red-500' : 'border-black'
+                      }`}
+                    />
+                    <Text
+                      className={`text-[10px] font-bold mt-1 ${
+                        completionId && !completionIdValid ? 'text-red-600' : 'text-slate-400'
+                      }`}
+                    >
+                      Numbers with one "-" in the middle, up to 15 characters. Saved to your profile.
+                    </Text>
+                  </View>
+                )}
               </View>
             </View>
 

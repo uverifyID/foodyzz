@@ -127,24 +127,28 @@ service cloud.firestore {
     // diff(), which needs an existing resource.data and so is meaningless on create.
     match /users/{userId} {
       allow read: if request.auth != null;
-      allow create: if (request.auth != null && request.auth.token.phone_number == userId)
+      // workerId is issued by the server (onUserWriteLifecycleEmails) and printed on
+      // the rider's badge, so the rider can never set or change it themselves.
+      allow create: if (request.auth != null && request.auth.token.phone_number == userId
+                        && !('workerId' in request.resource.data))
                     || isAdmin();
       allow delete: if (request.auth != null && request.auth.token.phone_number == userId)
                     || isAdmin();
 
       // Approving or rejecting a customer's ID is the delivery job, so store staff
       // must be able to stamp the review — but ONLY that. hasOnly() pins them to
-      // the two document maps, so a store member cannot flip isBlocked, rewrite an
+      // the three document maps, so a store member cannot flip isBlocked, rewrite an
       // address, or touch a Stripe customer id on the same write. Anything wider
       // stays admin-only.
       //
       // Platform-wide rather than per-store: scoping to "a customer my store is
       // serving" would mean querying orders, and rules can only get() a known path.
-      allow update: if (request.auth != null && request.auth.token.phone_number == userId)
+      allow update: if (request.auth != null && request.auth.token.phone_number == userId
+                        && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['workerId']))
                     || isAdmin()
                     || (isHqStaff()
                         && request.resource.data.diff(resource.data).affectedKeys()
-                             .hasOnly(['driverLicense', 'addressProof']));
+                             .hasOnly(['driverLicense', 'addressProof', 'selfie']));
     }
 
     // Orders - carry the customer's charge & authorization amounts, so READ is

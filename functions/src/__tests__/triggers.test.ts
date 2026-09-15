@@ -143,6 +143,53 @@ describe('onOrderCreatedUpdateStats', () => {
   });
 });
 
+describe('worker ID (piggybacked on onUserWriteLifecycleEmails)', () => {
+  const A = '+14025550000';
+  const B = '+14025550001';
+  const onboard = (phone: string) => triggerWritten(fns.onUserWriteLifecycleEmails, `users/${phone}`,
+    { phoneNumber: phone, onboarded: false },
+    { phoneNumber: phone, onboarded: true },
+    { phone });
+
+  test('riders are numbered in order from 002, zero-padded', async () => {
+    await seedUser(A, { onboarded: true });
+    await seedUser(B, { onboarded: true });
+    await onboard(A);
+    await onboard(B);
+    expect((await getDoc(`users/${A}`)).workerId).toBe('002');
+    expect((await getDoc(`users/${B}`)).workerId).toBe('003');
+    expect((await getDoc('counters/workerId')).next).toBe(4);
+  });
+
+  test('a retried trigger does not issue a second number', async () => {
+    await seedUser(A, { onboarded: true });
+    await onboard(A);
+    await onboard(A); // at-least-once delivery: same event again
+    expect((await getDoc(`users/${A}`)).workerId).toBe('002');
+    expect((await getDoc('counters/workerId')).next).toBe(3);
+  });
+
+  test('a rider who re-creates their account keeps their number', async () => {
+    await seedUser(A, { onboarded: true });
+    await onboard(A);
+    await db.doc(`users/${A}`).delete();
+    await seedUser(A, { onboarded: true }); // signed up again, no workerId on the new doc
+    await onboard(A);
+    expect((await getDoc(`users/${A}`)).workerId).toBe('002');
+    expect((await getDoc('counters/workerId')).next).toBe(3);
+  });
+
+  test('a rider who has not finished onboarding gets none', async () => {
+    await seedUser(A, { onboarded: false });
+    await triggerWritten(fns.onUserWriteLifecycleEmails, `users/${A}`,
+      null,
+      { phoneNumber: A, onboarded: false },
+      { phone: A });
+    expect((await getDoc(`users/${A}`)).workerId).toBeUndefined();
+    expect(await getDoc('counters/workerId')).toBeNull(); // no number was spent
+  });
+});
+
 describe('notifyDocsRejected (piggybacked on onUserWriteLifecycleEmails)', () => {
   const phone = '+14025550000';
   const REASON = 'Your identity check was rejected. Please re-upload your driver license and a different proof of address.';

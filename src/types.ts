@@ -31,6 +31,8 @@ export interface UserProfile {
   // customer with a reviewed license is never asked again.
   driverLicense?: DriverLicense;
   addressProof?: DriverLicense;
+  // Submitted and verified with the two above; matched against the licence photo.
+  selfie?: DriverLicense;
   isBlocked?: boolean;
   fcmToken?: string;
   isAdmin?: boolean;

@@ -255,6 +255,10 @@ function ctx(env, phone) {
     assertSucceeds(hqStaffCtx.doc(`users/${OTHER_PHONE}`).set(
       { driverLicense: { reviewedAt: "now", reviewedBy: PROVIDER_ID }, addressProof: { reviewedAt: "now" } },
       { merge: true })));
+  await check("store staff can stamp the selfie with the pair",
+    assertSucceeds(hqStaffCtx.doc(`users/${OTHER_PHONE}`).set(
+      { driverLicense: { reviewedAt: "now" }, addressProof: { reviewedAt: "now" }, selfie: { reviewedAt: "now" } },
+      { merge: true })));
   await check("...and reject it (the mirror write)",
     assertSucceeds(hqStaffCtx.doc(`users/${OTHER_PHONE}`).set(
       { driverLicense: { rejectedReason: "blurry", reviewedAt: null } }, { merge: true })));
@@ -274,6 +278,15 @@ function ctx(env, phone) {
     assertSucceeds(owner.doc(`users/${OWNER_PHONE}`).set({ name: "Me" }, { merge: true })));
   await check("user CANNOT write ANOTHER user's doc",
     assertFails(other.doc(`users/${OWNER_PHONE}`).set({ name: "Hacked" }, { merge: true })));
+  await check("owner CANNOT set their own workerId (server-issued)",
+    assertFails(owner.doc(`users/${OWNER_PHONE}`).set({ workerId: "001" }, { merge: true })));
+  await check("owner CANNOT create their doc carrying a workerId",
+    assertFails(owner.doc(`users/${OWNER_PHONE}`).delete().then(() =>
+      owner.doc(`users/${OWNER_PHONE}`).set({ name: "Me", workerId: "001" }))));
+  await check("owner can still re-create their doc without one",
+    assertSucceeds(owner.doc(`users/${OWNER_PHONE}`).set({ name: "Me" })));
+  await check("store staff CANNOT set a customer's workerId",
+    assertFails(hqStaffCtx.doc(`users/${OTHER_PHONE}`).set({ workerId: "001" }, { merge: true })));
 
   console.log("providers (cannot spoof another phone):");
   await check("cannot create a provider doc carrying ANOTHER phone",

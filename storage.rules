@@ -53,19 +53,35 @@ service firebase.storage {
     //         staff-writable path would let any HQ device forge a customer's ID.
     //         Capped at 10 MB and restricted to images so the path can't be used
     //         as general-purpose storage.
+    // Delete — the owner, so a replaced or failed upload can be cleaned up (every
+    //         upload has its own file name — see services/customerDocuments.ts).
+    //         Split from create/update because a delete carries no
+    //         request.resource for the size/type checks to read.
     match /driverLicenses/{phone}/{fileName} {
       allow read: if ownsPhone(phone) || isAdmin() || isHqStaff();
-      allow write: if ownsPhone(phone)
+      allow create, update: if ownsPhone(phone)
                    && request.resource.size < 10 * 1024 * 1024
                    && request.resource.contentType.matches('image/.*');
+      allow delete: if ownsPhone(phone);
     }
 
     // addressProofs/{phone}/front.jpg — same ownership model as the licence.
     match /addressProofs/{phone}/{fileName} {
       allow read: if ownsPhone(phone) || isAdmin() || isHqStaff();
-      allow write: if ownsPhone(phone)
+      allow create, update: if ownsPhone(phone)
                    && request.resource.size < 10 * 1024 * 1024
                    && request.resource.contentType.matches('image/.*');
+      allow delete: if ownsPhone(phone);
+    }
+
+    // selfies/{phone}/front.jpg — submitted with the licence and proof of address;
+    // staff match it against the licence photo. Same ownership model.
+    match /selfies/{phone}/{fileName} {
+      allow read: if ownsPhone(phone) || isAdmin() || isHqStaff();
+      allow create, update: if ownsPhone(phone)
+                   && request.resource.size < 10 * 1024 * 1024
+                   && request.resource.contentType.matches('image/.*');
+      allow delete: if ownsPhone(phone);
     }
 
     // bikeCondition/{orderId}/*.jpg — handover photos taken by FoodyzzHQ with the

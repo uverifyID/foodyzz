@@ -4805,13 +4805,18 @@ async function notifyDocsUploaded(
     !!u?.driverLicense?.frontPath && !!u?.driverLicense?.backPath && !!u?.addressProof?.frontPath;
   if (!complete(after)) return;
 
-  // Only on a NEW submission awaiting review.
-  const submittedAt = `${after.driverLicense?.uploadedAt || ""}|${after.addressProof?.uploadedAt || ""}`;
-  const wasSubmittedAt = `${before?.driverLicense?.uploadedAt || ""}|${before?.addressProof?.uploadedAt || ""}`;
-  if (submittedAt === wasSubmittedAt) return;
+  // Only on a NEW submission awaiting review. The selfie is part of the set, but
+  // app builds from before it existed still submit just the pair, so it is folded
+  // into the change key rather than required by complete().
+  const stamp = (u: any) =>
+    `${u?.driverLicense?.uploadedAt || ""}|${u?.addressProof?.uploadedAt || ""}|${u?.selfie?.uploadedAt || ""}`;
+  if (stamp(after) === stamp(before)) return;
   if (after.driverLicense?.reviewedAt && after.addressProof?.reviewedAt) return;
 
   const name = after.name || phone;
+  const what = after.selfie?.frontPath ?
+    "driver license, proof of address and selfie" :
+    "driver license and proof of address";
 
   // Route it to whoever is actually waiting: the stores holding this customer's
   // open orders that asked for documents and haven't verified them yet.
@@ -4833,7 +4838,7 @@ async function notifyDocsUploaded(
       await notifyProvider(
         providerId,
         "ID documents uploaded",
-        `${name} uploaded their driver license and proof of address for order ` +
+        `${name} uploaded their ${what} for order ` +
         `${doc.id.replace("order_", "#")}. Review them to release the bike.`,
         "ID_DOCS_UPLOADED",
         doc.id,
@@ -4845,7 +4850,7 @@ async function notifyDocsUploaded(
     if (notified.size === 0) {
       await notifyAdmin(
         "ID documents uploaded",
-        `${name} uploaded their driver license and proof of address.`,
+        `${name} uploaded their ${what}.`,
         "ID_DOCS_UPLOADED",
         {userPhone: phone},
       );
@@ -5304,6 +5309,42 @@ function emailLayout(opts: {
 
 // ── Lifecycle emails ─────────────────────────────────────────────────────────
 
+// Worker ID — a running number unique per rider, zero-padded to three digits and
+// starting at 002 ("002", "003", … "999", "1000"). Issued once, by the server only:
+//   counters/workerId      { next }                 the next number to hand out
+//   workerIds/{phone}      { workerId, assignedAt } the rider's number, for good
+// Both are server-only (the rules' default deny). Keeping the assignment per phone
+// means a rider who deletes their account and signs up again gets the same number,
+// and an at-least-once trigger retry can never burn a second one. Clients cannot
+// write users/{phone}.workerId (firestore.rules), so the copy on the profile is
+// trusted once set.
+const WORKER_ID_COUNTER = "counters/workerId";
+const FIRST_WORKER_ID = 2;
+const WORKER_ID_PATTERN = /^\d{3,}$/;
+
+async function ensureWorkerId(
+  phone: string,
+  userRef: FirebaseFirestore.DocumentReference,
+): Promise<void> {
+  await db.runTransaction(async (tx) => {
+    const assignRef = db.doc(`workerIds/${phone}`);
+    const counterRef = db.doc(WORKER_ID_COUNTER);
+    const [user, assign, counter] = await Promise.all([
+      tx.get(userRef), tx.get(assignRef), tx.get(counterRef),
+    ]);
+    if (!user.exists) return; // deleted meanwhile
+
+    let workerId: string | undefined = assign.data()?.workerId;
+    if (!workerId) {
+      const next = Number(counter.data()?.next) || FIRST_WORKER_ID;
+      workerId = String(next).padStart(3, "0");
+      tx.set(counterRef, {next: next + 1}, {merge: true});
+      tx.set(assignRef, {workerId, assignedAt: FieldValue.serverTimestamp()});
+    }
+    if (user.data()?.workerId !== workerId) tx.update(userRef, {workerId});
+  });
+}
+
 // Customer welcome (Foodyzz). The users doc is created at signup WITHOUT an email
 // (just phone + onboarded:false); the address arrives when the customer completes
 // their profile. So we fire on the write that first carries an email, guarded by
@@ -5338,6 +5379,15 @@ export const onUserWriteLifecycleEmails = onDocumentWritten("users/{phone}", asy
   // with the above in practice — an upload clears rejectedReason, a rejection leaves
   // uploadedAt untouched — so a single write can never fire both.
   await notifyDocsRejected(event.params.phone, before, after);
+
+  // Worker ID — issued as soon as the rider is onboarded, and to anyone onboarded
+  // before it existed on their next profile write. Gated on a plain field check, so
+  // the ordinary hot-path write (badge counts, fcm tokens) does no I/O here; the
+  // transaction's own write re-fires this trigger once and then passes the gate.
+  if (after.onboarded === true && !WORKER_ID_PATTERN.test(String(after.workerId || ""))) {
+    await ensureWorkerId(event.params.phone, event.data!.after.ref)
+      .catch((e) => console.error("worker ID issue failed", e));
+  }
 
   // Welcome to Foodyzz — fire only as onboarding COMPLETES (onboarded flips to
   // true, carrying the email). Gating on the transition — not merely "has email"

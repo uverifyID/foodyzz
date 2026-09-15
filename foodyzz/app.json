@@ -16,7 +16,7 @@
         "expo-image-picker",
         {
           "photosPermission": "Allow Foodyzz to access your photos so you can upload your driver license.",
-          "cameraPermission": "Allow Foodyzz to use your camera to photograph your driver license."
+          "cameraPermission": "Allow Foodyzz to use your camera to photograph your driver license and take your selfie."
         }
       ],
       "expo-font",

@@ -121,15 +121,16 @@ const formatReceiptDate = (iso?: string | null): string => {
     return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
 };
 
-// Documents are "on file" once BOTH the licence (front + back) and the proof of
-// address have been uploaded. Verification is a separate, later stamp.
+// Documents are "on file" once the licence (front + back), the proof of address and
+// the selfie have all been uploaded. Verification is a separate, later stamp.
 //
-// A rejected pair counts as NOT on file even though the images are still stored:
+// A rejected set counts as NOT on file even though the images are still stored:
 // FoodyzzHQ has refused them and is waiting for replacements, so the order is once
 // again blocked on the customer and the ID-Pending prompt has to come back.
 const hasIdOnFile = (profile: any): boolean =>
     hasDocumentOnFile(profile, 'driverLicense') &&
     hasDocumentOnFile(profile, 'addressProof') &&
+    hasDocumentOnFile(profile, 'selfie') &&
     !profile?.driverLicense?.rejectedReason &&
     !profile?.addressProof?.rejectedReason;
 
@@ -673,7 +674,7 @@ export default function OrdersScreen() {
                                 >
                                     <AlertTriangle size={14} color={ID_PENDING_ORANGE} />
                                     <Text style={{ color: '#9a3412' }} className="flex-1 text-[10px] font-black uppercase leading-relaxed">
-                                        Upload your ID & proof of address — go to Account
+                                        Upload your ID, proof of address & selfie — go to Account
                                     </Text>
                                     <ChevronRight size={14} color={ID_PENDING_ORANGE} />
                                 </TouchableOpacity>

@@ -151,7 +151,9 @@ function StatusPill({ bucket }: { bucket: Bucket }) {
 
 function LicenseDetail({ customer }: { customer: UserProfile }) {
   const dl = customer.driverLicense;
-  const [urls, setUrls] = useState<{ front?: string; back?: string }>({});
+  const address = customer.addressProof;
+  const selfie = customer.selfie;
+  const [urls, setUrls] = useState<{ front?: string; back?: string; address?: string; selfie?: string }>({});
   const [busy, setBusy] = useState(false);
   const [rejectReason, setRejectReason] = useState('');
 
@@ -160,17 +162,19 @@ function LicenseDetail({ customer }: { customer: UserProfile }) {
     setUrls({});
     if (!dl?.frontPath) return;
     const storage = getStorage();
-    Promise.all([
-      getDownloadURL(ref(storage, dl.frontPath)),
-      dl.backPath ? getDownloadURL(ref(storage, dl.backPath)) : Promise.resolve(''),
-    ])
-      .then(([front, back]) => { if (!cancelled) setUrls({ front, back }); })
-      .catch(e => console.warn('license download url failed:', e));
+    // Each image resolves on its own, so one missing file doesn't blank the rest.
+    const url = (path?: string) =>
+      path ? getDownloadURL(ref(storage, path)).catch(e => { console.warn('document download url failed:', e); return ''; })
+        : Promise.resolve('');
+    Promise.all([url(dl.frontPath), url(dl.backPath), url(address?.frontPath), url(selfie?.frontPath)])
+      .then(([front, back, addr, self]) => { if (!cancelled) setUrls({ front, back, address: addr, selfie: self }); });
     return () => { cancelled = true; };
-  }, [dl?.frontPath, dl?.backPath]);
+  }, [dl?.frontPath, dl?.backPath, address?.frontPath, selfie?.frontPath]);
 
-  // Approve / reject both write the same driverLicense record — a rejection keeps
-  // reviewedAt null so the customer's re-scan lands back in the pending queue.
+  // Approve / reject write EVERY document on file — the customer app and FoodyzzHQ
+  // treat the licence, proof of address and selfie as one set, so stamping only the
+  // licence left the customer stuck "In review". A rejection keeps reviewedAt null
+  // so the customer's re-scan lands back in the pending queue.
   const decide = async (approved: boolean) => {
     if (!dl) return;
     if (!approved && !rejectReason.trim()) {
@@ -178,16 +182,20 @@ function LicenseDetail({ customer }: { customer: UserProfile }) {
       return;
     }
     setBusy(true);
+    const now = new Date().toISOString();
+    const stamp = <T extends object>(d: T) => ({
+      ...d,
+      reviewedAt: approved ? now : null,
+      reviewedBy: 'admin',
+      rejectedReason: approved ? null : rejectReason.trim(),
+    });
     try {
       await setDoc(
         doc(db, 'users', customer.phoneNumber),
         {
-          driverLicense: {
-            ...dl,
-            reviewedAt: approved ? new Date().toISOString() : null,
-            reviewedBy: 'admin',
-            rejectedReason: approved ? null : rejectReason.trim(),
-          },
+          driverLicense: stamp(dl),
+          ...(address ? { addressProof: stamp(address) } : {}),
+          ...(selfie ? { selfie: stamp(selfie) } : {}),
         },
         { merge: true },
       );
@@ -240,6 +248,22 @@ function LicenseDetail({ customer }: { customer: UserProfile }) {
           </div>
         ))}
       </div>
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        {([['address', 'Proof of address'], ['selfie', 'Selfie — match to the license photo']] as const).map(([key, label]) => (
+          <div key={key}>
+            <p className="font-black uppercase text-[9px] tracking-widest text-stone-400 mb-1">{label}</p>
+            <div className="border-2 border-black bg-stone-100 aspect-[16/10] flex items-center justify-center overflow-hidden">
+              {urls[key] ? (
+                <a href={urls[key]} target="_blank" rel="noreferrer" className="w-full h-full">
+                  <img src={urls[key]} alt={label} className="w-full h-full object-contain" />
+                </a>
+              ) : (
+                <p className="font-black uppercase text-[9px] tracking-widest text-stone-400">Not submitted</p>
+              )}
+            </div>
+          </div>
+        ))}
+      </div>
       <p className="text-[10px] font-mono text-stone-400">Click an image to open it full size in a new tab.</p>
 
       {dl.rejectedReason && (
@@ -263,7 +287,7 @@ function LicenseDetail({ customer }: { customer: UserProfile }) {
             disabled={busy}
             className="w-full bg-black text-white font-black uppercase text-sm py-3 border-2 border-black shadow-brutalist hover:bg-emerald-600 transition-colors disabled:opacity-50"
           >
-            {busy ? 'Saving…' : 'Approve license'}
+            {busy ? 'Saving…' : 'Approve documents'}
           </button>
           <div className="flex gap-2">
             <input

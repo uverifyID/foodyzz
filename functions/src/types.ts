@@ -34,6 +34,12 @@ export interface UserProfile {
   driverLicense?: DriverLicense;
   // Proof of address on file (same lifecycle as the license).
   addressProof?: CustomerDocument;
+  // Selfie, submitted and verified together with the two above.
+  selfie?: CustomerDocument;
+  // NYC DeliverSafely bicycle safety course certificate id, given at checkout.
+  bikeSafetyCompletionId?: string;
+  // Unique running number from "002" — see ensureWorkerId in index.ts.
+  workerId?: string;
   // Sales-rep referral attribution (visibility / thank-you only — does not earn
   // the manager commission; only the provider's referrer earns).
   // Promo ids this customer has redeemed, written by onOrderCreatedRedeemPromo. Lives
@@ -370,6 +376,9 @@ export interface OrderAcknowledgements {
   speedLimitMph: number;
   batteryChargingRules: boolean;
   commercialUse: boolean;
+  // NYC DeliverSafely course — absent on orders placed before it was asked.
+  bikeSafetyCourse?: boolean;
+  bikeSafetyCompletionId?: string;
   termsVersion: string;
   acceptedAt: string;
 }

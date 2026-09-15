@@ -33,6 +33,13 @@ export interface UserProfile {
   // customer with a reviewed license is never asked again.
   driverLicense?: DriverLicense;
   addressProof?: DriverLicense;
+  // Submitted with the two above and verified with them; also the profile photo.
+  selfie?: CustomerDocument;
+  // NYC DeliverSafely bicycle safety course certificate id — see services/bikeSafety.
+  bikeSafetyCompletionId?: string;
+  // Unique running number from "002", issued by the server once onboarded.
+  // Read-only to the app (firestore.rules); printed on the worker ID badge.
+  workerId?: string;
   onboarded?: boolean;      // False until the profile onboarding wizard is completed
   isBlocked?: boolean;
   fcmToken?: string;

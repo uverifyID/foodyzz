@@ -10,13 +10,17 @@
 //
 // Review is deliberately manual: staff eyeball the images and can reach the
 // customer by phone or in-app chat if anything looks wrong.
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   View, Text, TouchableOpacity, Image, ActivityIndicator, Alert, Linking, Modal, ScrollView,
 } from 'react-native';
 import storage from '@react-native-firebase/storage';
-import { CreditCard, CheckCircle, Clock, Send, Phone, MessageSquare, X, AlertTriangle, RefreshCw, XCircle } from 'lucide-react-native';
+import * as Print from 'expo-print';
+import { CreditCard, CheckCircle, Clock, Send, Phone, MessageSquare, X, AlertTriangle, RefreshCw, XCircle, Printer } from 'lucide-react-native';
 import { db, auth, syncAdminClaim } from '../services/firebase';
+import {
+  buildWorkerLabelHtml, imageAsDataUrl, isPrintCancelled, LABEL_WIDTH_PT, LABEL_HEIGHT_PT,
+} from '../services/workerLabel';
 
 interface Props {
   order: any;
@@ -24,14 +28,15 @@ interface Props {
   onMessage?: () => void;
 }
 
-type DocKind = 'driverLicense' | 'addressProof';
+type DocKind = 'driverLicense' | 'addressProof' | 'selfie';
 
 const DOC_LABEL: Record<DocKind, string> = {
   driverLicense: 'Driver license',
   addressProof: 'Proof of address',
+  selfie: 'Selfie — match to the license photo',
 };
 
-// A licence needs both sides; proof of address is a single page.
+// A licence needs both sides; proof of address and the selfie are a single image.
 const isComplete = (doc: any, kind: DocKind): boolean =>
   kind === 'driverLicense' ? !!doc?.frontPath && !!doc?.backPath : !!doc?.frontPath;
 
@@ -47,7 +52,7 @@ type ImageState =
 // customer app can render it, and it is what the customer's push says: their pair
 // was refused and a fresh licence plus a DIFFERENT proof of address is needed.
 const REJECTION_REASON =
-  'Your identity check was rejected. Please re-upload your driver license and a different proof of address.';
+  'Your identity check was rejected. Please re-upload your driver license, a new selfie and a different proof of address.';
 
 // storage/unauthorized here means the staff `admin` claim is missing from this
 // device's token — the documents exist, we just can't read them. Anything else is
@@ -66,6 +71,9 @@ export default function CustomerIdCard({ order, onMessage }: Props) {
   const [requesting, setRequesting] = useState(false);
   const [verifying, setVerifying] = useState(false);
   const [rejecting, setRejecting] = useState(false);
+  const [printing, setPrinting] = useState(false);
+  // A second tap before the re-render would present a second print sheet.
+  const printingRef = useRef(false);
   const [zoom, setZoom] = useState<string | null>(null);
 
   useEffect(() => {
@@ -78,20 +86,25 @@ export default function CustomerIdCard({ order, onMessage }: Props) {
 
   const license = profile?.driverLicense;
   const address = profile?.addressProof;
+  const selfie = profile?.selfie;
   const licenseReady = isComplete(license, 'driverLicense');
   const addressReady = isComplete(address, 'addressProof');
-  // Both documents present is what turns "waiting" into "review me".
-  const allUploaded = licenseReady && addressReady;
+  const selfieReady = isComplete(selfie, 'selfie');
+  // All three present is what turns "waiting" into "review me".
+  const allUploaded = licenseReady && addressReady && selfieReady;
   // Verification is per-ORDER, keyed on order.docsVerifiedAt — the same stamp the
   // Dispatch card's "Ready for Delivery" gate reads. A returning customer whose
   // documents were reviewed on a PRIOR order still needs staff to confirm them for
   // this one, so we deliberately don't treat the profile's reviewedAt as verified
   // here — otherwise the card would show "verified" while the order gate stayed
   // locked with no button to unlock it.
-  const allVerified = allUploaded && !!order.docsVerifiedAt;
-  // Rejected until the customer submits again — saveDocumentToProfile clears
-  // rejectedReason on every upload, so this flips back off by itself.
-  const rejected = !allVerified && !!(license?.rejectedReason || address?.rejectedReason);
+  //
+  // The selfie is NOT required here: an order verified before the selfie was asked
+  // for stays verified rather than falling back to "request documents".
+  const allVerified = licenseReady && addressReady && !!order.docsVerifiedAt;
+  // Rejected until the customer submits again — every submission clears
+  // rejectedReason, so this flips back off by itself.
+  const rejected = !allVerified && !!(license?.rejectedReason || address?.rejectedReason || selfie?.rejectedReason);
 
   // Resolve every present image to a display URL, keeping per-image status so a
   // failure surfaces as a retryable error tile rather than an endless spinner.
@@ -101,6 +114,7 @@ export default function CustomerIdCard({ order, onMessage }: Props) {
     if (license?.frontPath) paths['license-front'] = license.frontPath;
     if (license?.backPath) paths['license-back'] = license.backPath;
     if (address?.frontPath) paths['address-front'] = address.frontPath;
+    if (selfie?.frontPath) paths['selfie-front'] = selfie.frontPath;
     if (Object.keys(paths).length === 0) { setImages({}); return; }
 
     setImages(Object.fromEntries(
@@ -122,7 +136,7 @@ export default function CustomerIdCard({ order, onMessage }: Props) {
       setImages(Object.fromEntries(pairs));
     });
     return () => { cancelled = true; };
-  }, [license?.frontPath, license?.backPath, address?.frontPath, reloadKey]);
+  }, [license?.frontPath, license?.backPath, address?.frontPath, selfie?.frontPath, reloadKey]);
 
   const anyFailed = Object.values(images).some((s) => s.status === 'error');
   const deniedFailure = Object.values(images).some(
@@ -155,8 +169,8 @@ export default function CustomerIdCard({ order, onMessage }: Props) {
         source: 'order',
         recipientPhone: order.customerPhone,
         text:
-          'Before we deliver your bike we need a photo of your driver license (front and back) ' +
-          'and proof of address. You can upload them from Account in the Foodyzz app.',
+          'Before we deliver your bike we need a photo of your driver license (front and back), ' +
+          'a proof of address and a selfie. You can upload them from Account in the Foodyzz app.',
         timestamp: new Date().toISOString(),
       });
       Alert.alert('Request sent', 'The customer has been notified to upload their documents.');
@@ -167,26 +181,78 @@ export default function CustomerIdCard({ order, onMessage }: Props) {
     }
   };
 
-  // Approving stamps BOTH documents and the order; docsVerifiedAt is what unlocks
-  // "Ready for Delivery" on the order card.
+  // Worker ID label — the same 3.5" × 2.25" Zebra label the rider can print from My
+  // Profile. Goes through the phone's own print system to whatever printer this
+  // device is already set up with; there is no in-app printer management.
+  const printLabel = async () => {
+    if (printingRef.current) return;
+    if (!selfie?.frontPath) {
+      Alert.alert('No selfie on file', 'This customer has no selfie yet, so a worker ID label cannot be printed.');
+      return;
+    }
+    // Issued by the server when the customer onboarded; missing only for a moment
+    // after that, or if issuing failed.
+    if (!profile?.workerId) {
+      Alert.alert('No worker ID yet', 'This customer’s worker ID has not been issued yet. Try again in a moment.');
+      return;
+    }
+    printingRef.current = true;
+    setPrinting(true);
+    try {
+      // The card already resolved the selfie for display — reuse that URL.
+      const shown = images['selfie-front'];
+      const url = shown?.status === 'ok' ? shown.url : await storage().ref(selfie.frontPath).getDownloadURL();
+      const selfieDataUrl = await imageAsDataUrl(url);
+      await Print.printAsync({
+        html: buildWorkerLabelHtml({
+          name: profile?.name || order.customerName || '',
+          workerId: profile.workerId,
+          selfieDataUrl,
+        }),
+        width: LABEL_WIDTH_PT,
+        height: LABEL_HEIGHT_PT,
+        // The label draws its own padding; iOS would otherwise add a default margin.
+        margins: { top: 0, right: 0, bottom: 0, left: 0 },
+      });
+    } catch (e: any) {
+      if (isPrintCancelled(e)) return;
+      Alert.alert(
+        'Label did not print',
+        'Check the Zebra printer is on and connected to this phone, then tap Print worker ID label to try again.',
+      );
+    } finally {
+      printingRef.current = false;
+      setPrinting(false);
+    }
+  };
+
+  // Approving stamps ALL THREE documents and the order; docsVerifiedAt is what
+  // unlocks "Ready for Delivery" on the order card. A successful approval then
+  // opens the worker ID label straight away.
   const verifyDocuments = async () => {
     setVerifying(true);
     const now = new Date().toISOString();
     const by = order.providerId || null;
+    let approved = false;
     try {
       await db.collection('users').doc(order.customerPhone).set(
         {
           driverLicense: { ...license, reviewedAt: now, reviewedBy: by, rejectedReason: null },
           addressProof: { ...address, reviewedAt: now, reviewedBy: by, rejectedReason: null },
+          // Never write a selfie map for a customer without one — it would carry a
+          // review stamp and no image.
+          ...(selfie ? { selfie: { ...selfie, reviewedAt: now, reviewedBy: by, rejectedReason: null } } : {}),
         },
         { merge: true },
       );
       await db.collection('orders').doc(order.id).update({ docsVerifiedAt: now });
+      approved = true;
     } catch (e: any) {
       Alert.alert('Could not verify', e?.message || 'Please try again.');
     } finally {
       setVerifying(false);
     }
+    if (approved) await printLabel();
   };
 
   // Rejecting is the mirror of approving: it clears the review stamps and writes the
@@ -212,6 +278,7 @@ export default function CustomerIdCard({ order, onMessage }: Props) {
                 {
                   driverLicense: { ...license, reviewedAt: null, reviewedBy: null, rejectedReason: REJECTION_REASON },
                   addressProof: { ...address, reviewedAt: null, reviewedBy: null, rejectedReason: REJECTION_REASON },
+                  ...(selfie ? { selfie: { ...selfie, reviewedAt: null, reviewedBy: null, rejectedReason: REJECTION_REASON } } : {}),
                 },
                 { merge: true },
               );
@@ -233,7 +300,7 @@ export default function CustomerIdCard({ order, onMessage }: Props) {
   };
 
   const renderDoc = (kind: DocKind, keys: string[]) => {
-    const doc = kind === 'driverLicense' ? license : address;
+    const doc = kind === 'driverLicense' ? license : kind === 'addressProof' ? address : selfie;
     if (!isComplete(doc, kind)) return null;
     return (
       <View className="mb-3">
@@ -311,10 +378,11 @@ export default function CustomerIdCard({ order, onMessage }: Props) {
         ) : null}
       </View>
 
-      {allUploaded ? (
+      {allUploaded || allVerified ? (
         <View>
           {renderDoc('driverLicense', ['license-front', 'license-back'])}
           {renderDoc('addressProof', ['address-front'])}
+          {renderDoc('selfie', ['selfie-front'])}
 
           {/* Never let staff approve documents they could not actually see. */}
           {anyFailed && (
@@ -396,6 +464,34 @@ export default function CustomerIdCard({ order, onMessage }: Props) {
             </View>
           )}
 
+          {/* Manual (re)print — the label opens automatically on approval, this is
+              for a jammed or disconnected printer. Needs a selfie, so orders
+              verified before selfies were asked for can't print one. */}
+          {allVerified && (
+            <TouchableOpacity
+              onPress={printLabel}
+              disabled={printing || !selfieReady}
+              className={`mt-2 py-2.5 rounded-xl flex-row items-center justify-center border-2 ${
+                selfieReady ? 'bg-white border-black' : 'bg-slate-50 border-slate-200'
+              }`}
+            >
+              {printing ? (
+                <ActivityIndicator size="small" color="#000000" />
+              ) : (
+                <>
+                  <Printer size={13} color={selfieReady ? '#000000' : '#cbd5e1'} />
+                  <Text
+                    className={`ml-2 font-black uppercase text-[10px] tracking-widest ${
+                      selfieReady ? 'text-black' : 'text-slate-300'
+                    }`}
+                  >
+                    {selfieReady ? 'Print worker ID label' : 'No selfie — no label'}
+                  </Text>
+                </>
+              )}
+            </TouchableOpacity>
+          )}
+
           <View className="flex-row mt-3">
             <TouchableOpacity
               onPress={() => Linking.openURL(`tel:${order.customerPhone}`)}
@@ -417,19 +513,28 @@ export default function CustomerIdCard({ order, onMessage }: Props) {
         <View>
           <Text className="text-[10px] font-bold text-slate-400 mb-3">
             {order.idRequestedAt
-              ? 'Waiting for the customer to upload their driver license and proof of address. This card updates automatically.'
-              : 'No documents on file. Request the customer’s ID and proof of address before delivery.'}
+              ? 'Waiting for the customer to upload their driver license, proof of address and selfie. This card updates automatically.'
+              : 'Documents incomplete. Request the customer’s ID, proof of address and selfie before delivery.'}
           </Text>
 
-          {/* Partial upload — say which half is still missing rather than nothing. */}
-          {(licenseReady || addressReady) && (
-            <View className="bg-amber-50 border border-amber-200 rounded-xl px-3 py-2 mb-3">
-              <Text className="text-[10px] font-bold text-amber-700">
-                Received: {licenseReady ? 'driver license' : 'proof of address'}. Still waiting on{' '}
-                {licenseReady ? 'proof of address' : 'the driver license'}.
-              </Text>
-            </View>
-          )}
+          {/* Partial upload — say what is still missing rather than nothing. A
+              customer verified before the selfie was asked for lands here too. */}
+          {(licenseReady || addressReady || selfieReady) && (() => {
+            const parts: [boolean, string][] = [
+              [licenseReady, 'driver license'],
+              [addressReady, 'proof of address'],
+              [selfieReady, 'selfie'],
+            ];
+            const received = parts.filter(([ok]) => ok).map(([, name]) => name).join(', ');
+            const missing = parts.filter(([ok]) => !ok).map(([, name]) => name).join(', ');
+            return (
+              <View className="bg-amber-50 border border-amber-200 rounded-xl px-3 py-2 mb-3">
+                <Text className="text-[10px] font-bold text-amber-700">
+                  Received: {received}. Still waiting on: {missing}.
+                </Text>
+              </View>
+            );
+          })()}
 
           <TouchableOpacity
             disabled={requesting || !!order.idRequestedAt}
@@ -452,7 +557,7 @@ export default function CustomerIdCard({ order, onMessage }: Props) {
                     order.idRequestedAt ? 'text-slate-400' : 'text-indigo-700'
                   }`}
                 >
-                  {order.idRequestedAt ? 'Request sent' : 'Request ID & address proof'}
+                  {order.idRequestedAt ? 'Request sent' : 'Request ID, address proof & selfie'}
                 </Text>
               </View>
             )}

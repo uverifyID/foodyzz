@@ -38,6 +38,12 @@ export interface UserProfile {
   // customer with a reviewed license is never asked again.
   driverLicense?: DriverLicense;
   addressProof?: DriverLicense;
+  // Submitted with the two above; staff match it against the licence photo.
+  selfie?: CustomerDocument;
+  // NYC DeliverSafely bicycle safety course certificate id, given at checkout.
+  bikeSafetyCompletionId?: string;
+  // Unique running number from "002", issued by the server once onboarded.
+  workerId?: string;
   preferredProviders: string[]; // Array of provider phone numbers
   blockedProviders: string[]; // Array of provider phone numbers
   stripeConfigured: boolean;

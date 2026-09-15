@@ -1,6 +1,7 @@
-import React, { useState, useEffect, useLayoutEffect } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, TextInput, Alert, Switch, Modal, ActivityIndicator, Linking, KeyboardAvoidingView } from 'react-native';
-import { User, Mail, MapPin, MessageSquare, CreditCard, AlertTriangle, ChevronRight, Edit2, X, Trash2, ShieldCheck, LogOut, Bell, Volume2 } from 'lucide-react-native';
+import React, { useState, useEffect, useLayoutEffect, useRef } from 'react';
+import { View, Text, ScrollView, TouchableOpacity, TextInput, Alert, Switch, Modal, ActivityIndicator, Linking, KeyboardAvoidingView, Image, Platform } from 'react-native';
+import { User, Mail, MapPin, MessageSquare, CreditCard, AlertTriangle, ChevronRight, Edit2, X, Trash2, ShieldCheck, LogOut, Bell, Volume2, Camera, Printer } from 'lucide-react-native';
+import * as Print from 'expo-print';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Constants from 'expo-constants';
 import { previewSound } from '../services/soundPlayer';
@@ -16,6 +17,14 @@ import AddressAutocomplete from '../components/AddressAutocomplete';
 import IdentityDocumentsCard from '../components/IdentityDocumentsCard';
 import { useUserProfile } from '../context/UserProfileContext';
 import { friendlyError, friendlyPaymentError } from '../services/errors';
+import { pickDocumentImage, documentImageUrl, areDocumentsVerified } from '../services/customerDocuments';
+import { buildWorkerLabelHtml, imageAsDataUrl, isPrintCancelled, LABEL_WIDTH_PT, LABEL_HEIGHT_PT } from '../services/workerLabel';
+import {
+    DELIVER_SAFELY_URL,
+    COMPLETION_ID_MAX_LENGTH,
+    sanitizeCompletionId,
+    isValidCompletionId,
+} from '../services/bikeSafety';
 
 export default function ProfileScreen() {
     const navigation = useNavigation<any>();
@@ -40,6 +49,21 @@ export default function ProfileScreen() {
     const [editName, setEditName] = useState('');
     const [editEmail, setEditEmail] = useState('');
     const [editAddress, setEditAddress] = useState('');
+    const [editCompletionId, setEditCompletionId] = useState('');
+
+    // Selfie box in the profile header. A capture there is handed to the identity
+    // documents card (pendingSelfie) — it is submitted with the licence and proof of
+    // address, never on its own — and the screen scrolls down to that card.
+    const scrollRef = useRef<ScrollView>(null);
+    const docsCardY = useRef(0);
+    const [pendingSelfie, setPendingSelfie] = useState<string | null>(null);
+    // What the card actually holds (reported back by it) — this, not pendingSelfie,
+    // is what the header shows, so a selfie discarded in the card leaves the header.
+    const [draftSelfie, setDraftSelfie] = useState<string | null>(null);
+    const [selfieUrl, setSelfieUrl] = useState<string | null>(null);
+    const [printingLabel, setPrintingLabel] = useState(false);
+    // A second tap before the re-render would present a second print sheet.
+    const printingLabelRef = useRef(false);
 
     // Card management
     const { createPaymentMethod } = useStripe();
@@ -74,16 +98,79 @@ export default function ProfileScreen() {
         navigation.setOptions({ headerShown: false });
     }, [navigation]);
 
-    // Seed the edit-form fields whenever the shared profile updates. Mirrors the old
-    // per-snapshot behavior (the listener that used to live here set these on every
-    // snapshot); the users/{phone} subscription itself now lives in UserProfileContext.
+    // Seed the edit form when it OPENS, not on every profile snapshot. users/{phone}
+    // is rewritten in the background (badge counts, the server's worker ID stamp), and
+    // re-seeding on each snapshot wiped whatever the customer was typing.
+    const startEditing = () => {
+        setEditName(profile?.name || '');
+        setEditEmail(profile?.email || '');
+        setEditAddress(profile?.address || '');
+        setEditCompletionId(profile?.bikeSafetyCompletionId || '');
+        setIsEditing(true);
+    };
+
+    // One download URL for the stored selfie, re-resolved only when it is replaced.
+    const selfiePath = profile?.selfie?.frontPath;
     useEffect(() => {
-        if (profile) {
-            setEditName(profile.name || '');
-            setEditEmail(profile.email || '');
-            setEditAddress(profile.address || '');
+        if (!selfiePath) { setSelfieUrl(null); return; }
+        let cancelled = false;
+        documentImageUrl(selfiePath)
+            .then((url) => { if (!cancelled) setSelfieUrl(url); })
+            .catch(() => { if (!cancelled) setSelfieUrl(null); });
+        return () => { cancelled = true; };
+    }, [selfiePath]);
+
+    const handleTakeSelfie = async () => {
+        try {
+            const uri = await pickDocumentImage('camera', 'selfie');
+            if (!uri) return;
+            setPendingSelfie(uri);
+            scrollRef.current?.scrollTo({ y: Math.max(docsCardY.current - 12, 0), animated: true });
+        } catch (e: any) {
+            Alert.alert('Could not open camera', friendlyError(e, 'We could not open the camera. Please try again.'));
         }
-    }, [profile]);
+    };
+
+    // Worker ID label (Zebra 3.5" × 2.25"). Only once FoodyzzHQ has verified the
+    // licence, address and selfie — otherwise anyone could print a Foodyzz badge
+    // carrying an unchecked photo — and the server has issued the worker ID.
+    const labelReady = areDocumentsVerified(profile) && !!profile?.workerId;
+    const handlePrintLabel = async () => {
+        if (printingLabelRef.current) return;
+        if (!labelReady) {
+            Alert.alert(
+                'Not ready to print',
+                areDocumentsVerified(profile)
+                    ? 'Your worker ID is still being issued. Try again in a moment.'
+                    : 'You can print your worker ID label once FoodyzzHQ has verified your driver license, proof of address and selfie.',
+            );
+            return;
+        }
+        printingLabelRef.current = true;
+        setPrintingLabel(true);
+        try {
+            // The header already resolved this selfie's URL — reuse it.
+            const url = selfieUrl ?? await documentImageUrl(profile.selfie.frontPath);
+            const selfieDataUrl = await imageAsDataUrl(url);
+            await Print.printAsync({
+                html: buildWorkerLabelHtml({
+                    name: profile?.name || '',
+                    workerId: profile.workerId,
+                    selfieDataUrl,
+                }),
+                width: LABEL_WIDTH_PT,
+                height: LABEL_HEIGHT_PT,
+                // The label draws its own padding; iOS would otherwise add a default margin.
+                margins: { top: 0, right: 0, bottom: 0, left: 0 },
+            });
+        } catch (e: any) {
+            if (isPrintCancelled(e)) return;
+            Alert.alert('Could not print', friendlyError(e, 'The label did not print. Check the printer is on and connected, then try again.'));
+        } finally {
+            printingLabelRef.current = false;
+            setPrintingLabel(false);
+        }
+    };
 
     const handleSaveCard = async () => {
         if (!cardName.trim() || !cardComplete) {
@@ -154,6 +241,11 @@ export default function ProfileScreen() {
             Alert.alert('Error', 'Required fields: Name, Email, and Address.');
             return;
         }
+        // Optional here, but if one is entered it has to be a real one.
+        if (editCompletionId && !isValidCompletionId(editCompletionId)) {
+            Alert.alert('Check your Completion ID', "It's numbers with one '-' in the middle, up to 15 characters.");
+            return;
+        }
 
         const apiKey = globalConfig?.apiKeys?.googleMap;
         let lat: number | null = null;
@@ -183,6 +275,7 @@ export default function ProfileScreen() {
                 email: editEmail,
                 address: editAddress,
                 zipCode: extractZip(editAddress) || null,
+                bikeSafetyCompletionId: editCompletionId || null,
                 ...(lat !== null && lng !== null ? { lat, lng } : {}),
             });
             setIsEditing(false);
@@ -238,7 +331,7 @@ export default function ProfileScreen() {
                 <Text className="text-xl font-black text-black uppercase tracking-tighter leading-none">My.<Text className="text-brand-green-dark">Profile</Text></Text>
                 {!isEditing && (
                     <TouchableOpacity
-                        onPress={() => setIsEditing(true)}
+                        onPress={startEditing}
                         className="bg-indigo-50 px-3 py-1.5 rounded-xl border border-indigo-100 flex-row items-center gap-2"
                     >
                         <Edit2 size={12} color={COLORS.brand.greenDark} />
@@ -263,23 +356,63 @@ export default function ProfileScreen() {
     return (
         <View className="flex-1 bg-white">
             {header}
-            <ScrollView className="flex-1 px-4 pt-4" showsVerticalScrollIndicator={false}>
+            <ScrollView ref={scrollRef} className="flex-1 px-4 pt-4" showsVerticalScrollIndicator={false}>
                 {/* Profile Card */}
                 <View className="bg-white border-2 border-black rounded-[32px] p-6 shadow-brutalist mb-6">
                     <View className="flex-row items-center gap-4 mb-6">
-                        <View className="w-16 h-16 bg-indigo-600 rounded-2xl items-center justify-center border-2 border-black">
-                            <Text className="text-white text-2xl font-black">{profile?.name?.slice(0, 2).toUpperCase() || '??'}</Text>
-                        </View>
-                        <View>
+                        {/* Selfie box — the rider's selfie once taken (it goes on the
+                            worker ID). Tapping opens the front camera. */}
+                        <TouchableOpacity
+                            onPress={handleTakeSelfie}
+                            accessibilityRole="button"
+                            accessibilityLabel={selfieUrl || draftSelfie ? 'Retake selfie' : 'Take selfie'}
+                            className="w-16 h-16 bg-slate-100 rounded-2xl items-center justify-center border-2 border-black overflow-hidden"
+                        >
+                            {draftSelfie || selfieUrl ? (
+                                <Image source={{ uri: (draftSelfie || selfieUrl)! }} className="w-full h-full" resizeMode="cover" />
+                            ) : (
+                                <>
+                                    <Camera size={20} color="#64748b" />
+                                    <Text className="text-[8px] font-black uppercase text-slate-500 tracking-widest mt-1">Selfie</Text>
+                                </>
+                            )}
+                        </TouchableOpacity>
+                        <View className="flex-1">
                             <Text className="text-lg font-black text-black uppercase">{profile?.name || 'Incomplete Profile'}</Text>
-                            <Text className="text-[10px] font-mono text-slate-400 font-bold">{user?.phoneNumber}</Text>
+                            {/* Phone, then the worker ID once the server has issued it. */}
+                            <Text className="text-[10px] font-mono text-slate-400 font-bold">
+                                {user?.phoneNumber}
+                                {profile?.workerId ? <Text className="text-slate-600 font-black"> {profile.workerId}</Text> : null}
+                            </Text>
                         </View>
+                        {/* Print the worker ID label — greyed until the documents are verified. */}
+                        <TouchableOpacity
+                            onPress={handlePrintLabel}
+                            disabled={printingLabel}
+                            accessibilityRole="button"
+                            accessibilityLabel="Print worker ID label"
+                            className={`w-10 h-10 rounded-xl border-2 items-center justify-center ${
+                                labelReady ? 'border-black bg-white' : 'border-slate-200 bg-slate-50'
+                            }`}
+                        >
+                            {printingLabel
+                                ? <ActivityIndicator size="small" color="#000000" />
+                                : <Printer size={18} color={labelReady ? '#000000' : '#cbd5e1'} />}
+                        </TouchableOpacity>
                     </View>
 
                     <View className="space-y-4">
                         <View className="flex-row items-center gap-3">
                             <Mail size={16} color="#94a3b8" />
                             <Text className="text-xs font-bold text-slate-600">{profile?.email || 'No email set'}</Text>
+                        </View>
+                        <View className="flex-row items-center gap-3">
+                            <ShieldCheck size={16} color="#94a3b8" />
+                            <Text className="text-xs font-bold text-slate-600 flex-1">
+                                {profile?.bikeSafetyCompletionId
+                                    ? <>Safety course ID <Text className="font-mono font-black">{profile.bikeSafetyCompletionId}</Text></>
+                                    : 'No safety course Completion ID'}
+                            </Text>
                         </View>
                         <View className="flex-row items-start gap-3">
                             <MapPin size={16} color="#94a3b8" className="mt-0.5" />
@@ -288,9 +421,18 @@ export default function ProfileScreen() {
                     </View>
                 </View>
 
-                {/* Driver license — scan ahead of time to skip the ID check at rental. */}
-                <View className="px-5 mb-5">
-                    <IdentityDocumentsCard profile={profile} />
+                {/* Driver license, proof of address and selfie — scan ahead of time to
+                    skip the ID check at rental. */}
+                <View className="px-5 mb-5" onLayout={(e) => { docsCardY.current = e.nativeEvent.layout.y; }}>
+                    <IdentityDocumentsCard
+                        profile={profile}
+                        incomingSelfie={pendingSelfie}
+                        onSelfieDraftChange={(uri) => {
+                            setDraftSelfie(uri);
+                            // Discarded or submitted — don't re-apply it if the card remounts.
+                            if (!uri) setPendingSelfie(null);
+                        }}
+                    />
                 </View>
 
                 {/* Saved Payment Card */}
@@ -544,6 +686,24 @@ export default function ProfileScreen() {
                                     apiKey={globalConfig?.apiKeys?.googleMap}
                                     inputClassName="bg-slate-50 border-2 border-black rounded-2xl p-4 font-bold text-black"
                                 />
+                            </View>
+                            <View>
+                                <Text className="text-[10px] font-black text-slate-400 uppercase mb-2 ml-1">Bike Safety Course Completion ID</Text>
+                                <TextInput
+                                    value={editCompletionId}
+                                    onChangeText={(t) => setEditCompletionId(sanitizeCompletionId(t))}
+                                    placeholder="e.g. 1234567-89012"
+                                    placeholderTextColor="#94a3b8"
+                                    maxLength={COMPLETION_ID_MAX_LENGTH}
+                                    keyboardType={Platform.OS === 'ios' ? 'numbers-and-punctuation' : 'phone-pad'}
+                                    autoCorrect={false}
+                                    className="bg-slate-50 border-2 border-black rounded-2xl p-4 font-bold text-black font-mono"
+                                />
+                                <TouchableOpacity onPress={() => Linking.openURL(DELIVER_SAFELY_URL)} className="mt-2 ml-1">
+                                    <Text className="text-[10px] font-black text-brand-green-dark underline">
+                                        Not done the course yet? nyc.gov/DeliverSafely
+                                    </Text>
+                                </TouchableOpacity>
                             </View>
 
                             <TouchableOpacity
