@@ -158,7 +158,11 @@ export default function FleetInsightsModal({ entity, isProvider, orders, config,
                 <span className={`text-[10px] font-black uppercase tracking-widest px-2 py-0.5 border-2 ${health.cls}`}>{health.label}</span>
               </div>
               <p className="text-xs font-mono text-stone-400 mt-1">
-                {entity.phoneNumber} · {isProvider ? 'Provider' : 'Customer'}
+                {entity.phoneNumber}
+                {/* Worker ID after the phone, as in the rider app — server-issued, so
+                    absent for a moment after onboarding. */}
+                {!isProvider && customer!.workerId ? <span className="text-stone-700 font-black"> {customer!.workerId}</span> : null}
+                {' · '}{isProvider ? 'Provider' : 'Customer'}
                 {isProvider && provider!.zipCode ? ` · ZIP ${provider!.zipCode}` : ''}
               </p>
             </div>

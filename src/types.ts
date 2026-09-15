@@ -33,6 +33,8 @@ export interface UserProfile {
   addressProof?: DriverLicense;
   // Submitted and verified with the two above; matched against the licence photo.
   selfie?: DriverLicense;
+  // Unique running number from "002", issued by the server once onboarded.
+  workerId?: string;
   isBlocked?: boolean;
   fcmToken?: string;
   isAdmin?: boolean;
