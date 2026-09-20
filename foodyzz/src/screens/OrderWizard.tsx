@@ -80,7 +80,7 @@ export default function OrderWizard() {
   const navigation = useNavigation<any>();
   // Presented as a stack modal, so it fills the window and its fixed footer is
   // the last thing above the nav bar.
-  const { bottom } = useSafeAreaInsets();
+  const { top, bottom } = useSafeAreaInsets();
   // Home's "Apply to Next Order" opens the wizard with the promo's code and the type
   // it was minted for, so tapping an offer starts the matching transaction and the
   // code is already waiting on the confirm step.
@@ -916,11 +916,14 @@ export default function OrderWizard() {
           (a grey disc behind the close button, which react-native-screens 4.11 can't
           disable), and the white native header used to paint over the top of this
           white strip — invisibly, since both surfaces are the same white — which is
-          what clipped the step label in half. No safe-area padding is needed: iOS
-          presents this as a page sheet, below the status bar, and Android runs with
-          edgeToEdgeEnabled false. The explicit lineHeight keeps the 10px uppercase
-          glyphs off the top of their own line box. */}
-      <View className="bg-white border-b-2 border-black pt-3">
+          what clipped the step label in half. The top inset is what a native header
+          would have reserved: SDK 54 turned edgeToEdgeEnabled on, so on Android this
+          bar draws behind the status bar and the camera cutout landed on the title
+          with the close button half under it. iOS reports 0 here — a page sheet
+          already starts below the status bar — so the padding costs it nothing. The
+          explicit lineHeight keeps the 10px uppercase glyphs off the top of their own
+          line box. */}
+      <View className="bg-white border-b-2 border-black" style={{ paddingTop: top + 12 }}>
         <View className="flex-row items-center px-5">
           <View className="flex-1" />
           <Text className="text-lg font-black text-black">Ride Now</Text>
