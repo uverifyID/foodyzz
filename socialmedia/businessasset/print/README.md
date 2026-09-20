@@ -14,11 +14,22 @@ Built 2026-09-09 from the three logo files in `../` and the numbers in
 | `pdf/card-front-3-paper.pdf` | Business card front — tint field, `foodyzz3` 3D render | 3.5 × 2 in | 3.75 × 2.25 in |
 | `pdf/card-back.pdf` | **Shared back** — QR, contact, UL line. Pairs with all five fronts. | 3.5 × 2 in | 3.75 × 2.25 in |
 | `pdf/rack-4x6.pdf` | 4 × 6 price card | 4 × 6 in | 4.25 × 6.25 in |
+| `pdf/rack-4x6-sheet-letter.pdf` | The 4 × 6 card **four-up on US Letter** for home/office printing, with crop marks | 3.5 × 5.25 in each (87.5%) | 8.5 × 11 in |
 | `pdf/foodyzz-print-pack.pdf` | All of the above as one flip-through proof | — | — |
 | `png/*.png` | 300 dpi rasters of the same pages, for web/preview use | — | — |
 | `src/*.html` | Self-contained sources — fonts and images embedded, no network needed | — | — |
+| `src/make-rack-sheet.py` | Builds the four-up Letter sheet from `src/rack-4x6.html` | — | — |
 | `src/build.py` | Regenerates every HTML from the logo files | — | — |
 | `foodyzz-logomark-square.png` | Bonus: the rider-in-disc glyph cut out of `foodyzz1`, as a square mark | — | — |
+
+## Printing the 4 × 6 four-up at home
+
+Four full-size 4 × 6 cards need 8 × 12 in, which is bigger than a Letter sheet, so
+`rack-4x6-sheet-letter.pdf` scales each card to **87.5% (3.5 × 5.25 in)** and butts
+the four together. Print at **Actual size / 100%**, not "Fit to page". Cut along the
+crop marks: two cuts down, two across. The QR is enlarged in this version so it still
+prints at about 0.66 in with 0.58 mm modules. The fine print shrinks to about 3.7 pt.
+It is legible, but for the full-size card use `rack-4x6.pdf` at a print shop.
 
 ## Sending to a printer
 
