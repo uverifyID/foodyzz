@@ -117,8 +117,20 @@ export default function AppNavigator() {
       <Stack.Screen name="Support" component={ChatScreen} />
       <Stack.Screen name="OrderChat" component={ChatScreen} />
       {/* Identity / address / sign-up location checks for Rent and Rent to Buy.
-          Opened from Account and from checkout when the server requires it. */}
-      <Stack.Screen name="Verification" component={VerificationScreen} />
+          Opened from Account and from checkout when the server requires it.
+
+          Presented modally because of where it is opened FROM. The wizard is
+          itself a modal, and on iOS a native-stack push from a presented screen
+          goes into the navigation controller underneath it — the screen is
+          created but stays behind the wizard, so "Verify now" looked like it did
+          nothing. Presenting over the wizard also keeps the checkout mounted
+          behind it, so finishing here drops the customer back on step 6 with
+          their order still filled in rather than at the start of a new one. */}
+      <Stack.Screen
+        name="Verification"
+        component={VerificationScreen}
+        options={{ presentation: 'modal' }}
+      />
     </Stack.Navigator>
   );
 }
