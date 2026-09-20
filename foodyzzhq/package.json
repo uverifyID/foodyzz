@@ -1,6 +1,6 @@
 {
   "name": "foodyzz-provider",
-  "version": "1.0.0",
+  "version": "3.0.0",
   "main": "./app/index.tsx",
   "scripts": {
     "start": "cross-env NODE_OPTIONS=--max-old-space-size=8192 expo start",
