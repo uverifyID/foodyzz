@@ -6,7 +6,7 @@ import { Building, Zap, Clock, MapPin, CheckCircle, X, Truck, RefreshCcw, Bike, 
 import { activateKeepAwakeAsync, deactivateKeepAwake } from 'expo-keep-awake';
 import { COLORS } from '../theme';
 import { db } from '../services/firebase';
-import { useActiveProvider, useGlobalConfig, useProviderOrders, useBikeInventory } from '../hooks';
+import { useActiveProvider, useGlobalConfig, useOrdersFeed, useBikeInventory } from '../hooks';
 import firebase from '@react-native-firebase/app';
 import '@react-native-firebase/functions';
 import { OrderStatus, RentalOrder } from '../types';
@@ -14,6 +14,7 @@ import { getScheduleLines } from '../utils/schedule';
 import ProviderNotes from '../components/ProviderNotes';
 import CustomerIdCard from '../components/CustomerIdCard';
 import { getCurrentProviderCoords, warnLocationUnavailableOnce } from '../utils/location';
+import { isDispatchOrder } from '../utils/orderFeed';
 
 
 export default function DispatchScreen() {
@@ -30,24 +31,27 @@ export default function DispatchScreen() {
     .onSnapshot((snap) => setVerifyQueue(snap?.size ?? 0), () => setVerifyQueue(0)), []);
 
   // Shared hooks replace the per-screen config/provider/orders listener block.
-  // The feed is every open request on the platform, not the active store's — see
-  // useProviderOrders. The store profile is still read, for the blocked/paused
-  // banner and to stamp identity on accept, but it no longer gates the feed: an
-  // admin with no store selected still sees the work.
+  // Orders come from the one listener this app runs (hooks/OrdersFeed): every
+  // order on the platform, every status, not the active store's slice. The store
+  // profile is still read, for the blocked/paused banner and to stamp identity on
+  // accept, but it no longer gates the feed — an admin with no store selected
+  // still sees the work.
   const config = useGlobalConfig();
   const { models: inventory } = useBikeInventory();
   const { profile: providerProfile } = useActiveProvider();
-  const { orders, loading, error: ordersError, applyOptimistic, clearOptimistic } = useProviderOrders({
-    statuses: ['requested', 'confirmed', 'en_route_pickup', 'at_pickup', 'pending_customer_confirmation'],
-    // Safety read-cap on the feed.
-    limitTo: 100,
-  });
+  const { orders, loading, error: ordersError, applyOptimistic, clearOptimistic } = useOrdersFeed();
 
   // A blocked or self-paused store still sees its in-flight work; the customer app
   // simply stops offering it as a pickable location.
   const isBlocked = !!providerProfile?.isBlocked;
   const servicesActive = providerProfile?.servicesActive ?? true;
-  const visibleOrders = orders;
+
+  // Dispatch is the CATCH-ALL half of the feed: everything Operations does not
+  // claim. Today that is requested (pending), confirmed (accepted, collecting the
+  // rider's documents), cancelled, and — importantly — any status this build does
+  // not recognise, so a value written by a newer build or edited by hand in the
+  // console surfaces here instead of being invisible in the whole app.
+  const visibleOrders = useMemo(() => orders.filter(isDispatchOrder), [orders]);
 
   const [processingOrderId, setProcessingOrderId] = useState<string | null>(null);
 
@@ -532,6 +536,10 @@ export default function DispatchScreen() {
                     )}
                   </View>
                     
+                  {/* Status pill, plus Cancel while the order can still be cancelled.
+                      A cancelled order keeps the pill — it is on this screen so staff
+                      can see what happened to it — but cancelling it again is not a
+                      thing, so the button is dropped rather than the whole row. */}
                   {![OrderStatus.DELIVERED, OrderStatus.COMPLETED, OrderStatus.EN_ROUTE_DELIVERY, OrderStatus.AT_DELIVERY, OrderStatus.DELIVERED].includes(order.status as OrderStatus) && (
                     <View className="flex-row gap-2 mt-2">
                       <View
@@ -557,12 +565,14 @@ export default function DispatchScreen() {
                           {getStatusLabel(order.status, isPickupOrder)}
                         </Text>
                       </View>
-                      <TouchableOpacity
-                        onPress={() => handleCancelOrder(order.id)}
-                        className="px-4 bg-rose-50 border border-rose-100 rounded-2xl justify-center items-center"
-                      >
-                        <Text className="text-rose-600 font-black uppercase text-[8px] tracking-widest">Cancel</Text>
-                      </TouchableOpacity>
+                      {order.status !== OrderStatus.CANCELLED && (
+                        <TouchableOpacity
+                          onPress={() => handleCancelOrder(order.id)}
+                          className="px-4 bg-rose-50 border border-rose-100 rounded-2xl justify-center items-center"
+                        >
+                          <Text className="text-rose-600 font-black uppercase text-[8px] tracking-widest">Cancel</Text>
+                        </TouchableOpacity>
+                      )}
                     </View>
                   )}
                 </View>

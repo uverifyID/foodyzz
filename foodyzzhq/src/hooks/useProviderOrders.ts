@@ -2,8 +2,6 @@ import { useEffect, useMemo, useState, useCallback } from 'react';
 import { db, isTransient, resetFirestoreConnection } from '../services/firebase';
 
 export type ProviderOrdersOpts = {
-  /** status `in` filter (omit for no status constraint). */
-  statuses?: string[];
   /** caps results with `.limit()`. */
   limitTo?: number;
 };
@@ -54,11 +52,20 @@ const isPatchSatisfied = (doc: any, data: Record<string, any>): boolean =>
   });
 
 /**
- * Live orders for FoodyzzHQ. Composes the two distinct queries its screens use,
- * with identical semantics + indexes:
- *  - Dispatch:  { statuses:[…], limitTo:100 }
- *  - Logistics: { statuses:[…], limitTo:100 }
- * Always ordered by createdAt desc.
+ * Live orders for FoodyzzHQ: the most recent `limitTo`, newest first.
+ *
+ * NO STATUS FILTER, deliberately. The two screens used to query disjoint status
+ * allow-lists, which meant any status in neither list was invisible in the whole
+ * app — `cancelled` was, and three of Dispatch's five listed statuses
+ * (en_route_pickup, at_pickup, pending_customer_confirmation) had never been
+ * written to `status` at all, so the list was both leaky and stale. The goal is
+ * that every order placed in the Foodyzz app is visible here, so the split is now
+ * made in the screens, over one shared feed: Operations claims its five delivery
+ * statuses plus cancelled, and Dispatch shows everything else — including a status
+ * this build has never heard of. Nothing can fall between them.
+ *
+ * It also means the query is a bare orderBy(createdAt), which Firestore's automatic
+ * single-field index serves — no composite index to deploy before a build ships.
  *
  * PLATFORM-WIDE, not scoped to the active store — the same call the Chat Center
  * already makes. FoodyzzHQ is the admin app: everyone holding it is staff, and
@@ -78,7 +85,7 @@ const isPatchSatisfied = (doc: any, data: Record<string, any>): boolean =>
  * wedged snapshot no longer forces an app restart.
  */
 export function useProviderOrders(opts: ProviderOrdersOpts = {}) {
-  const { statuses, limitTo } = opts;
+  const { limitTo } = opts;
   const [orders, setOrders] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   // Set when the listener died on a TERMINAL error (permission-denied on a stale
@@ -87,9 +94,6 @@ export function useProviderOrders(opts: ProviderOrdersOpts = {}) {
   // and a quiet day looked identical on the device.
   const [error, setError] = useState<string | null>(null);
   const [patches, setPatches] = useState<Record<string, Patch>>({});
-
-  // Stable primitive dep for the statuses array.
-  const statusesKey = statuses ? statuses.join(',') : '';
 
   const applyOptimistic = useCallback((orderId: string, data: Record<string, any>) => {
     setPatches(prev => ({
@@ -116,9 +120,7 @@ export function useProviderOrders(opts: ProviderOrdersOpts = {}) {
     const subscribe = () => {
       // Read the provider-safe mirror (charge/authorization fields stripped server-side),
       // never the raw `orders` collection — providers must not see customer charges.
-      let query: any = db.collection('providerOrders');
-      if (statuses && statuses.length) query = query.where('status', 'in', statuses);
-      query = query.orderBy('createdAt', 'desc');
+      let query: any = db.collection('providerOrders').orderBy('createdAt', 'desc');
       if (limitTo) query = query.limit(limitTo);
 
       unsub = query.onSnapshot(
@@ -193,7 +195,7 @@ export function useProviderOrders(opts: ProviderOrdersOpts = {}) {
       clearTimeout(retry);
       try { unsub(); } catch { /* already torn down */ }
     };
-  }, [statusesKey, limitTo]);
+  }, [limitTo]);
 
   // Orders with any live optimistic overlay applied (skipping ones the snapshot has
   // already caught up to, which are also pruned above).

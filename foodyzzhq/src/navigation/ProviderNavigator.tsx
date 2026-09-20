@@ -14,6 +14,7 @@ import HqChatScreen from '../screens/HqChatScreen';
 import SupportScreen from '../screens/SupportScreen';
 import VerificationsScreen from '../screens/VerificationsScreen';
 import { db } from '../services/firebase';
+import { OrdersFeedProvider } from '../hooks';
 import { COLORS } from '../theme';
 
 const Tab = createBottomTabNavigator();
@@ -67,6 +68,9 @@ function MainTabs() {
   // Devices with no bottom inset are unaffected — this is the old 75/12 there.
   const { bottom } = useSafeAreaInsets();
   return (
+    // Dispatch and Operations divide one shared order listener between them; see
+    // OrdersFeed. Mounted here so it survives switching between the two tabs.
+    <OrdersFeedProvider>
     <Tab.Navigator screenOptions={{
       headerShown: false,
       tabBarStyle: {
@@ -106,6 +110,7 @@ function MainTabs() {
         ),
       }} />
     </Tab.Navigator>
+    </OrdersFeedProvider>
   );
 }
 

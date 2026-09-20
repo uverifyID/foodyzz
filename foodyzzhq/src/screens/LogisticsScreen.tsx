@@ -6,7 +6,7 @@ import { useNavigation } from '@react-navigation/native';
 import { Truck, Clock, MessageSquare, Bell, MapPin, CheckCircle, RefreshCcw, Package, Phone, Search, X, Bike, QrCode, CreditCard, CalendarClock, User, UserX, AlertTriangle, ClipboardCheck } from 'lucide-react-native';
 import { COLORS } from '../theme';
 import { db } from '../services/firebase';
-import { useGlobalConfig, useLogisticsConfig, useProviderOrders } from '../hooks';
+import { useGlobalConfig, useLogisticsConfig, useOrdersFeed } from '../hooks';
 import { OrderStatus, RentalOrder } from '../types';
 import { getScheduleLines, getOrderDates } from '../utils/schedule';
 import { getCurrentProviderCoords, warnLocationUnavailableOnce } from '../utils/location';
@@ -196,17 +196,21 @@ export default function LogisticsScreen() {
   const functions = firebase.app().functions('us-central1');
 
   // Shared hooks replace the per-screen config/provider/orders listener blocks.
-  // Orders are capped to the 100 most-recent active+recent-completed, platform-wide
-  // rather than per-store (see useProviderOrders), served by the
-  // providerOrders(status,createdAt) composite index.
+  // One unfiltered platform-wide listener backs both order screens (hooks/OrdersFeed);
+  // Operations takes its own statuses out of it. No status filter on the query means
+  // no composite index — a bare orderBy(createdAt) is served automatically.
+  //
+  // The lanes need no status guard of their own: categoryOf() returns null for
+  // anything outside the five delivery statuses, and the Completed filter checks
+  // `status === 'completed'`, so a requested / confirmed / cancelled order in the
+  // window already falls through every lane and every filter. Search is deliberately
+  // left unfiltered — a customer at the counter should be findable whatever state
+  // their order is in, which is how the remote-id lookup below already behaves.
   const config = useGlobalConfig();
   // Rates + the missed-pickup admin fee, so the "not present" confirmation can state
   // exactly what the customer is about to be charged.
   const logistics = useLogisticsConfig();
-  const { orders, loading, applyOptimistic, clearOptimistic } = useProviderOrders({
-    statuses: ['ready_for_delivery', 'en_route_delivery', 'at_delivery', 'delivered', 'completed'],
-    limitTo: 100,
-  });
+  const { orders, loading, applyOptimistic, clearOptimistic } = useOrdersFeed();
 
   // Adjust-price modal + logic is shared with the Dispatch screen.
 
