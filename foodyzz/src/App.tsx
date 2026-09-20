@@ -11,6 +11,7 @@ import {
 import { SpaceGrotesk_700Bold } from '@expo-google-fonts/space-grotesk';
 import { JetBrainsMono_400Regular } from '@expo-google-fonts/jetbrains-mono';
 import * as SplashScreen from 'expo-splash-screen';
+import { StatusBar } from 'expo-status-bar';
 import * as Notifications from 'expo-notifications';
 import Constants from 'expo-constants';
 import { StripeProvider } from '@stripe/stripe-react-native';
@@ -290,6 +291,8 @@ export default function App() {
   if (!fontsReady || initializing) {
     return (
       <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: '#507425' }}>
+        {/* Light glyphs for the one dark screen in the app — see the note below. */}
+        <StatusBar style="light" />
         <ActivityIndicator size="large" color="#FFFFFF" />
         <View style={{ marginTop: 20, padding: 20, backgroundColor: 'white', borderRadius: 10 }}>
           <Text style={{ color: '#507425', fontSize: 16, fontWeight: 'bold' }}>Initialising Node...</Text>
@@ -307,6 +310,13 @@ export default function App() {
 
   return (
     <SafeAreaProvider>
+      {/* Dark glyphs for the clock, battery and signal. Every screen past the
+          loading state is bg-white or bg-slate-50, and edge-to-edge (on since SDK
+          54) draws them straight onto that, so the default light glyphs were white
+          on white — an apparently empty status bar. Only `style` is set: the
+          `backgroundColor` prop maps to the API 35 call Play flags as deprecated,
+          and under edge-to-edge the bar is transparent by design anyway. */}
+      <StatusBar style="dark" />
       {/* No `key` here. StripeProvider is a pass-through that renders <>{children}</>
           and re-runs NativeStripeSdk.initialise from a useEffect keyed on
           publishableKey — so it ALREADY re-initialises when the real key arrives.
