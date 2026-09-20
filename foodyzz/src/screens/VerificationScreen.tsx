@@ -15,7 +15,7 @@ import { View, Text, ScrollView, TouchableOpacity, Alert, ActivityIndicator, Ima
 import {
   ChevronLeft, ScanFace, FileText, MapPinCheck, CheckCircle, Clock, AlertTriangle, Camera, ImageIcon, ShieldCheck,
 } from 'lucide-react-native';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useRoute } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useUserProfile } from '../context/UserProfileContext';
 import { COLORS } from '../theme';
@@ -127,6 +127,29 @@ export default function VerificationScreen() {
   const busyRef = useRef(false);
   const mounted = useRef(true);
   useEffect(() => () => { mounted.current = false; }, []);
+
+  // Sent here mid-checkout? Hand the customer back once the gate actually passes.
+  //
+  // The trigger is the OVERALL status, not any one card finishing. Closing when
+  // the ID came back would drop someone who still has the location check to do
+  // straight onto Confirm, where the same prompt sends them back here — a loop.
+  // Identity and sign-up location together are what the rental is gated on, and
+  // that is exactly what `status` reports.
+  //
+  // Not while something is in flight: proof of address is optional now, so the
+  // gate can pass while an upload is still running, and yanking the screen away
+  // mid-upload would look like a crash. The delay leaves the green result on
+  // screen long enough to read before the screen goes.
+  //
+  // The wizard is still mounted underneath (this screen is presented over it),
+  // so goBack lands them on Confirm with the order exactly as they left it.
+  const route = useRoute<any>();
+  const returnToCheckout = route.params?.returnTo === 'checkout';
+  useEffect(() => {
+    if (!returnToCheckout || v.status !== 'verified' || busy) return;
+    const t = setTimeout(() => { if (mounted.current) navigation.goBack(); }, 1400);
+    return () => clearTimeout(t);
+  }, [returnToCheckout, v.status, busy, navigation]);
 
   const [showManual, setShowManual] = useState(false);
   const [idImages, setIdImages] = useState<Partial<Record<IdSlot, string>>>({});

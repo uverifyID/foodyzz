@@ -504,8 +504,10 @@ export default function OrderWizard() {
         ? 'Our team is reviewing your details. We will notify you as soon as you can rent — usually within a few hours.'
         : 'Before we hand over a rental bike we confirm your ID, your address and that you signed up from your delivery address. It takes about 3 minutes.',
       inReview
-        ? [{ text: 'OK' }, { text: 'View status', onPress: () => navigation.navigate('Verification') }]
-        : [{ text: 'Not now', style: 'cancel' }, { text: 'Verify now', onPress: () => navigation.navigate('Verification') }],
+        // returnTo: the verification screen hands them back here once the gate
+        // passes, rather than leaving them to find their own way to Confirm.
+        ? [{ text: 'OK' }, { text: 'View status', onPress: () => navigation.navigate('Verification', { returnTo: 'checkout' }) }]
+        : [{ text: 'Not now', style: 'cancel' }, { text: 'Verify now', onPress: () => navigation.navigate('Verification', { returnTo: 'checkout' }) }],
     );
   };
 
