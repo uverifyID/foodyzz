@@ -74,6 +74,13 @@ export default function OnboardingWizard({
     }
   };
 
+  // The email step gates the CTA itself rather than alerting on tap: the code is
+  // the whole point of the step, so "Continue" should not look available until it
+  // has come back. EmailConfirmField tracks confirmation against the exact address
+  // it verified, so editing the field flips this back off on its own.
+  // validateCurrentStep still covers it — that stays the backstop.
+  const continueBlocked = step === 2 && !emailConfirmed;
+
   const handleNext = () => {
     const error = validateCurrentStep();
     if (error) {
@@ -275,17 +282,24 @@ export default function OnboardingWizard({
         <View className="py-8">
           <TouchableOpacity
             onPress={handleNext}
-            disabled={saving}
-            className="bg-black py-5 rounded-3xl items-center shadow-brutalist border-2 border-black"
+            disabled={saving || continueBlocked}
+            accessibilityRole="button"
+            accessibilityState={{ disabled: saving || continueBlocked }}
+            accessibilityHint={continueBlocked ? 'Confirm your email with the code we sent to continue' : undefined}
+            className={`py-5 rounded-3xl items-center border-2 ${
+              continueBlocked ? 'bg-slate-200 border-slate-200' : 'bg-black border-black shadow-brutalist'
+            }`}
           >
             {saving ? (
               <ActivityIndicator color="white" />
             ) : (
               <View className="flex-row items-center gap-2">
-                <Text className="text-white font-black uppercase">
+                <Text className={`font-black uppercase ${continueBlocked ? 'text-slate-400' : 'text-white'}`}>
                   {isFinalStep ? 'Finish & Enter App' : 'Continue'}
                 </Text>
-                {isFinalStep ? <Check size={18} color="white" /> : <ArrowRight size={18} color="white" />}
+                {isFinalStep
+                  ? <Check size={18} color={continueBlocked ? '#94a3b8' : 'white'} />
+                  : <ArrowRight size={18} color={continueBlocked ? '#94a3b8' : 'white'} />}
               </View>
             )}
           </TouchableOpacity>
