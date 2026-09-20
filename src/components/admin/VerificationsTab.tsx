@@ -320,7 +320,9 @@ function VerificationDetail({ phone }: { phone: string }) {
       </div>
       {!data.required && (
         <p className="text-[11px] font-bold text-amber-700 bg-amber-50 border-2 border-amber-300 p-2">
-          The checkout gate is OFF (Settings → apiConfig/global.verification.required) — customers can still rent without this.
+          The checkout gate is OFF for this customer — they can still rent without it. Check
+          apiConfig/global.verification: either <code>required</code> is off, or <code>legacy</code> is
+          still set and this number is not in <code>pilotPhones</code>.
         </p>
       )}
 

@@ -288,6 +288,15 @@ function ctx(env, phone) {
   await check("store staff CANNOT set a customer's workerId",
     assertFails(hqStaffCtx.doc(`users/${OTHER_PHONE}`).set({ workerId: "001" }, { merge: true })));
 
+  await check("owner CANNOT stamp their own emailVerified (code-confirmed server-side)",
+    assertFails(owner.doc(`users/${OWNER_PHONE}`)
+      .set({ emailVerified: { email: "a@gmail.com", verifiedAt: "now" } }, { merge: true })));
+  await check("owner CANNOT create their doc carrying an emailVerified stamp",
+    assertFails(env.authenticatedContext("new-email", { phone_number: "+15550008888" }).firestore()
+      .doc("users/+15550008888").set({ name: "Me", emailVerified: { email: "a@gmail.com" } })));
+  await check("owner CAN still write their plain email (the shipped build does)",
+    assertSucceeds(owner.doc(`users/${OWNER_PHONE}`).set({ email: "a@gmail.com" }, { merge: true })));
+
   await check("owner CANNOT set their own verification status (server-derived)",
     assertFails(owner.doc(`users/${OWNER_PHONE}`).set({ verification: { status: "verified" } }, { merge: true })));
   await check("owner CANNOT create their doc carrying a verification status",

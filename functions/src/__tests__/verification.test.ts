@@ -133,7 +133,7 @@ describe('customer verification flow', () => {
   beforeEach(async () => {
     await clearFirestore();
     resetDiditConfigCache();
-    await seedConfig({ verification: { required: true, radiusMiles: 0.25 } });
+    await seedConfig({ verification: { required: true, radiusMiles: 0.25, legacy: false } });
     await db.doc('apiConfigSecret/didit').set({ apiKey: 'k', workflowId: WORKFLOW, webhookSecret: 'whsec' });
     await seedCustomer();
     notify = jest.spyOn(cv.verificationHooks, 'notifyCustomer').mockResolvedValue(undefined);
@@ -148,16 +148,109 @@ describe('customer verification flow', () => {
 
   test('the Rent checkout is refused until verified; Buy is not gated', async () => {
     await expect(callable(fns.createPaymentIntent, {
-      orderId: 'o1', providerId: '14025551111_10118', rentalType: 'rent',
+      orderId: 'o1', providerId: '14025551111_10118', rentalType: 'rent', appVersion: '3.0.0',
     }, phoneAuth(PHONE))).rejects.toThrow(/verification_required/);
     await expect(callable(fns.createPaymentIntent, {
-      orderId: 'o1', providerId: '14025551111_10118', rentalType: 'buy',
+      orderId: 'o1', providerId: '14025551111_10118', rentalType: 'buy', appVersion: '3.0.0',
     }, phoneAuth(PHONE))).rejects.not.toThrow(/verification_required/);
   });
 
   test('the gate stays open while verification.required is off', async () => {
     await db.doc('apiConfig/global').set({ verification: { required: false } }, { merge: true });
     await expect(cv.assertVerifiedForRental(PHONE)).resolves.toBeUndefined();
+  });
+
+  describe('a build too old to show the Verification screen', () => {
+    test('is told to update, in words its raw alert can show', async () => {
+      // 2.1.0 renders error.message verbatim, so the token must not reach it.
+      await expect(cv.assertVerifiedForRental(PHONE, '2.1.0')).rejects.toThrow(/App update required/);
+      await expect(cv.assertVerifiedForRental(PHONE, '2.1.0')).rejects.not.toThrow(/verification_required/);
+      await expect(cv.assertVerifiedForRental(PHONE)).rejects.toThrow(/App update required/);
+    });
+
+    test('a current build still gets the token its checkout catches', async () => {
+      await expect(cv.assertVerifiedForRental(PHONE, '3.0.0')).rejects.toThrow(/verification_required/);
+      await expect(cv.assertVerifiedForRental(PHONE, '3.1.4')).rejects.toThrow(/verification_required/);
+    });
+
+    test('createPaymentIntent passes the version through', async () => {
+      const order = { orderId: 'o1', providerId: '14025551111_10118', rentalType: 'rent' };
+      await expect(callable(fns.createPaymentIntent, order, phoneAuth(PHONE)))
+        .rejects.toThrow(/App update required/);
+      await expect(callable(fns.createPaymentIntent, { ...order, appVersion: '3.0.0' }, phoneAuth(PHONE)))
+        .rejects.toThrow(/verification_required/);
+    });
+
+    test('minAppVersion retires a build without a redeploy', async () => {
+      await db.doc('apiConfig/global').set({ verification: { minAppVersion: '3.2.0' } }, { merge: true });
+      await expect(cv.assertVerifiedForRental(PHONE, '3.0.0')).rejects.toThrow(/App update required/);
+      await expect(cv.assertVerifiedForRental(PHONE, '3.2.0')).rejects.toThrow(/verification_required/);
+    });
+
+    test('a typo in minAppVersion is ignored, not obeyed', async () => {
+      // Obeying it would tell every customer on every build to go and update.
+      await db.doc('apiConfig/global').set({ verification: { minAppVersion: 'v3.0.0' } }, { merge: true });
+      await expect(cv.assertVerifiedForRental(PHONE, '3.0.0')).rejects.toThrow(/verification_required/);
+      await expect(cv.assertVerifiedForRental(PHONE, '2.1.0')).rejects.toThrow(/App update required/);
+    });
+
+    test('a junk version is treated as old', () => {
+      expect(cv.versionAtLeast('', '3.0.0')).toBe(false);
+      expect(cv.versionAtLeast(undefined, '3.0.0')).toBe(false);
+      expect(cv.versionAtLeast('banana', '3.0.0')).toBe(false);
+      expect(cv.versionAtLeast('3', '3.0.0')).toBe(true);
+      expect(cv.versionAtLeast('2.9.9', '3.0.0')).toBe(false);
+      expect(cv.versionAtLeast('10.0.0', '3.0.0')).toBe(true);
+    });
+  });
+
+  // TEMPORARY — delete with the `legacy` block in customerVerification.ts.
+  describe('while the old app is still in production (legacy)', () => {
+    const OTHER = '+14025559999';
+
+    test('a pilot number matches however it was typed into the console', async () => {
+      for (const typed of ['+14025550000', ' +1 402 555 0000', '1-402-555-0000', 14025550000]) {
+        await db.doc('apiConfig/global').set(
+          { verification: { required: true, legacy: true, pilotPhones: [typed] } }, { merge: true });
+        await expect(cv.assertVerifiedForRental(PHONE, '3.0.0'))
+          .rejects.toThrow(/verification_required/);
+      }
+    });
+
+    test('an unlisted customer checks out as before, a pilot phone is gated', async () => {
+      await db.doc('apiConfig/global').set(
+        { verification: { required: true, legacy: true, pilotPhones: [PHONE] } }, { merge: true });
+      await expect(cv.assertVerifiedForRental(OTHER, '3.0.0')).resolves.toBeUndefined();
+      await expect(cv.assertVerifiedForRental(PHONE, '3.0.0')).rejects.toThrow(/verification_required/);
+    });
+
+    test('an old client is not told to update either - it just checks out', async () => {
+      await db.doc('apiConfig/global').set(
+        { verification: { required: true, legacy: true, pilotPhones: [PHONE] } }, { merge: true });
+      await expect(cv.assertVerifiedForRental(OTHER, '2.1.0')).resolves.toBeUndefined();
+    });
+
+    test('legacy is assumed until it is explicitly cleared', async () => {
+      // update() replaces the whole map; a merged set() would keep the seeded flag.
+      await db.doc('apiConfig/global').update({ verification: { required: true } });
+      await expect(cv.assertVerifiedForRental(PHONE)).resolves.toBeUndefined();
+    });
+
+    test('clearing legacy gates everyone, pilot list or not', async () => {
+      await db.doc('apiConfig/global').set(
+        { verification: { required: true, legacy: false, pilotPhones: [] } }, { merge: true });
+      await expect(cv.assertVerifiedForRental(OTHER, '3.0.0')).rejects.toThrow(/verification_required/);
+      await expect(cv.assertVerifiedForRental(PHONE, '3.0.0')).rejects.toThrow(/verification_required/);
+    });
+
+    test('the app is told whether the gate applies to this caller', async () => {
+      await db.doc('apiConfig/global').set(
+        { verification: { required: true, legacy: true, pilotPhones: [PHONE] } }, { merge: true });
+      const mine: any = await callable(fns.getVerificationStatus, {}, phoneAuth(PHONE));
+      expect(mine.required).toBe(true);
+      const theirs: any = await callable(fns.getVerificationStatus, {}, phoneAuth(OTHER));
+      expect(theirs.required).toBe(false);
+    });
   });
 
   test('Didit approval + matching ID ZIP + GPS at the address → verified', async () => {

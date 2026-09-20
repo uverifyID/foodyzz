@@ -9,6 +9,7 @@ import { User, Mail, MapPin, Hash, ArrowRight, ArrowLeft, Check } from 'lucide-r
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { UserProfile } from '../types';
 import AddressAutocomplete from '../components/AddressAutocomplete';
+import EmailConfirmField from '../components/EmailConfirmField';
 import { friendlyError, logHandledError } from '../services/errors';
 
 // One-step-at-a-time profile onboarding. Shown whenever the user's Firestore
@@ -47,6 +48,8 @@ export default function OnboardingWizard({
   // the onboarding flag existed) don't lose what they already entered.
   const [name, setName] = useState(profile?.name || '');
   const [email, setEmail] = useState(profile?.email || '');
+  // Set by EmailConfirmField once a code sent to this address has come back.
+  const [emailConfirmed, setEmailConfirmed] = useState(false);
   const [address, setAddress] = useState(profile?.address || '');
   const [zipCode, setZipCode] = useState(profile?.zipCode || '');
   // Optional referral code from an ambassador (captured at the zip step).
@@ -58,6 +61,7 @@ export default function OnboardingWizard({
         return null;
       case 2:
         if (!EMAIL_REGEX.test(email.trim())) return 'Please enter a valid email address.';
+        if (!emailConfirmed) return 'Please confirm your email with the code we sent before continuing.';
         return null;
       case 3:
         if (!address.trim()) return 'Please enter your street address.';
@@ -161,16 +165,21 @@ export default function OnboardingWizard({
         );
       case 2:
         return (
-          <StepField
-            icon={<Mail size={22} color="#507425" />}
-            label="Email Address"
-            helper="We'll send rental receipts and updates here."
-            value={email}
-            onChangeText={setEmail}
-            placeholder="jane@email.com"
-            keyboardType="email-address"
-            autoCapitalize="none"
-          />
+          <View>
+            <View className="flex-row items-center gap-3 mb-2">
+              <Mail size={22} color="#507425" />
+              <Text className="text-xl font-black uppercase tracking-tighter">Email Address</Text>
+            </View>
+            <Text className="text-xs font-bold text-slate-400 mb-6">
+              We'll send rental receipts and updates here.
+            </Text>
+            <EmailConfirmField
+              value={email}
+              onChangeText={setEmail}
+              profile={profile}
+              onConfirmedChange={setEmailConfirmed}
+            />
+          </View>
         );
       case 3:
         return (

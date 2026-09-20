@@ -75,6 +75,14 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
+    // Email confirmation codes (functions/src/emailVerification.ts). Deny-all, and
+    // not merely unmatched: only a sha256 of the code is stored, but the code is six
+    // digits, so a readable digest is a code — the whole space brute-forces offline
+    // in a moment. Writable would let anyone mark their own address confirmed.
+    match /emailVerifications/{phone} {
+      allow read, write: if false;
+    }
+
     // Single-use join codes, issued per person by a manager (scripts/invite-member.js)
     // and redeemed by the redeemHqInvite function. Deny-all: the CODE is the
     // credential, so a readable collection would be an enumerable key ring, and a
@@ -144,8 +152,11 @@ service cloud.firestore {
       // the rider's badge, so the rider can never set or change it themselves.
       // `verification` is the server-derived identity/address/location status that
       // gates Rent and Rent to Buy (functions/src/customerVerification.ts) — same rule.
+      // `emailVerified` says a confirmation code really was received at that address
+      // (functions/src/emailVerification.ts); self-stamping it would void the check.
+      // The plain `email` field stays writable — the build in the stores sets it.
       allow create: if (request.auth != null && request.auth.token.phone_number == userId
-                        && !request.resource.data.keys().hasAny(['workerId', 'verification']))
+                        && !request.resource.data.keys().hasAny(['workerId', 'verification', 'emailVerified']))
                     || isAdmin();
       allow delete: if (request.auth != null && request.auth.token.phone_number == userId)
                     || isAdmin();
@@ -159,7 +170,7 @@ service cloud.firestore {
       // Platform-wide rather than per-store: scoping to "a customer my store is
       // serving" would mean querying orders, and rules can only get() a known path.
       allow update: if (request.auth != null && request.auth.token.phone_number == userId
-                        && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['workerId', 'verification'])
+                        && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['workerId', 'verification', 'emailVerified'])
                         && ownDocsOk())
                     || isAdmin()
                     || (isHqStaff()

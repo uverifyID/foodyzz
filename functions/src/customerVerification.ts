@@ -91,12 +91,72 @@ export const MAX_DIDIT_SESSIONS_PER_DAY = 5;
 export const MAX_LOCATION_CHECKS_PER_DAY = 20;
 export const MAX_SUBMISSIONS_PER_DAY = 10;
 
-export async function verificationConfig(): Promise<{ required: boolean; radiusMiles: number }> {
+// ── Stale clients ───────────────────────────────────────────────────────────
+// A build without the Verification screen cannot resolve a `verification_required`
+// refusal: its checkout catch is `Alert.alert('Error', error.message)`, so the raw
+// token is what the customer reads, with no way forward. Those callers are told to
+// update instead — the message below IS the alert body on that build. Anything
+// that declares a new enough `appVersion` gets the token, which its checkout
+// catches and turns into the verification prompt.
+//
+// Raise apiConfig/global.verification.minAppVersion to retire a build later;
+// it needs no redeploy.
+export const MIN_VERIFIED_APP_VERSION = "3.0.0";
+export const UPDATE_REQUIRED_MESSAGE =
+  "App update required. Please update Foodyzz from the App Store or Google Play to keep renting.";
+
+/** Dotted numeric version to [major, minor, patch] — null if it isn't one. */
+export function parseVersion(v: unknown): number[] | null {
+  if (typeof v !== "string") return null;
+  const out = v.trim().split(".").slice(0, 3).map((n) => Number.parseInt(n, 10));
+  while (out.length < 3) out.push(0);
+  return out.every((n) => Number.isInteger(n) && n >= 0) ? out : null;
+}
+
+/**
+ * `a >= b`. A missing or unparseable client version is old, so it is told to
+ * update. An unparseable floor is ignored rather than obeyed: a typo in
+ * minAppVersion must not tell every customer on every build to update.
+ */
+export function versionAtLeast(a: unknown, b: string): boolean {
+  const got = parseVersion(a);
+  if (!got) return false;
+  const want = parseVersion(b);
+  if (!want) return true;
+  for (let i = 0; i < 3; i++) {
+    if (got[i] !== want[i]) return got[i] > want[i];
+  }
+  return true;
+}
+
+/** Digits only, so a number typed into the console with spaces, dashes or no `+` still matches. */
+const phoneKey = (v: unknown) => String(v ?? "").replace(/\D/g, "");
+
+// ── TEMPORARY: while the old app is still in production ─────────────────────
+// `legacy: true` means 2.1.0 is still out there. That build has no Verification
+// screen, so a `verification_required` refusal dead-ends it — the customer sees a
+// raw "verification_required" alert and has no way to resolve it. While legacy is
+// set, the gate therefore applies ONLY to `pilotPhones`, so the feature can be
+// tested end to end against real production data without touching anyone else.
+//
+// It defaults to ON: a missing flag means nobody has confirmed the old build is
+// gone, and the safe reading of that is to leave existing customers alone.
+//
+// Setting `legacy: false` is the go-live switch — and the cue to DELETE this
+// block: drop `legacy` and `pilotPhones` from apiConfig/global.verification,
+// drop the `phone` parameter here and at its four call sites, and restore
+// `required: c.required === true`.
+export async function verificationConfig(phone?: string):
+  Promise<{ required: boolean; radiusMiles: number; minAppVersion: string }> {
   const c: any = (await db().doc("apiConfig/global").get()).data()?.verification ?? {};
   const r = Number(c.radiusMiles);
+  const legacy = c.legacy !== false;
+  const pilot: string[] = Array.isArray(c.pilotPhones) ? c.pilotPhones.map(phoneKey) : [];
+  const caller = phoneKey(phone);
   return {
-    required: c.required === true,
+    required: c.required === true && (!legacy || (!!caller && pilot.includes(caller))),
     radiusMiles: Number.isFinite(r) && r > 0 ? r : DEFAULT_RADIUS_MILES,
+    minAppVersion: parseVersion(c.minAppVersion) ? String(c.minAppVersion) : MIN_VERIFIED_APP_VERSION,
   };
 }
 
@@ -311,7 +371,7 @@ const LABEL: Record<string, string> = {identity: "Identity", address: "Proof of 
 export async function recomputeVerification(
   phone: string, opts: { quietRejections?: boolean } = {},
 ): Promise<Verification | null> {
-  const [kSnap, uSnap, cfg] = await Promise.all([kycRef(phone).get(), userRef(phone).get(), verificationConfig()]);
+  const [kSnap, uSnap, cfg] = await Promise.all([kycRef(phone).get(), userRef(phone).get(), verificationConfig(phone)]);
   const user = uSnap.data();
   if (!user) return null;
   if (!kSnap.exists && !user.verification) return null;
@@ -362,12 +422,19 @@ export async function recomputeVerification(
   return next;
 }
 
-/** Throws unless this customer may check out a Rent / Rent to Buy order. No-op while the gate is off. */
-export async function assertVerifiedForRental(phone: string): Promise<void> {
-  const cfg = await verificationConfig();
+/**
+ * Throws unless this customer may check out a Rent / Rent to Buy order. No-op
+ * while the gate is off. `appVersion` is what the client says it is running; a
+ * build too old to show the Verification screen is told to update instead.
+ */
+export async function assertVerifiedForRental(phone: string, appVersion?: unknown): Promise<void> {
+  const cfg = await verificationConfig(phone);
   if (!cfg.required) return;
   const v = await recomputeVerification(phone);
   if (v?.status !== "verified") {
+    if (!versionAtLeast(appVersion, cfg.minAppVersion)) {
+      throw new HttpsError("failed-precondition", UPDATE_REQUIRED_MESSAGE);
+    }
     throw new HttpsError("failed-precondition", "verification_required");
   }
 }
@@ -494,7 +561,7 @@ export const getVerificationStatus = onCall(async (request) => {
     }
   }
   const v = await recomputeVerification(phone);
-  const cfg = await verificationConfig();
+  const cfg = await verificationConfig(phone);
   return {
     verification: v ?? {status: "action_required", identity: "not_started", address: "waiting", location: "not_started"},
     required: cfg.required,
@@ -785,7 +852,7 @@ export async function syncDocumentReviews(phone: string, before: any, after: any
 export const adminGetCustomerVerification = onCall(async (request) => {
   assertStaff(request);
   const phone = phoneArg(request.data);
-  const [kSnap, uSnap, cfg] = await Promise.all([kycRef(phone).get(), userRef(phone).get(), verificationConfig()]);
+  const [kSnap, uSnap, cfg] = await Promise.all([kycRef(phone).get(), userRef(phone).get(), verificationConfig(phone)]);
   const user: any = uSnap.data();
   if (!user) throw new HttpsError("not-found", "Customer not found.");
   const k: any = kSnap.data() ?? {};

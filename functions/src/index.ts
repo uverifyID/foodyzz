@@ -25,6 +25,7 @@ import * as path from "path";
 import * as fs from "fs";
 import {setGlobalOptions} from "firebase-functions/v2";
 import {installVerificationHooks, assertVerifiedForRental, recomputeVerification, syncDocumentReviews} from "./customerVerification";
+import {installEmailHooks} from "./emailVerification";
 
 initializeApp();
 const db = getFirestore();
@@ -1254,7 +1255,9 @@ export const createPaymentIntent = onCall(async (request) => {
   // verified identity, address and sign-up location first (customerVerification.ts).
   // Buy is paid in full up front and is not gated. A no-op until
   // apiConfig/global.verification.required is switched on.
-  if (rentalType !== "buy") await assertVerifiedForRental(String(request.auth.token.phone_number || ""));
+  if (rentalType !== "buy") {
+    await assertVerifiedForRental(String(request.auth.token.phone_number || ""), request.data?.appVersion);
+  }
 
   try {
     const [config, logistics] = await Promise.all([getConfig(), getLogistics()]);
@@ -6282,6 +6285,24 @@ export const monitorFunctionErrors = onSchedule(
 // ── Customer verification (Didit KYC, proof of address, sign-up location) ────
 // The module lives in ./customerVerification; it reaches mail and push through
 // these hooks rather than importing this file back.
+// ── Email confirmation ──────────────────────────────────────────────────────
+// ./emailVerification owns the code and the domain rule; the mail itself is sent
+// here, through the same branded shell as everything else.
+installEmailHooks({
+  sendCode: async (to, code, expiresInMin) => {
+    await sendEmail(to, `${code} is your Foodyzz confirmation code`, emailLayout({
+      title: "Confirm your email",
+      intro: "Enter this code in the Foodyzz app to confirm this address.",
+      bodyHtml: `<div style="text-align:center;margin:8px 0 4px">
+        <div style="display:inline-block;font-size:34px;letter-spacing:10px;font-weight:bold;
+          color:#0f172a;background:#f1f5f9;border-radius:12px;padding:14px 22px 14px 32px">${escapeHtml(code)}</div>
+        <p style="color:#64748b;font-size:13px;margin:14px 0 0">
+          The code expires in ${expiresInMin} minutes. If you didn't ask for it, you can ignore this email.</p>
+      </div>`,
+    }));
+  },
+});
+
 installVerificationHooks({
   notifyCustomer: (phone, title, body, type) => notifyCustomer(phone, "", title, body, type),
   emailAdmin: async (subject, title, intro, rows) => {
@@ -6300,3 +6321,5 @@ export {
   diditWebhook, onDiditEventCreated, adminGetCustomerVerification, adminReviewCustomerVerification,
   adminRequestCustomerVerification,
 } from "./customerVerification";
+
+export {sendEmailVerificationCode, confirmEmailVerificationCode} from "./emailVerification";

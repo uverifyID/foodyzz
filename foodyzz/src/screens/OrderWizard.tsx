@@ -16,6 +16,7 @@ import {
 } from 'react-native';
 import { Bike as BikeIcon, Calendar, Clock, MapPin, ShieldCheck, Check, CreditCard, Info, Ticket, X } from 'lucide-react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import Constants from 'expo-constants';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { useStripe } from '@stripe/stripe-react-native';
 import * as Haptics from 'expo-haptics';
@@ -538,6 +539,9 @@ export default function OrderWizard() {
       const createPaymentIntentCall = getFunctionsInstance().httpsCallable('createPaymentIntent');
       const response: any = await createPaymentIntentCall({
         orderId,
+        // Declares that this build can resolve a `verification_required` refusal.
+        // A build that doesn't send it is told to update instead (customerVerification.ts).
+        appVersion: Constants.expoConfig?.version,
         currency: 'usd',
         providerId: selectedProviderId,
         customerAddress: userProfile?.address || 'Address Not Set',

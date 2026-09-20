@@ -15,8 +15,10 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useStripe, CardField } from '@stripe/stripe-react-native';
 import AddressAutocomplete from '../components/AddressAutocomplete';
 import IdentityDocumentsCard from '../components/IdentityDocumentsCard';
+import EmailConfirmField from '../components/EmailConfirmField';
 import { useUserProfile } from '../context/UserProfileContext';
 import { friendlyError, friendlyPaymentError } from '../services/errors';
+import { normalizeEmail } from '../services/emailVerification';
 import { pickDocumentImage, documentImageUrl, areDocumentsVerified } from '../services/customerDocuments';
 import { buildWorkerLabelHtml, imageAsDataUrl, isPrintCancelled, LABEL_WIDTH_PT, LABEL_HEIGHT_PT } from '../services/workerLabel';
 import {
@@ -48,6 +50,8 @@ export default function ProfileScreen() {
     // Edit form states
     const [editName, setEditName] = useState('');
     const [editEmail, setEditEmail] = useState('');
+    // Set by EmailConfirmField once a code sent to this address has come back.
+    const [emailConfirmed, setEmailConfirmed] = useState(false);
     const [editAddress, setEditAddress] = useState('');
     const [editCompletionId, setEditCompletionId] = useState('');
 
@@ -104,6 +108,7 @@ export default function ProfileScreen() {
     const startEditing = () => {
         setEditName(profile?.name || '');
         setEditEmail(profile?.email || '');
+        setEmailConfirmed(false);
         setEditAddress(profile?.address || '');
         setEditCompletionId(profile?.bikeSafetyCompletionId || '');
         setIsEditing(true);
@@ -243,6 +248,12 @@ export default function ProfileScreen() {
     const handleSaveProfile = async () => {
         if (!editName || !editEmail || !editAddress) {
             Alert.alert('Error', 'Required fields: Name, Email, and Address.');
+            return;
+        }
+        // Only a CHANGED address needs a code — an address from before this existed
+        // stays as it is rather than locking the customer out of their own profile.
+        if (normalizeEmail(editEmail) !== normalizeEmail(profile?.email) && !emailConfirmed) {
+            Alert.alert('Confirm your email', 'Send yourself the code and enter it before saving the new address.');
             return;
         }
         // Optional here, but if one is entered it has to be a real one.
@@ -702,9 +713,12 @@ export default function ProfileScreen() {
                             </View>
                             <View>
                                 <Text className="text-[10px] font-black text-slate-400 uppercase mb-2 ml-1">Email Address</Text>
-                                <TextInput
-                                    value={editEmail} onChangeText={setEditEmail} keyboardType="email-address"
-                                    className="bg-slate-50 border-2 border-black rounded-2xl p-4 font-bold text-black font-mono"
+                                <EmailConfirmField
+                                    value={editEmail}
+                                    onChangeText={setEditEmail}
+                                    profile={profile}
+                                    onConfirmedChange={setEmailConfirmed}
+                                    inputClassName="bg-slate-50 border-2 border-black rounded-2xl p-4 font-bold text-black font-mono"
                                 />
                             </View>
                             <View>
