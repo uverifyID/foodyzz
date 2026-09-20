@@ -19,15 +19,24 @@ const RESUBSCRIBE_MS = 3000;
 const MAX_RESUBSCRIBE_MS = 30000;
 const RESET_AT_ATTEMPT = 5;
 
-// Linear pickup→delivery progression, used to retire an optimistic `status` overlay
-// once the authoritative mirror has advanced TO or PAST it. Off-axis statuses
-// (pending_customer_confirmation, cancelled) are deliberately NOT on this line: a
-// server jump to one of them means the optimistic linear advance no longer applies,
-// so the overlay is retired rather than pinned. Do not reuse the enum declaration
-// order — it lists pending_customer_confirmation last even though it occurs early.
+// The order's linear progression, used to retire an optimistic `status` overlay once
+// the authoritative mirror has advanced TO or PAST it. This is the real lifecycle:
+// a rider requests, staff accept, documents clear, the bike goes out, it is handed
+// over, and eventually it comes back.
+//
+// `cancelled` is deliberately NOT on this line. A server jump to it means the
+// optimistic linear advance no longer applies, so the overlay is retired rather than
+// pinned to a status the order will never reach.
+//
+// Every entry must be a value that actually lands on `order.status`. The previous
+// version listed en_route_pickup, at_pickup and rental_active, which only ever
+// appear on `providerCurrentStatus` — a different field — and omitted
+// ready_for_delivery, which is a real and heavily-used one. Anything missing here
+// ranks -1, and isPatchSatisfied treats a doc at -1 as "already caught up", so an
+// absent status silently retires every overlay while the order sits on it.
 const STATUS_ORDER = [
-  'requested', 'confirmed', 'en_route_pickup', 'at_pickup', 'rental_active',
-  'completed', 'en_route_delivery', 'at_delivery', 'delivered',
+  'requested', 'confirmed', 'ready_for_delivery',
+  'en_route_delivery', 'at_delivery', 'delivered', 'completed',
 ];
 const statusRank = (s: any): number => STATUS_ORDER.indexOf(s); // -1 = off-axis/unknown
 
