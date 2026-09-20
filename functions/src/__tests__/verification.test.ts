@@ -1,5 +1,5 @@
 import {
-  callable, fns, db, phoneAuth, adminAuth, seedConfig, seedUser, getDoc, clearFirestore, triggerUpdated,
+  callable, fns, db, phoneAuth, adminAuth, seedConfig, seedUser, seedOrder, getDoc, clearFirestore, triggerUpdated,
 } from './helpers';
 import * as cv from '../customerVerification';
 import { diditApi, diditSignature, verifyDiditWebhook, resetDiditConfigCache } from '../didit';
@@ -66,6 +66,43 @@ describe('deriveVerification', () => {
     }, { address: '1 New St', zipCode: '11201' }, 0.25);
     expect(v.address).toBe('needs_document');
     expect(v.location).toBe('not_started');
+  });
+
+  test('a staff re-request retires what is already on file', () => {
+    const k = {
+      didit: { status: 'Approved', idZip: '10118', updatedAt: '2026-09-01T00:00:00.000Z' },
+      location: { forAddress: key, distanceMiles: 0.1, capturedAt: 't' },
+    };
+    expect(cv.deriveVerification(k, user, 0.25)).toMatchObject({ identity: 'verified', address: 'verified' });
+
+    // Asking for a proof of address: the ID's matching ZIP is no longer an answer.
+    const askedAddr = { ...k, requests: { address: { requestedAt: '2026-09-10T00:00:00.000Z' } } };
+    expect(cv.deriveVerification(askedAddr, user, 0.25))
+      .toMatchObject({ identity: 'verified', address: 'needs_document', status: 'action_required' });
+
+    // Asking for the ID again puts the whole ID check back on the customer — and
+    // with it the address, which that ID was what proved.
+    const askedId = { ...k, requests: { identity: { requestedAt: '2026-09-10T00:00:00.000Z' } } };
+    expect(cv.deriveVerification(askedId, user, 0.25))
+      .toMatchObject({ identity: 'not_started', address: 'waiting', status: 'action_required' });
+  });
+
+  test('a re-request closes itself as soon as the customer sends something newer', () => {
+    const asked = { requests: { identity: { requestedAt: '2026-09-10T00:00:00.000Z' }, address: { requestedAt: '2026-09-10T00:00:00.000Z' } } };
+    // A document uploaded before staff asked does not count as an answer.
+    const stale = {
+      ...asked,
+      didit: { status: 'Approved', idZip: '10118', updatedAt: '2026-09-01T00:00:00.000Z' },
+      addressReview: { status: 'approved', forAddress: key, reviewedAt: '2026-09-02T00:00:00.000Z' },
+    };
+    expect(cv.deriveVerification(stale, user, 0.25)).toMatchObject({ identity: 'not_started', address: 'needs_document' });
+
+    const fresh = {
+      ...asked,
+      didit: { status: 'In Review', idZip: '10118', updatedAt: '2026-09-11T00:00:00.000Z' },
+      addressReview: { status: 'submitted', forAddress: key, submittedAt: '2026-09-11T00:00:00.000Z' },
+    };
+    expect(cv.deriveVerification(fresh, user, 0.25)).toMatchObject({ identity: 'in_review', address: 'in_review' });
   });
 
   test('a staff override passes a location that was too far', () => {
@@ -202,6 +239,77 @@ describe('customer verification flow', () => {
       expect.stringContaining('older than 90 days'), 'VERIFICATION_REJECTED');
     const status: any = await callable(fns.getVerificationStatus, {}, phoneAuth(PHONE));
     expect(status.notes.address).toBe('Bill is older than 90 days.');
+  });
+
+  // The admin console's rental cards: Cancel / Request ID check / Request proof of
+  // address. Only the two requests are new here — cancelOrder already existed.
+  test('staff can ask a verified renter to redo a check from a rental card', async () => {
+    const verifiedAt = '2026-09-01T00:00:00.000Z';
+    await db.doc(`customerKyc/${PHONE}`).set({
+      phone: PHONE, didit: { status: 'Approved', idZip: '10118', updatedAt: verifiedAt }, updatedAt: verifiedAt,
+    });
+    await seedOrder('order_v1', { customerPhone: PHONE, status: 'confirmed' });
+    await callable(fns.recordVerificationLocation, { ...NEARBY, accuracyM: 12 }, phoneAuth(PHONE));
+    expect((await getDoc(`users/${PHONE}`)).verification.status).toBe('verified');
+
+    await expect(callable(fns.adminRequestCustomerVerification,
+      { phone: PHONE, target: 'address', orderId: 'order_v1' }, phoneAuth(PHONE))).rejects.toThrow(/staff only/i);
+    await expect(callable(fns.adminRequestCustomerVerification,
+      { phone: PHONE, target: 'selfie', orderId: 'order_v1' }, staffAuth())).rejects.toThrow(/identity or address/i);
+
+    const r: any = await callable(fns.adminRequestCustomerVerification,
+      { phone: PHONE, target: 'address', orderId: 'order_v1', note: 'The ID is from another ZIP.' }, staffAuth());
+    expect(r.verification).toMatchObject({ address: 'needs_document', status: 'action_required' });
+    expect(notify).toHaveBeenCalledWith(PHONE, expect.stringMatching(/proof of address/i),
+      expect.stringContaining('another ZIP'), 'ID_DOCS_REQUESTED');
+    // Stamped on the rental the operator was looking at.
+    expect((await getDoc('orders/order_v1')).verificationRequests.address)
+      .toMatchObject({ requestedBy: '+19175550100', note: 'The ID is from another ZIP.', orderId: 'order_v1' });
+
+    // ...and the customer can act on it: the upload path is open again.
+    await seedUser(PHONE, { addressProof: { frontPath: `addressProofs/${PHONE}/front-1.jpg`, uploadedAt: 't', reviewedAt: null } });
+    const sub: any = await callable(fns.submitVerificationDocuments, { target: 'address' }, phoneAuth(PHONE));
+    expect(sub.verification.address).toBe('in_review');
+  });
+
+  test('asking for the ID again lets an approved customer start a new Didit session', async () => {
+    await db.doc(`customerKyc/${PHONE}`).set({
+      phone: PHONE, didit: { status: 'Approved', idZip: '10118', updatedAt: '2026-09-01T00:00:00.000Z' },
+    });
+    await expect(callable(fns.startIdentityVerification, {}, phoneAuth(PHONE))).rejects.toThrow(/already_verified/);
+
+    await callable(fns.adminRequestCustomerVerification, { phone: PHONE, target: 'identity' }, staffAuth());
+    expect((await getDoc(`users/${PHONE}`)).verification.identity).toBe('not_started');
+
+    await callable(fns.startIdentityVerification, {}, phoneAuth(PHONE));
+    expect(createSession).toHaveBeenCalledWith(expect.anything(), PHONE);
+    // The new session is newer than the request, so the request has been answered.
+    expect((await getDoc(`users/${PHONE}`)).verification.identity).toBe('in_progress');
+  });
+
+  test('a re-request is answered by the old document path too', async () => {
+    const fire = async (patch: any) => {
+      const before = await getDoc(`users/${PHONE}`);
+      const after = { ...before, ...patch };
+      await db.doc(`users/${PHONE}`).set(after);
+      await triggerUpdated(fns.onUserWriteLifecycleEmails, `users/${PHONE}`, before, after, { phone: PHONE });
+      return (await getDoc(`users/${PHONE}`)).verification;
+    };
+    // Verified the old way, then staff ask for the ID again.
+    const lic = { frontPath: `driverLicenses/${PHONE}/f.jpg`, backPath: `driverLicenses/${PHONE}/b.jpg`, uploadedAt: 't1', reviewedAt: null, rejectedReason: null };
+    await fire({ driverLicense: lic });
+    let v = await fire({ driverLicense: { ...lic, reviewedAt: '2026-09-01T00:00:00.000Z', reviewedBy: 'staff' } });
+    expect(v.identity).toBe('verified');
+
+    await callable(fns.adminRequestCustomerVerification, { phone: PHONE, target: 'identity' }, staffAuth());
+    expect((await getDoc(`users/${PHONE}`)).verification.identity).toBe('not_started');
+
+    // The customer re-uploads from Account → Identity documents, not from the
+    // Verification screen. The old path still has to register it.
+    v = await fire({ driverLicense: { ...lic, uploadedAt: 't2' } });
+    expect(v.identity).toBe('in_review');
+    v = await fire({ driverLicense: { ...lic, uploadedAt: 't2', reviewedAt: new Date().toISOString(), reviewedBy: 'staff' } });
+    expect(v.identity).toBe('verified');
   });
 
   test('a late progress event never overwrites a decided session', async () => {

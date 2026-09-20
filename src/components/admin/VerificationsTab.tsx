@@ -197,6 +197,20 @@ function DocImage({ path, label }: { path?: string; label: string }) {
   );
 }
 
+// A staff re-request (Rentals tab → Request ID check / proof of address).
+function Requested({ req }: { req?: any }) {
+  if (!req?.requestedAt) return null;
+  return (
+    <p className="text-[11px] font-bold text-indigo-700 bg-indigo-50 border-2 border-indigo-200 p-2">
+      Asked for again on {new Date(req.requestedAt).toLocaleString()}
+      {req.requestedBy ? ` by ${req.requestedBy}` : ''}
+      {req.orderId ? ` · ${String(req.orderId).replace('order_', '#')}` : ''}
+      {req.note ? ` — ${req.note}` : ''}
+      . Anything below it was already on file when staff asked, so it no longer counts.
+    </p>
+  );
+}
+
 function Section({ icon, title, state, children }: { icon: React.ReactNode; title: string; state?: string; children: React.ReactNode }) {
   return (
     <div className="border-2 border-black p-4 space-y-2">
@@ -282,6 +296,9 @@ function VerificationDetail({ phone }: { phone: string }) {
   const d = k.didit ?? {};
   const loc = k.location?.forAddress === data.currentAddress ? k.location : null;
   const ipl = loc?.ipLocation;
+  // A staff re-request retires everything below it until the customer sends
+  // something newer — say so, or the Didit record reads as still current.
+  const requests = k.requests ?? {};
   const idReview = k.identityReview;
   const addrReview = k.addressReview?.forAddress === data.currentAddress ? k.addressReview : null;
   const locReview = k.locationReview?.forAddress === data.currentAddress ? k.locationReview : null;
@@ -308,6 +325,7 @@ function VerificationDetail({ phone }: { phone: string }) {
       )}
 
       <Section icon={<ScanFace size={14} />} title="Identity" state={v.identity}>
+        <Requested req={requests.identity} />
         {data.portrait && (
           <a href={data.portrait} target="_blank" rel="noreferrer">
             <img src={data.portrait} alt="Didit selfie" className="w-28 h-28 object-cover border-2 border-black" />
@@ -342,6 +360,7 @@ function VerificationDetail({ phone }: { phone: string }) {
       </Section>
 
       <Section icon={<FileText size={14} />} title="Proof of address" state={v.address}>
+        <Requested req={requests.address} />
         <Row k="Delivery ZIP / ID ZIP" v={`${zip || '—'} / ${d.idZip || '—'}`} />
         {addrReview?.document && (
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">

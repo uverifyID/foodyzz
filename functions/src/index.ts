@@ -6298,4 +6298,5 @@ installVerificationHooks({
 export {
   startIdentityVerification, getVerificationStatus, recordVerificationLocation, submitVerificationDocuments,
   diditWebhook, onDiditEventCreated, adminGetCustomerVerification, adminReviewCustomerVerification,
+  adminRequestCustomerVerification,
 } from "./customerVerification";

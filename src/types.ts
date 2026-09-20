@@ -121,6 +121,13 @@ export interface RentalOrder {
   // Stamped when FoodyzzHQ verifies BOTH documents; gates Ready for Delivery.
   docsVerifiedAt?: string;
   idRequestedAt?: string;
+  // What staff last asked this renter to redo from the admin console's rental card
+  // (adminRequestCustomerVerification). The decision still happens in FoodyzzHQ;
+  // this is only so the card can show what was asked for, and when.
+  verificationRequests?: {
+    identity?: { requestedAt: string; requestedBy?: string; note?: string; orderId?: string };
+    address?: { requestedAt: string; requestedBy?: string; note?: string; orderId?: string };
+  };
   readyForDeliveryAt?: string;
   customerPhone: string;
   customerName: string;

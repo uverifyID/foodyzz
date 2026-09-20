@@ -152,11 +152,59 @@ export function clientIpOf(req: any): string | null {
 
 const PROGRESS_DIDIT = new Set(["Not Started", "In Progress", "Resubmitted"]);
 
+/**
+ * What still counts after a staff re-request (adminRequestCustomerVerification).
+ *
+ * Staff asking for a check again is a statement that what is on file no longer
+ * satisfies them, so every record the customer produced BEFORE they asked stops
+ * counting and the check lands back on the customer as something to do. The
+ * request closes itself the moment the customer produces something newer — a
+ * fresh Didit session, new licence photos, another proof of address — so nothing
+ * has to be cleared by hand, and the superseded record stays on customerKyc for
+ * a reviewer to look at. Pure; exported for the callables' "already verified"
+ * guards, which must let a reopened customer start over.
+ */
+export function currentVerificationRecords(kyc: any, user: any): {
+  didit: any; identityReview: any; addressReview: any; identityOpen: boolean; addressOpen: boolean;
+  } {
+  const k = kyc ?? {};
+  const askedAt = (t: "identity" | "address") => String(k.requests?.[t]?.requestedAt ?? "");
+  // Only a real ISO timestamp can close a request. Some of these stamps are copied
+  // out of users/{phone} by the old document path, where rules only guarantee that
+  // staff wrote a non-null value — so anything unparseable counts as OLDER, leaving
+  // the check open rather than quietly passing it on a string comparison.
+  const iso = (v: unknown): string => {
+    const t = String(v ?? "");
+    return /^\d{4}-\d{2}-\d{2}T/.test(t) && !Number.isNaN(Date.parse(t)) ? t : "";
+  };
+  // A record counts when there was no request, or when it is newer than the request.
+  const since = (rec: any, at: unknown, asked: string) => (!asked || iso(at) > asked ? rec : null);
+
+  const idAsked = askedAt("identity");
+  const didit = since(k.didit, k.didit?.updatedAt, idAsked);
+  const identityReview = since(k.identityReview, k.identityReview?.reviewedAt ?? k.identityReview?.submittedAt, idAsked);
+
+  // Only a document answers a request for a document: the address review is the
+  // one record that can close it (the ID's ZIP cannot, see below).
+  const addrAsked = askedAt("address");
+  const forAddress = k.addressReview?.forAddress === addressKey(user) ? k.addressReview : null;
+  const addressReview = since(forAddress, forAddress?.reviewedAt ?? forAddress?.submittedAt, addrAsked);
+
+  return {
+    didit,
+    identityReview,
+    addressReview,
+    identityOpen: !!idAsked && !didit && !identityReview,
+    addressOpen: !!addrAsked && !addressReview,
+  };
+}
+
 /** The three checks and the overall status, from the KYC record and the profile. Pure. */
 export function deriveVerification(kyc: any, user: any, radiusMiles: number): Verification {
   const k = kyc ?? {};
-  const didit = String(k.didit?.status ?? "");
-  const manual = k.identityReview?.status;
+  const rec = currentVerificationRecords(k, user);
+  const didit = String(rec.didit?.status ?? "");
+  const manual = rec.identityReview?.status;
 
   let identity: IdentityState;
   if (manual === "approved" || didit === "Approved") identity = "verified";
@@ -164,15 +212,19 @@ export function deriveVerification(kyc: any, user: any, radiusMiles: number): Ve
   else if (manual === "rejected") identity = "rejected";
   else if (didit === "Declined") identity = "failed";
   else if (PROGRESS_DIDIT.has(didit)) identity = "in_progress";
-  else identity = "not_started"; // none yet, or Abandoned / Expired: start again
+  else identity = "not_started"; // none yet, reopened, or Abandoned / Expired: start again
 
   const key = addressKey(user);
-  const addrReview = k.addressReview?.forAddress === key ? k.addressReview : null;
+  const addrReview = rec.addressReview;
   let address: AddressState;
   if (addrReview?.status === "approved") address = "verified";
   else if (addrReview?.status === "submitted") address = "in_review";
-  else if (didit === "Approved" && k.didit?.idZip && k.didit.idZip === profileZip(user)) address = "verified";
+  // A matching ZIP on the ID is not an answer to staff asking for a document.
+  else if (!rec.addressOpen && didit === "Approved" && rec.didit?.idZip && rec.didit.idZip === profileZip(user)) address = "verified";
   else if (addrReview?.status === "rejected") address = "rejected";
+  // Staff asked for a document, so the customer can send one whatever else is
+  // outstanding — including an identity check that has not finished.
+  else if (rec.addressOpen) address = "needs_document";
   // Until identity is settled there is nothing to compare the address with; the
   // customer may still upload a document early.
   else if (identity !== "verified") address = "waiting";
@@ -325,9 +377,12 @@ export async function assertVerifiedForRental(phone: string): Promise<void> {
 /** Starts a fresh Didit session. Every attempt gets a new one — a declined session can't be reused. */
 export const startIdentityVerification = onCall(async (request) => {
   const phone = callerPhone(request);
-  await requireOnboardedUser(phone);
+  const user = await requireOnboardedUser(phone);
   const k: any = (await kycRef(phone).get()).data();
-  if (k?.didit?.status === "Approved" || k?.identityReview?.status === "approved") {
+  // "Already verified" is about what still COUNTS: a customer whose identity staff
+  // have asked for again has to be able to start a fresh session.
+  if (!currentVerificationRecords(k, user).identityOpen &&
+      (k?.didit?.status === "Approved" || k?.identityReview?.status === "approved")) {
     throw new HttpsError("failed-precondition", "already_verified");
   }
   await spendDailyBudget(phone, "didit", MAX_DIDIT_SESSIONS_PER_DAY, "verification attempts");
@@ -624,7 +679,8 @@ export const submitVerificationDocuments = onCall(async (request) => {
       throw new HttpsError("failed-precondition", "Upload both sides of your licence and a selfie first.");
     }
     const k: any = (await kycRef(phone).get()).data();
-    if (k?.didit?.status === "Approved" || k?.identityReview?.status === "approved") {
+    if (!currentVerificationRecords(k, user).identityOpen &&
+        (k?.didit?.status === "Approved" || k?.identityReview?.status === "approved")) {
       throw new HttpsError("failed-precondition", "already_verified");
     }
     await spendDailyBudget(phone, "submissions", MAX_SUBMISSIONS_PER_DAY, "uploads");
@@ -677,11 +733,15 @@ export async function syncDocumentReviews(phone: string, before: any, after: any
   const key = addressKey(after);
   const now = nowIso();
   const upd: Record<string, unknown> = {};
-  const identityDone = k.didit?.status === "Approved" || k.identityReview?.status === "approved";
+  // Through the filter, so a staff re-request reaches this path too: a customer who
+  // answers it from Account -> Identity documents rather than the Verification
+  // screen must still count, and the record it retired must not suppress them.
+  const rec = currentVerificationRecords(k, after);
+  const identityDone = rec.didit?.status === "Approved" || rec.identityReview?.status === "approved";
   const sameIdentity = (r: any) => r?.licenseFront === lic?.frontPath && r?.licenseBack === lic?.backPath;
-  const addrCurrent = k.addressReview?.forAddress === key ? k.addressReview : null;
+  const addrCurrent = rec.addressReview;
 
-  if (licApproved && !(k.identityReview?.status === "approved" && sameIdentity(k.identityReview))) {
+  if (licApproved && !(rec.identityReview?.status === "approved" && sameIdentity(rec.identityReview))) {
     upd.identityReview = compact({
       status: "approved", source: "documents", licenseFront: lic.frontPath, licenseBack: lic.backPath,
       selfie: after.selfie?.frontPath, reviewedBy: String(lic.reviewedBy || "staff"), reviewedAt: String(lic.reviewedAt),
@@ -800,4 +860,61 @@ export const adminReviewCustomerVerification = onCall(async (request) => {
   }
   const v = await recomputeVerification(phone);
   return {verification: v};
+});
+
+/**
+ * Staff ask a customer to (re)do one check.
+ *
+ * The admin console's rental cards call this: there the operator is looking at an
+ * order, not at a customer, and needs to put the ID check or a proof of address
+ * back in front of the renter without leaving the rental. It only ASKS — the
+ * decision still happens where it always has, in FoodyzzHQ / the Verification tab
+ * (adminReviewCustomerVerification).
+ *
+ * The customer app needs no change: currentVerificationRecords retires whatever is
+ * on file, so the Verification screen comes back with "Start ID check" or the
+ * proof-of-address upload already open, and the push lands them on Account.
+ */
+export const adminRequestCustomerVerification = onCall(async (request) => {
+  const requestedBy = assertStaff(request);
+  const phone = phoneArg(request.data);
+  const target = request.data?.target;
+  if (target !== "identity" && target !== "address") {
+    throw new HttpsError("invalid-argument", "target must be identity or address.");
+  }
+  const note = request.data?.note != null ? String(request.data.note).trim().slice(0, 500) || undefined : undefined;
+  const orderId = request.data?.orderId ? String(request.data.orderId) : undefined;
+
+  const [kSnap, uSnap] = await Promise.all([kycRef(phone).get(), userRef(phone).get()]);
+  if (!uSnap.exists) throw new HttpsError("not-found", "Customer not found.");
+  const now = nowIso();
+  const record = compact({requestedAt: now, requestedBy, note, orderId});
+
+  if (kSnap.exists) await kycRef(phone).update({[`requests.${target}`]: record, updatedAt: now});
+  else await kycRef(phone).set({phone, createdAt: now, requests: {[target]: record}, updatedAt: now});
+
+  // Stamped on the order too, so the rental card can show what was asked for
+  // without anyone opening the customer. Best-effort: the request itself is
+  // already recorded, and an order that has since been deleted must not fail it.
+  if (orderId) {
+    await db().doc(`orders/${orderId}`).update({[`verificationRequests.${target}`]: record})
+      .catch((e) => logger.warn(`adminRequestCustomerVerification: could not stamp order ${orderId}`, e));
+  }
+
+  const v = await recomputeVerification(phone);
+
+  const [title, body] = target === "identity" ?
+    ["Action needed: verify your ID",
+      `${note ? `${note} ` : ""}Foodyzz needs to check your ID again before your rental. ` +
+      "Open Account → Identity verification to run the ID check."] :
+    ["Action needed: proof of address",
+      `${note ? `${note} ` : ""}Foodyzz needs a proof of address — a utility bill, bank statement or lease ` +
+      "from the last 90 days showing your name and delivery address. " +
+      "Open Account → Identity verification to upload it."];
+  // ID_DOCS_REQUESTED is the type the customer app deep-links to Account (App.tsx),
+  // which is where both the verification card and the document card live.
+  await verificationHooks.notifyCustomer(phone, title, body, "ID_DOCS_REQUESTED")
+    .catch((e) => logger.error(`adminRequestCustomerVerification: push failed for ${phone}`, e));
+
+  return {verification: v, requestedAt: now};
 });

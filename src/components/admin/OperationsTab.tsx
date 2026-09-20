@@ -1,8 +1,8 @@
 import React, { useMemo, useState } from 'react';
-import { db } from '../../firebase';
+import { db, callable } from '../../firebase';
 import { collection, query, onSnapshot, orderBy, limit } from 'firebase/firestore';
 import { RentalOrder, LogisticsConfig, OrderStatus } from '../../types';
-import { Activity, MapPin, DollarSign, Bike, ShieldCheck, AlertCircle, Clock } from 'lucide-react';
+import { Activity, MapPin, DollarSign, Bike, ShieldCheck, AlertCircle, Clock, ScanFace, FileText, XCircle } from 'lucide-react';
 
 interface OperationsTabProps {
   logistics: LogisticsConfig | null;
@@ -37,6 +37,22 @@ const todayDay = (): string => {
 const isDelivered = (o: RentalOrder) =>
   o.paymentCaptured === true || ['delivered', 'completed'].includes(o.status);
 
+// Nothing left to cancel once the bike has gone out or the rental is already off
+// the books — cancelOrder refuses these too.
+const isTerminal = (o: RentalOrder) =>
+  [OrderStatus.DELIVERED, OrderStatus.COMPLETED, OrderStatus.CANCELLED].includes(o.status);
+
+// Both the app and the console store the customer in E.164; normalize anyway, since
+// the verification callables match on it strictly.
+const e164 = (phone?: string): string | null => {
+  const s = String(phone ?? '').replace(/[^\d+]/g, '');
+  if (s.startsWith('+')) return /^\+\d{8,15}$/.test(s) ? s : null;
+  const d = s.replace(/\D/g, '');
+  return d.length === 10 ? `+1${d}` : d.length === 11 && d.startsWith('1') ? `+${d}` : null;
+};
+
+const askedOn = (iso?: string) => (iso ? new Date(iso).toLocaleDateString() : null);
+
 const bucketOf = (o: RentalOrder, today: string): Bucket => {
   if (o.status === OrderStatus.CANCELLED) return 'all';
   if (o.status === OrderStatus.DELIVERED && o.completedAt) return 'completed';
@@ -48,6 +64,56 @@ const bucketOf = (o: RentalOrder, today: string): Bucket => {
 export default function OperationsTab({ logistics }: OperationsTabProps) {
   const [orders, setOrders] = useState<RentalOrder[]>([]);
   const [bucket, setBucket] = useState<Bucket>('all');
+  // One action at a time per card, keyed `${orderId}:${action}`.
+  const [busy, setBusy] = useState<string | null>(null);
+
+  // Cancelling releases the authorization hold, frees a reserved bike and tells the
+  // customer why — all of that is cancelOrder's job, so the console only asks.
+  const cancel = async (order: RentalOrder) => {
+    const reason = window.prompt(
+      `Cancel ${order.id.replace('order_', '#')} for ${order.customerName}?\n\n` +
+      'The customer is notified with the reason below, any hold on their card is released ' +
+      'and a reserved bike goes back into stock.',
+      'Cancelled by FoodyzzHQ',
+    );
+    if (reason === null) return;
+    setBusy(`${order.id}:cancel`);
+    try {
+      await callable('cancelOrder')({ orderId: order.id, reason: reason.trim() || undefined });
+    } catch (e: any) {
+      alert(e?.message || 'Could not cancel this rental.');
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  // Asks the renter to redo one check. The decision stays in the app — this puts the
+  // ID check or the proof-of-address upload back in front of them and pushes them.
+  const request = async (order: RentalOrder, target: 'identity' | 'address') => {
+    const phone = e164(order.customerPhone);
+    if (!phone) {
+      alert('This rental has no usable customer phone number, so the customer cannot be reached.');
+      return;
+    }
+    const what = target === 'identity' ? 'redo their ID check' : 'upload a proof of address';
+    const note = window.prompt(
+      `Ask ${order.customerName} to ${what}?\n\n` +
+      'They are notified and the step reopens in the Foodyzz app. Anything you write here is ' +
+      'shown to them — leave it empty to send the standard wording.',
+      '',
+    );
+    if (note === null) return;
+    setBusy(`${order.id}:${target}`);
+    try {
+      await callable('adminRequestCustomerVerification')({
+        phone, target, orderId: order.id, note: note.trim() || undefined,
+      });
+    } catch (e: any) {
+      alert(e?.message || 'Could not send the request.');
+    } finally {
+      setBusy(null);
+    }
+  };
 
   React.useEffect(() => {
     const q = query(collection(db, 'orders'), orderBy('createdAt', 'desc'), limit(50));
@@ -198,6 +264,37 @@ export default function OperationsTab({ logistics }: OperationsTabProps) {
                   </div>
                 </div>
               </div>
+
+              {/* The three things an operator does to a live rental from here. The
+                  verification requests only ASK — approving an ID or a proof of
+                  address stays in the app (FoodyzzHQ → Verifications). */}
+              <div className="mt-5 pt-4 border-t-2 border-dashed border-stone-200 flex flex-wrap gap-2">
+                <CardButton
+                  icon={<XCircle size={13} />}
+                  label={order.status === OrderStatus.CANCELLED ? 'Cancelled' : 'Cancel rental'}
+                  busy={busy === `${order.id}:cancel`}
+                  disabled={!!busy || isTerminal(order)}
+                  onClick={() => cancel(order)}
+                  tone="danger"
+                  title={isTerminal(order) ? 'This rental is already closed' : undefined}
+                />
+                <CardButton
+                  icon={<ScanFace size={13} />}
+                  label="Request ID check"
+                  sub={askedOn(order.verificationRequests?.identity?.requestedAt)}
+                  busy={busy === `${order.id}:identity`}
+                  disabled={!!busy}
+                  onClick={() => request(order, 'identity')}
+                />
+                <CardButton
+                  icon={<FileText size={13} />}
+                  label="Request proof of address"
+                  sub={askedOn(order.verificationRequests?.address?.requestedAt)}
+                  busy={busy === `${order.id}:address`}
+                  disabled={!!busy}
+                  onClick={() => request(order, 'address')}
+                />
+              </div>
             </div>
           );
         })}
@@ -210,6 +307,27 @@ export default function OperationsTab({ logistics }: OperationsTabProps) {
         )}
       </div>
     </div>
+  );
+}
+
+function CardButton({ icon, label, sub, busy, disabled, onClick, tone, title }: {
+  icon: React.ReactNode; label: string; sub?: string | null; busy?: boolean; disabled?: boolean;
+  onClick: () => void; tone?: 'danger'; title?: string;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      disabled={disabled || busy}
+      title={title}
+      className={`flex items-center gap-2 px-3 py-2 border-2 border-black font-black uppercase text-[10px] tracking-widest transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${
+        tone === 'danger' ? 'text-rose-600 bg-white hover:bg-rose-600 hover:text-white' : 'bg-white hover:bg-brand-green'
+      }`}
+    >
+      {icon}
+      {busy ? 'Sending…' : label}
+      {/* When it was last asked for, so nobody nudges the same renter twice a day. */}
+      {!busy && sub && <span className="font-mono text-[9px] text-stone-400 normal-case tracking-normal">asked {sub}</span>}
+    </button>
   );
 }
 
