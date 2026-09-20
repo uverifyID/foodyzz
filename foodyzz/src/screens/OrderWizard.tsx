@@ -242,6 +242,18 @@ export default function OrderWizard() {
     setDurationValue((prev) => (prev < commitment.value ? commitment.value : prev));
   }, [commitment]);
 
+  // A one-model catalogue is not a choice, so make it for them: step 4 opens with
+  // the card already selected and only the commitment left to set. This also runs
+  // after a rental-type change, which clears the pick on purpose above — the only
+  // option goes straight back, now priced against the new type's pool. Selecting
+  // an out-of-stock sole model is still right: it is what surfaces the waitlist,
+  // and canProceed keeps Next disabled until there is one to hand over.
+  useEffect(() => {
+    if (bikesLoading || bikeModel !== null || !rentalType) return;
+    const models = logistics.bikeModels;
+    if (models.length === 1) setBikeModel(models[0].model);
+  }, [bikesLoading, bikeModel, rentalType, logistics.bikeModels]);
+
   // Rent-to-buy and Buy always start from NEW inventory; Rent may use either.
   const availability = useMemo(() => {
     if (!rentalType) return [];
