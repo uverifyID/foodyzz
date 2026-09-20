@@ -267,7 +267,12 @@ export default function LogisticsScreen() {
     });
 
     // Late buckets list the most recently-missed order first; other tabs keep feed order.
-    if (timeFilter === 'Overdue' || timeFilter === 'Past 10 Days') {
+    // Not on the Cancelled lane: it ignores the time filter for SELECTION, so letting
+    // that filter still drive the sort would order a flat list by needByDay/pickupDay —
+    // dates a cancelled order was never going to meet — and the order on screen would
+    // depend on whichever time tab happened to be selected before switching lanes, with
+    // the row hidden and no way to see why. Feed order (newest first) throughout.
+    if (opsTab !== 'cancelled' && (timeFilter === 'Overdue' || timeFilter === 'Past 10 Days')) {
       result.sort((a, b) => {
         const da = resolveOrderDate(a.needByDay ?? a.pickupDay ?? a.needBy, ctx.today, ctx.tomorrow);
         const dbt = resolveOrderDate(b.needByDay ?? b.pickupDay ?? b.needBy, ctx.today, ctx.tomorrow);
@@ -1237,26 +1242,30 @@ export default function LogisticsScreen() {
                 const isWork = key !== 'cancelled';
                 const highlight = (isWork && count > 0) || active;
                 return (
+                  // Icon and badge STACKED above the label, not beside it. With four
+                  // lanes a button is ~78dp on a 360dp phone, and the old side-by-side
+                  // row left the label about 38dp once the icon, badge and padding took
+                  // their share — while "Payment Due" needs ~60dp at this size. Stacking
+                  // hands the label the full button width. (adjustsFontSizeToFit is not
+                  // an answer here: it is iOS-only, so Android would just ellipsize.)
                   <TouchableOpacity
                     key={key}
                     onPress={() => setOpsTab(key)}
                     style={isWork && count > 0 ? { borderColor: '#86B54F', borderWidth: 1.5 } : undefined}
-                    className={`flex-1 py-3 px-0.5 rounded-xl items-center flex-row justify-center gap-0.5 ${active ? 'bg-white border border-slate-200' : ''}`}
+                    className={`flex-1 py-2.5 px-1 rounded-xl items-center justify-center gap-1 ${active ? 'bg-white border border-slate-200' : ''}`}
                   >
-                    <Icon size={12} color={highlight ? '#86B54F' : '#475569'} />
-                    {/* A fourth lane leaves ~90pt per button. Shrink-to-fit rather than
-                        wrap, so "Payment Due" can't push the row to two lines. */}
+                    <View className="flex-row items-center gap-1">
+                      <Icon size={12} color={highlight ? '#86B54F' : '#475569'} />
+                      <View className={`rounded-full min-w-[16px] px-1 items-center justify-center ${isWork && count > 0 ? 'bg-emerald-500' : 'bg-slate-300'}`}>
+                        <Text className={`text-[9px] font-black ${isWork && count > 0 ? 'text-white' : 'text-slate-600'}`}>{count}</Text>
+                      </View>
+                    </View>
                     <Text
                       numberOfLines={1}
-                      adjustsFontSizeToFit
-                      minimumFontScale={0.8}
-                      className={`shrink text-[9px] font-black uppercase ${highlight ? 'text-brand-green' : 'text-slate-500'}`}
+                      className={`text-[9px] font-black uppercase ${highlight ? 'text-brand-green' : 'text-slate-500'}`}
                     >
                       {label}
                     </Text>
-                    <View className={`rounded-full min-w-[16px] px-1 items-center justify-center ${isWork && count > 0 ? 'bg-emerald-500' : 'bg-slate-300'}`}>
-                      <Text className={`text-[9px] font-black ${isWork && count > 0 ? 'text-white' : 'text-slate-600'}`}>{count}</Text>
-                    </View>
                   </TouchableOpacity>
                 );
               })}
