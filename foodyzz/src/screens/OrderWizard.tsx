@@ -481,6 +481,27 @@ export default function OrderWizard() {
 
   const completionIdValid = isValidCompletionId(completionId);
 
+  // Save the Completion ID as soon as it is a valid one, rather than only in the
+  // checkout success path below. It used to be written there alone, so a rider
+  // who typed it and did not finish — turned back at the verification gate, or
+  // simply away — found the field empty again on their next visit and had to
+  // fetch the number from DeliverSafely a second time. Debounced so a write does
+  // not fire on every keystroke, and skipped while it still matches the profile
+  // (which is where the seed above got it from). The write on checkout stays: a
+  // rider who types the ID and taps straight through would otherwise unmount
+  // before this fires.
+  useEffect(() => {
+    const phone = auth().currentUser?.phoneNumber;
+    if (!phone || !completionIdSeeded.current || !completionIdValid) return;
+    if (completionId === userProfile?.bikeSafetyCompletionId) return;
+    const t = setTimeout(() => {
+      db.collection('users').doc(phone)
+        .set({ bikeSafetyCompletionId: completionId }, { merge: true })
+        .catch((e) => console.warn('Failed to save bike safety Completion ID:', e));
+    }, 800);
+    return () => clearTimeout(t);
+  }, [completionId, completionIdValid, userProfile?.bikeSafetyCompletionId]);
+
   const canProceed = (): boolean => {
     switch (step) {
       case 1: return !!startDate && startDate > todayDay();
