@@ -14,6 +14,8 @@
       "./withFmtConstevalFix",
       "./withPodsMinDeploymentTarget",
       "./withUISceneLifecycle",
+      "./withAndroidEdgeToEdgeAttrs",
+      "./withAndroidGradleMemory",
       "./withFirebaseAuthSwiftOptFix",
       [
         "expo-image-picker",
@@ -45,7 +47,9 @@
           "android": {
             "compileSdkVersion": 36,
             "targetSdkVersion": 36,
-            "buildToolsVersion": "36.0.0"
+            "buildToolsVersion": "36.0.0",
+            "enableMinifyInReleaseBuilds": true,
+            "extraProguardRules": "# R8 runs on release builds, which is what Play's DEX code optimization\n# check measures. React Native, Firebase, Stripe and the Expo modules each\n# ship consumer rules inside their AARs; these cover the gaps those leave.\n# Kept deliberately narrow — every -keep is a class R8 may not rename, and\n# Play reads the obfuscated share of the bundle.\n\n# Anything C++ looks up by name has to keep that name.\n-keepclasseswithmembernames,includedescriptorclasses class * { native <methods>; }\n\n# Reanimated drives views from its own JNI layer.\n-keep class com.swmansion.reanimated.** { *; }\n-keep class com.facebook.react.turbomodule.** { *; }\n\n# Optional backends these libraries reference but do not bundle.\n-dontwarn javax.annotation.**\n-dontwarn org.conscrypt.**\n-dontwarn org.bouncycastle.**\n-dontwarn org.openjsse.**\n\n# Stripe ships push provisioning (adding a card to the Google Pay wallet)\n# as a separate artifact neither app pulls in, but the React Native wrapper\n# references it unconditionally. R8 lists these as missing classes.\n-dontwarn com.stripe.android.pushProvisioning.**\n"
           },
           "ios": {
             "useFrameworks": "static",
