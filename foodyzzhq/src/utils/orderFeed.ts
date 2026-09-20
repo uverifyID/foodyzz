@@ -8,21 +8,22 @@ import { OrderStatus } from '../types';
 //
 // Operations (the Logistics tab) owns the order from the moment its documents
 // are verified and the bike can go out — that is where staff pick the physical
-// bike number. Everything before that, and everything that fell off the rails,
-// stays on Dispatch.
+// bike number — through to completion, plus the Cancelled lane. Dispatch keeps
+// the front of the funnel: pending and awaiting-documents.
 const OPERATIONS_STATUSES: ReadonlySet<string> = new Set([
   OrderStatus.READY_FOR_DELIVERY,
   OrderStatus.EN_ROUTE_DELIVERY,
   OrderStatus.AT_DELIVERY,
   OrderStatus.DELIVERED,
   OrderStatus.COMPLETED,
+  OrderStatus.CANCELLED,
 ]);
 
 /**
  * Orders Dispatch shows: pending (`requested`), accepted-and-awaiting-documents
- * (`confirmed`), `cancelled`, and — deliberately — any status this build does not
- * recognise. Defining Dispatch as the COMPLEMENT of Operations rather than as its
- * own allow-list is what guarantees every order lands on exactly one of the two
+ * (`confirmed`), and — deliberately — any status this build does not recognise.
+ * Defining Dispatch as the COMPLEMENT of Operations rather than as its own
+ * allow-list is what guarantees every order lands on exactly one of the two
  * screens, including a status written by a newer build or edited by hand.
  */
 export function isDispatchOrder(order: any): boolean {

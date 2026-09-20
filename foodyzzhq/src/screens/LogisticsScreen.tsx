@@ -3,7 +3,7 @@ import { View, Text, ScrollView, FlatList, TouchableOpacity, ActivityIndicator, 
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
-import { Truck, Clock, MessageSquare, Bell, MapPin, CheckCircle, RefreshCcw, Package, Phone, Search, X, Bike, QrCode, CreditCard, CalendarClock, User, UserX, AlertTriangle, ClipboardCheck } from 'lucide-react-native';
+import { Truck, Clock, MessageSquare, Bell, MapPin, CheckCircle, RefreshCcw, Package, Phone, Search, X, XCircle, Bike, QrCode, CreditCard, CalendarClock, User, UserX, AlertTriangle, ClipboardCheck } from 'lucide-react-native';
 import { COLORS } from '../theme';
 import { db } from '../services/firebase';
 import { useGlobalConfig, useLogisticsConfig, useOrdersFeed } from '../hooks';
@@ -139,15 +139,20 @@ function matchesTimeFilter(order: any, filter: string, ctx: FilterCtx, lane?: Op
   }
 }
 
-// The three operations lanes, derived purely from an order's status + type:
+// The four operations lanes, derived purely from an order's status + type:
 //  - delivery:   bike still going OUT (ready → en route → at customer) — all rental types.
 //  - rentalDue:  delivered plain rent — the bike has to come back (Check bike back in).
 //  - paymentDue: delivered rent-to-buy — no return; instead installments run until paid off.
+//  - cancelled:  the order is dead. No work attached; it is here so staff can answer
+//                "what happened to my order?" without hunting. Unlike the other three
+//                this lane ignores the time filter — a cancelled order has no delivery
+//                or due-back date to bucket, only the day it was cancelled.
 // A rent-to-buy leaves paymentDue only when its plan completes (status → completed).
-// Returns null for statuses that belong to no lane (completed / cancelled).
-type OpsCategory = 'delivery' | 'rentalDue' | 'paymentDue';
+// Returns null for statuses that belong to no lane (completed).
+type OpsCategory = 'delivery' | 'rentalDue' | 'paymentDue' | 'cancelled';
 function categoryOf(order: any): OpsCategory | null {
   const s = order.status;
+  if (s === OrderStatus.CANCELLED) return 'cancelled';
   if (s === OrderStatus.READY_FOR_DELIVERY || s === OrderStatus.EN_ROUTE_DELIVERY || s === OrderStatus.AT_DELIVERY) {
     return 'delivery';
   }
@@ -201,11 +206,11 @@ export default function LogisticsScreen() {
   // no composite index — a bare orderBy(createdAt) is served automatically.
   //
   // The lanes need no status guard of their own: categoryOf() returns null for
-  // anything outside the five delivery statuses, and the Completed filter checks
-  // `status === 'completed'`, so a requested / confirmed / cancelled order in the
-  // window already falls through every lane and every filter. Search is deliberately
-  // left unfiltered — a customer at the counter should be findable whatever state
-  // their order is in, which is how the remote-id lookup below already behaves.
+  // anything outside the delivery statuses and cancelled, and the Completed filter
+  // checks `status === 'completed'`, so a requested or confirmed order in the window
+  // falls through every lane and every filter. Search is deliberately left unfiltered
+  // — a customer at the counter should be findable whatever state their order is in,
+  // which is how the remote-id lookup below already behaves.
   const config = useGlobalConfig();
   // Rates + the missed-pickup admin fee, so the "not present" confirmation can state
   // exactly what the customer is about to be charged.
@@ -247,6 +252,12 @@ export default function LogisticsScreen() {
     const ctx = buildFilterContext();
     const result = orders.filter(order => {
       const cat = categoryOf(order);
+      // Cancelled is a flat list, not a schedule: it ignores the time filter the way
+      // Completed ignores the lane toggle. Checked before matchesTimeFilter because
+      // that function rejects every cancelled order outright — which is what keeps
+      // them out of the three working lanes.
+      if (opsTab === 'cancelled') return cat === 'cancelled';
+      if (cat === 'cancelled') return false;
       // Lane first: the time window is measured against the date THAT LANE cares
       // about, so the two cannot be evaluated independently.
       if (!matchesTimeFilter(order, timeFilter, ctx, cat)) return false;
@@ -267,7 +278,7 @@ export default function LogisticsScreen() {
     return result;
   }, [orders, opsTab, timeFilter]);
 
-  // Counts that drive the filter-tab badges and the three lane toggles. Both react
+  // Counts that drive the filter-tab badges and the four lane toggles. Both react
   // to the current selection so the numbers never disagree with what tapping shows:
   //  - filterCounts[f]: orders matching filter `f` AND the active lane — the number
   //    on each tab reflects the load you'd see for the lane you're viewing.
@@ -275,13 +286,18 @@ export default function LogisticsScreen() {
   //  - delivery/rentalDue/paymentDueCount: orders matching the CURRENTLY selected
   //    filter, split by lane — so the toggle shows e.g. tomorrow's load when on the
   //    Tomorrow tab, not just today's. activeOrders = all open (non-delivered) orders.
-  const { filterCounts, deliveryCount, rentalDueCount, paymentDueCount, activeOrders } = useMemo(() => {
+  //  - cancelledCount: every cancelled order in the window. Not filter-scoped, because
+  //    the Cancelled lane itself ignores the time filter — a badge that moved with the
+  //    Today/Tomorrow tabs would disagree with the flat list behind it.
+  const { filterCounts, deliveryCount, rentalDueCount, paymentDueCount, cancelledCount, activeOrders } = useMemo(() => {
     const ctx = buildFilterContext();
     const fc: Record<string, number> = {};
     for (const f of FILTERS) fc[f] = 0;
-    let delivery = 0, rentalDue = 0, paymentDue = 0, active = 0;
+    let delivery = 0, rentalDue = 0, paymentDue = 0, cancelled = 0, active = 0;
     for (const order of orders) {
-      if (order.status === 'cancelled') continue;
+      // Cancelled orders are counted for their own lane and then skipped: they are
+      // not work, so they must not reach activeOrders or any time-filter badge.
+      if (order.status === 'cancelled') { cancelled++; continue; }
       if (order.status !== 'delivered') active++;
       const cat = categoryOf(order);
       for (const f of FILTERS) {
@@ -294,7 +310,10 @@ export default function LogisticsScreen() {
         }
       }
     }
-    return { filterCounts: fc, deliveryCount: delivery, rentalDueCount: rentalDue, paymentDueCount: paymentDue, activeOrders: active };
+    return {
+      filterCounts: fc, deliveryCount: delivery, rentalDueCount: rentalDue,
+      paymentDueCount: paymentDue, cancelledCount: cancelled, activeOrders: active,
+    };
   }, [orders, opsTab, timeFilter]);
 
   const searchResults = useMemo(() => {
@@ -1069,7 +1088,6 @@ export default function LogisticsScreen() {
                 numberOfLines={1}
                 style={{
                   includeFontPadding: false,
-                  lineHeight: 16,
                   fontSize: 11,
                   fontWeight: '900',
                   letterSpacing: 0.5,
@@ -1080,12 +1098,16 @@ export default function LogisticsScreen() {
                 {getStatusLabel(order.status, isPickupOrder)}
               </Text>
             </View>
-            <TouchableOpacity
-              onPress={() => handleCancelOrder(order.id)}
-              className="px-4 bg-rose-50 border border-rose-100 rounded-2xl justify-center items-center"
-            >
-              <Text className="text-rose-600 font-black uppercase text-[8px] tracking-widest">Cancel</Text>
-            </TouchableOpacity>
+            {/* The Cancelled lane shows dead orders, which keep the status pill but
+                cannot be cancelled again — drop the button, not the whole row. */}
+            {order.status !== OrderStatus.CANCELLED && (
+              <TouchableOpacity
+                onPress={() => handleCancelOrder(order.id)}
+                className="px-4 bg-rose-50 border border-rose-100 rounded-2xl justify-center items-center"
+              >
+                <Text className="text-rose-600 font-black uppercase text-[8px] tracking-widest">Cancel</Text>
+              </TouchableOpacity>
+            )}
           </View>
         )}
       </View>
@@ -1196,51 +1218,70 @@ export default function LogisticsScreen() {
 
         {!isSearchActive && (
           <>
-            {/* Three lanes: Delivery (bikes going out, all types) · Rental Due
+            {/* Four lanes: Delivery (bikes going out, all types) · Rental Due
                 (delivered rents to bring back) · Payment Due (delivered rent-to-buy
-                on an installment plan). Each badge counts the SELECTED time filter's
-                load for that lane, with a green ring when there's work. */}
+                on an installment plan) · Cancelled (dead orders, kept visible so
+                staff can answer for them). The first three badges count the SELECTED
+                time filter's load for that lane; Cancelled counts the whole window,
+                because that lane ignores the time filter. Green ring when there's work.
+                Cancelled is deliberately NOT ringed — it is a reference list, not a
+                queue, and a permanent green ring would read as outstanding work. */}
             <View className="flex-row bg-slate-100 p-1 rounded-2xl border border-slate-200 mb-3">
               {([
                 { key: 'delivery', label: 'Delivery', count: deliveryCount, Icon: Truck },
                 { key: 'rentalDue', label: 'Rental Due', count: rentalDueCount, Icon: RefreshCcw },
                 { key: 'paymentDue', label: 'Payment Due', count: paymentDueCount, Icon: CreditCard },
+                { key: 'cancelled', label: 'Cancelled', count: cancelledCount, Icon: XCircle },
               ] as { key: OpsCategory; label: string; count: number; Icon: any }[]).map(({ key, label, count, Icon }) => {
                 const active = opsTab === key;
-                const highlight = count > 0 || active;
+                const isWork = key !== 'cancelled';
+                const highlight = (isWork && count > 0) || active;
                 return (
                   <TouchableOpacity
                     key={key}
                     onPress={() => setOpsTab(key)}
-                    style={count > 0 ? { borderColor: '#86B54F', borderWidth: 1.5 } : undefined}
-                    className={`flex-1 py-3 px-1 rounded-xl items-center flex-row justify-center gap-1 ${active ? 'bg-white border border-slate-200' : ''}`}
+                    style={isWork && count > 0 ? { borderColor: '#86B54F', borderWidth: 1.5 } : undefined}
+                    className={`flex-1 py-3 px-0.5 rounded-xl items-center flex-row justify-center gap-0.5 ${active ? 'bg-white border border-slate-200' : ''}`}
                   >
                     <Icon size={12} color={highlight ? '#86B54F' : '#475569'} />
-                    <Text className={`text-[9px] font-black uppercase ${highlight ? 'text-brand-green' : 'text-slate-500'}`}>{label}</Text>
-                    <View className={`rounded-full min-w-[16px] px-1 items-center justify-center ${count > 0 ? 'bg-emerald-500' : 'bg-slate-300'}`}>
-                      <Text className={`text-[9px] font-black ${count > 0 ? 'text-white' : 'text-slate-600'}`}>{count}</Text>
+                    {/* A fourth lane leaves ~90pt per button. Shrink-to-fit rather than
+                        wrap, so "Payment Due" can't push the row to two lines. */}
+                    <Text
+                      numberOfLines={1}
+                      adjustsFontSizeToFit
+                      minimumFontScale={0.8}
+                      className={`shrink text-[9px] font-black uppercase ${highlight ? 'text-brand-green' : 'text-slate-500'}`}
+                    >
+                      {label}
+                    </Text>
+                    <View className={`rounded-full min-w-[16px] px-1 items-center justify-center ${isWork && count > 0 ? 'bg-emerald-500' : 'bg-slate-300'}`}>
+                      <Text className={`text-[9px] font-black ${isWork && count > 0 ? 'text-white' : 'text-slate-600'}`}>{count}</Text>
                     </View>
                   </TouchableOpacity>
                 );
               })}
             </View>
 
-            <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-              <View className="flex-row gap-2">
-                {FILTERS.map(f => (
-                  <TouchableOpacity
-                    key={f}
-                    onPress={() => setTimeFilter(f)}
-                    className={`px-4 py-2 rounded-xl border ${timeFilter === f ? 'bg-brand-green/10 border-brand-green/30' : 'bg-white border-slate-200'}`}
-                  >
-                    <Text className={`text-[9px] font-black uppercase tracking-wider ${timeFilter === f ? 'text-brand-green-dark' : 'text-slate-400'}`}>
-                      {f}
-                      {filterCounts[f] > 0 ? <Text className="text-emerald-500"> ({filterCounts[f]})</Text> : null}
-                    </Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
-            </ScrollView>
+            {/* Hidden on the Cancelled lane: that list is flat, so leaving the row up
+                would offer buckets that change nothing when tapped. */}
+            {opsTab !== 'cancelled' && (
+              <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                <View className="flex-row gap-2">
+                  {FILTERS.map(f => (
+                    <TouchableOpacity
+                      key={f}
+                      onPress={() => setTimeFilter(f)}
+                      className={`px-4 py-2 rounded-xl border ${timeFilter === f ? 'bg-brand-green/10 border-brand-green/30' : 'bg-white border-slate-200'}`}
+                    >
+                      <Text className={`text-[9px] font-black uppercase tracking-wider ${timeFilter === f ? 'text-brand-green-dark' : 'text-slate-400'}`}>
+                        {f}
+                        {filterCounts[f] > 0 ? <Text className="text-emerald-500"> ({filterCounts[f]})</Text> : null}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              </ScrollView>
+            )}
           </>
         )}
       </View>
@@ -1260,7 +1301,9 @@ export default function LogisticsScreen() {
           <Text className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-4 px-1">
             {isSearchActive
               ? `Search Results (${searchDisplay.length})${remoteSearching ? ' · searching…' : ''}`
-              : `${timeFilter === 'Completed' ? 'Completed Today' : `${timeFilter} ${opsTab === 'delivery' ? 'Deliveries' : opsTab === 'rentalDue' ? 'Rentals Due' : 'Payments Due'}`} (${filteredOrders.length})`}
+              : opsTab === 'cancelled'
+                ? `Cancelled Orders (${filteredOrders.length})`
+                : `${timeFilter === 'Completed' ? 'Completed Today' : `${timeFilter} ${opsTab === 'delivery' ? 'Deliveries' : opsTab === 'rentalDue' ? 'Rentals Due' : 'Payments Due'}`} (${filteredOrders.length})`}
           </Text>
         )}
         ListEmptyComponent={isSearchActive && searchQuery.trim() ? (

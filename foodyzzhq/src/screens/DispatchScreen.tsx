@@ -47,10 +47,11 @@ export default function DispatchScreen() {
   const servicesActive = providerProfile?.servicesActive ?? true;
 
   // Dispatch is the CATCH-ALL half of the feed: everything Operations does not
-  // claim. Today that is requested (pending), confirmed (accepted, collecting the
-  // rider's documents), cancelled, and — importantly — any status this build does
-  // not recognise, so a value written by a newer build or edited by hand in the
-  // console surfaces here instead of being invisible in the whole app.
+  // claim. Today that is requested (pending) and confirmed (accepted, collecting
+  // the rider's documents), plus — importantly — any status this build does not
+  // recognise, so a value written by a newer build or edited by hand in the console
+  // surfaces here instead of being invisible in the whole app. Cancelled orders
+  // live in Operations' Cancelled lane.
   const visibleOrders = useMemo(() => orders.filter(isDispatchOrder), [orders]);
 
   const [processingOrderId, setProcessingOrderId] = useState<string | null>(null);
@@ -554,7 +555,6 @@ export default function DispatchScreen() {
                           numberOfLines={1}
                           style={{
                             includeFontPadding: false,
-                            lineHeight: 16,
                             fontSize: 11,
                             fontWeight: '900',
                             letterSpacing: 0.5,
