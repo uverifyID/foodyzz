@@ -30,17 +30,18 @@ export default function DispatchScreen() {
     .onSnapshot((snap) => setVerifyQueue(snap?.size ?? 0), () => setVerifyQueue(0)), []);
 
   // Shared hooks replace the per-screen config/provider/orders listener block.
-  // Every Foodyzz order names its store at checkout, so the feed is simply this
-  // store's assignments — there is no broadcast pool to filter.
+  // The feed is every open request on the platform, not the active store's — see
+  // useProviderOrders. The store profile is still read, for the blocked/paused
+  // banner and to stamp identity on accept, but it no longer gates the feed: an
+  // admin with no store selected still sees the work.
   const config = useGlobalConfig();
   const { models: inventory } = useBikeInventory();
-  const { profile: providerProfile, loading: providerLoading } = useActiveProvider();
-  const { orders, loading: ordersLoading, applyOptimistic, clearOptimistic } = useProviderOrders(providerProfile?.id, {
+  const { profile: providerProfile } = useActiveProvider();
+  const { orders, loading, error: ordersError, applyOptimistic, clearOptimistic } = useProviderOrders({
     statuses: ['requested', 'confirmed', 'en_route_pickup', 'at_pickup', 'pending_customer_confirmation'],
     // Safety read-cap on the feed.
     limitTo: 100,
   });
-  const loading = providerLoading || (!!providerProfile?.id && ordersLoading);
 
   // A blocked or self-paused store still sees its in-flight work; the customer app
   // simply stops offering it as a pickable location.
@@ -126,10 +127,16 @@ export default function DispatchScreen() {
     // When accepting a directly-assigned order, stamp provider identity. A BUY skips
     // document review and is accepted straight to Ready for Delivery, so stamp identity
     // for that target too — both are "accept from the request feed".
+    //
+    // Only when the order names no store yet, or names THIS one. The feed is now
+    // platform-wide, so an admin switched into store B can accept an order the
+    // customer placed to store A, and stamping unconditionally would silently move
+    // it — the customer would be told a different store is delivering.
     if (
       order.status === OrderStatus.REQUESTED &&
       (newStatus === OrderStatus.CONFIRMED || newStatus === OrderStatus.READY_FOR_DELIVERY) &&
-      providerProfile
+      providerProfile &&
+      (!order.providerId || order.providerId === providerProfile.id)
     ) {
       updateData.providerName = providerProfile.businessName;
       updateData.providerPhone = providerProfile.phoneNumber;
@@ -300,7 +307,16 @@ export default function DispatchScreen() {
         initialNumToRender={6}
         maxToRenderPerBatch={8}
         windowSize={11}
-        ListEmptyComponent={(
+        ListEmptyComponent={ordersError ? (
+          // A dead listener is not an empty feed. Say so, rather than letting a
+          // permissions or index failure read as "no orders today".
+          <View className="p-10 mt-10 items-center">
+            <Building size={48} color="#dc2626" />
+            <Text className="text-rose-600 font-bold text-xs uppercase mt-4 text-center">
+              {ordersError}
+            </Text>
+          </View>
+        ) : (
           <View className="p-10 mt-10 items-center opacity-40">
             <Building size={48} color="#475569" />
             <Text className="text-slate-500 font-bold text-xs uppercase mt-4 text-center">
@@ -309,8 +325,6 @@ export default function DispatchScreen() {
           </View>
         )}
         renderItem={({ item: order }) => {
-            const currentProviderId = providerProfile?.id;
-            const isMine = order.providerId === currentProviderId;
             // Every bike rental is delivered to the customer; the drop-off variant
             // the bike flow had does not exist here.
             const isPickupOrder = true;
@@ -460,96 +474,98 @@ export default function DispatchScreen() {
                   <ProviderNotes orderId={order.id} />
                 </View>
 
-                {isMine ? (
-                  <View className="space-y-2">
-                    <View className="flex-row gap-2">
-                      {order.status === OrderStatus.REQUESTED && (
+                {/* Actions are open on every card. They used to be hidden unless the
+                    order named the active store, which on a platform-wide feed would
+                    render most cards read-only for no reason: firestore.rules lets any
+                    isHqStaff drive the workflow fields on any order. */}
+                <View className="space-y-2">
+                  <View className="flex-row gap-2">
+                    {order.status === OrderStatus.REQUESTED && (
+                      <TouchableOpacity
+                        onPress={() => handleUpdateStatus(order, order.rentalType === 'buy' ? OrderStatus.READY_FOR_DELIVERY : OrderStatus.CONFIRMED)}
+                        disabled={busy}
+                        activeOpacity={busy ? 1 : 0.8}
+                        className={`flex-1 py-3.5 rounded-2xl items-center flex-row justify-center gap-2 ${busy ? 'bg-slate-200' : 'bg-[#86B54F]'}`}
+                      >
+                        {busy ? (
+                          <ActivityIndicator size="small" color="black" />
+                        ) : (
+                          <View className="flex-row items-center gap-2">
+                            <CheckCircle size={14} color="black" />
+                            <Text className="text-black font-black uppercase text-[10px] tracking-widest">Accept Order</Text>
+                          </View>
+                        )}
+                      </TouchableOpacity>
+                    )}
+                    {order.status === OrderStatus.CONFIRMED && (
+                      docsVerified ? (
                         <TouchableOpacity
-                          onPress={() => handleUpdateStatus(order, order.rentalType === 'buy' ? OrderStatus.READY_FOR_DELIVERY : OrderStatus.CONFIRMED)}
+                          onPress={() => handleUpdateStatus(order, OrderStatus.READY_FOR_DELIVERY)}
                           disabled={busy}
                           activeOpacity={busy ? 1 : 0.8}
-                          className={`flex-1 py-3.5 rounded-2xl items-center flex-row justify-center gap-2 ${busy ? 'bg-slate-200' : 'bg-[#86B54F]'}`}
+                          style={{ opacity: busy ? 0.6 : 1 }}
+                          className="flex-1 bg-[#86B54F] py-3.5 rounded-2xl items-center flex-row justify-center gap-2"
                         >
-                          {busy ? (
-                            <ActivityIndicator size="small" color="black" />
-                          ) : (
-                            <View className="flex-row items-center gap-2">
-                              <CheckCircle size={14} color="black" />
-                              <Text className="text-black font-black uppercase text-[10px] tracking-widest">Accept Order</Text>
-                            </View>
-                          )}
+                          <Truck size={14} color="black" />
+                          <Text className="text-black font-black uppercase text-[10px] tracking-widest">
+                            Ready for Delivery
+                          </Text>
                         </TouchableOpacity>
-                      )}
-                      {order.status === OrderStatus.CONFIRMED && (
-                        docsVerified ? (
-                          <TouchableOpacity
-                            onPress={() => handleUpdateStatus(order, OrderStatus.READY_FOR_DELIVERY)}
-                            disabled={busy}
-                            activeOpacity={busy ? 1 : 0.8}
-                            style={{ opacity: busy ? 0.6 : 1 }}
-                            className="flex-1 bg-[#86B54F] py-3.5 rounded-2xl items-center flex-row justify-center gap-2"
-                          >
-                            <Truck size={14} color="black" />
-                            <Text className="text-black font-black uppercase text-[10px] tracking-widest">
-                              Ready for Delivery
-                            </Text>
-                          </TouchableOpacity>
-                        ) : (
-                          // Hard gate: a bike never leaves before ID and proof of
-                          // address are verified on the card above.
-                          <View className="flex-1 bg-slate-100 py-3.5 rounded-2xl items-center flex-row justify-center gap-2 border border-slate-200">
-                            <Clock size={14} color="#94a3b8" />
-                            <Text className="text-slate-400 font-black uppercase text-[10px] tracking-widest">
-                              Verify documents first
-                            </Text>
-                          </View>
-                        )
-                      )}
-                      {order.status === OrderStatus.READY_FOR_DELIVERY && (
-                        <View className="flex-1 bg-emerald-50 py-3.5 rounded-2xl items-center flex-row justify-center gap-2 border border-emerald-200">
-                          <CheckCircle size={14} color="#059669" />
-                          <Text className="text-emerald-700 font-black uppercase text-[10px] tracking-widest">
-                            In Operations
+                      ) : (
+                        // Hard gate: a bike never leaves before ID and proof of
+                        // address are verified on the card above.
+                        <View className="flex-1 bg-slate-100 py-3.5 rounded-2xl items-center flex-row justify-center gap-2 border border-slate-200">
+                          <Clock size={14} color="#94a3b8" />
+                          <Text className="text-slate-400 font-black uppercase text-[10px] tracking-widest">
+                            Verify documents first
                           </Text>
                         </View>
-                      )}
-                    </View>
-                    
-                    {![OrderStatus.DELIVERED, OrderStatus.COMPLETED, OrderStatus.EN_ROUTE_DELIVERY, OrderStatus.AT_DELIVERY, OrderStatus.DELIVERED].includes(order.status as OrderStatus) && (
-                      <View className="flex-row gap-2 mt-2">
-                        <View
-                          style={{ backgroundColor: false ? '#fbbf24' : '#000000' }}
-                          className="flex-1 py-3 rounded-2xl items-center border-2 border-black flex-row justify-center gap-2"
-                        >
-                          <View
-                            style={{ backgroundColor: false ? '#000000' : '#86B54F' }}
-                            className="w-2 h-2 rounded-full"
-                          />
-                          <Text
-                            numberOfLines={1}
-                            style={{
-                              includeFontPadding: false,
-                              lineHeight: 16,
-                              fontSize: 11,
-                              fontWeight: '900',
-                              letterSpacing: 0.5,
-                              textTransform: 'uppercase',
-                              color: false ? '#000000' : '#ffffff',
-                            }}
-                          >
-                            {getStatusLabel(order.status, isPickupOrder)}
-                          </Text>
-                        </View>
-                        <TouchableOpacity
-                          onPress={() => handleCancelOrder(order.id)}
-                          className="px-4 bg-rose-50 border border-rose-100 rounded-2xl justify-center items-center"
-                        >
-                          <Text className="text-rose-600 font-black uppercase text-[8px] tracking-widest">Cancel</Text>
-                        </TouchableOpacity>
+                      )
+                    )}
+                    {order.status === OrderStatus.READY_FOR_DELIVERY && (
+                      <View className="flex-1 bg-emerald-50 py-3.5 rounded-2xl items-center flex-row justify-center gap-2 border border-emerald-200">
+                        <CheckCircle size={14} color="#059669" />
+                        <Text className="text-emerald-700 font-black uppercase text-[10px] tracking-widest">
+                          In Operations
+                        </Text>
                       </View>
                     )}
                   </View>
-                ) : null}
+                    
+                  {![OrderStatus.DELIVERED, OrderStatus.COMPLETED, OrderStatus.EN_ROUTE_DELIVERY, OrderStatus.AT_DELIVERY, OrderStatus.DELIVERED].includes(order.status as OrderStatus) && (
+                    <View className="flex-row gap-2 mt-2">
+                      <View
+                        style={{ backgroundColor: false ? '#fbbf24' : '#000000' }}
+                        className="flex-1 py-3 rounded-2xl items-center border-2 border-black flex-row justify-center gap-2"
+                      >
+                        <View
+                          style={{ backgroundColor: false ? '#000000' : '#86B54F' }}
+                          className="w-2 h-2 rounded-full"
+                        />
+                        <Text
+                          numberOfLines={1}
+                          style={{
+                            includeFontPadding: false,
+                            lineHeight: 16,
+                            fontSize: 11,
+                            fontWeight: '900',
+                            letterSpacing: 0.5,
+                            textTransform: 'uppercase',
+                            color: false ? '#000000' : '#ffffff',
+                          }}
+                        >
+                          {getStatusLabel(order.status, isPickupOrder)}
+                        </Text>
+                      </View>
+                      <TouchableOpacity
+                        onPress={() => handleCancelOrder(order.id)}
+                        className="px-4 bg-rose-50 border border-rose-100 rounded-2xl justify-center items-center"
+                      >
+                        <Text className="text-rose-600 font-black uppercase text-[8px] tracking-widest">Cancel</Text>
+                      </TouchableOpacity>
+                    </View>
+                  )}
+                </View>
               </View>
             );
           }}

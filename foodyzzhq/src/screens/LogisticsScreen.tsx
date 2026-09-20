@@ -6,7 +6,7 @@ import { useNavigation } from '@react-navigation/native';
 import { Truck, Clock, MessageSquare, Bell, MapPin, CheckCircle, RefreshCcw, Package, Phone, Search, X, Bike, QrCode, CreditCard, CalendarClock, User, UserX, AlertTriangle, ClipboardCheck } from 'lucide-react-native';
 import { COLORS } from '../theme';
 import { db } from '../services/firebase';
-import { useActiveProvider, useGlobalConfig, useLogisticsConfig, useProviderOrders } from '../hooks';
+import { useGlobalConfig, useLogisticsConfig, useProviderOrders } from '../hooks';
 import { OrderStatus, RentalOrder } from '../types';
 import { getScheduleLines, getOrderDates } from '../utils/schedule';
 import { getCurrentProviderCoords, warnLocationUnavailableOnce } from '../utils/location';
@@ -196,18 +196,17 @@ export default function LogisticsScreen() {
   const functions = firebase.app().functions('us-central1');
 
   // Shared hooks replace the per-screen config/provider/orders listener blocks.
-  // Orders are capped to the 100 most-recent active+recent-completed (served by
-  // the orders(providerId,status,createdAt) composite index).
+  // Orders are capped to the 100 most-recent active+recent-completed, platform-wide
+  // rather than per-store (see useProviderOrders), served by the
+  // providerOrders(status,createdAt) composite index.
   const config = useGlobalConfig();
   // Rates + the missed-pickup admin fee, so the "not present" confirmation can state
   // exactly what the customer is about to be charged.
   const logistics = useLogisticsConfig();
-  const { profile: providerProfile, loading: providerLoading } = useActiveProvider();
-  const { orders, loading: ordersLoading, applyOptimistic, clearOptimistic } = useProviderOrders(providerProfile?.id, {
+  const { orders, loading, applyOptimistic, clearOptimistic } = useProviderOrders({
     statuses: ['ready_for_delivery', 'en_route_delivery', 'at_delivery', 'delivered', 'completed'],
     limitTo: 100,
   });
-  const loading = providerLoading || (!!providerProfile?.id && ordersLoading);
 
   // Adjust-price modal + logic is shared with the Dispatch screen.
 
@@ -341,11 +340,9 @@ export default function LogisticsScreen() {
           .limit(10)
           .get();
         if (cancelled) return;
-        const pid = providerProfile?.id;
-        const found = snap.docs
-          .map((d: any) => ({ id: d.id, ...d.data() }))
-          .filter((o: any) => !pid || o.providerId === pid);
-        setRemoteSearchResults(found);
+        // No store filter — the feed itself is platform-wide now, so dropping
+        // another store's order here would only hide a result staff can act on.
+        setRemoteSearchResults(snap.docs.map((d: any) => ({ id: d.id, ...d.data() })));
       } catch {
         if (!cancelled) setRemoteSearchResults([]);
       } finally {
@@ -354,7 +351,7 @@ export default function LogisticsScreen() {
     }, 350); // debounce typing
 
     return () => { cancelled = true; clearTimeout(handle); };
-  }, [searchQuery, isSearchActive, orders, providerProfile?.id]);
+  }, [searchQuery, isSearchActive, orders]);
 
   // Local hits first, then any remote-only order, de-duped by id.
   const searchDisplay = useMemo(() => {

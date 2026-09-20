@@ -4,8 +4,6 @@ import { db, isTransient, resetFirestoreConnection } from '../services/firebase'
 export type ProviderOrdersOpts = {
   /** status `in` filter (omit for no status constraint). */
   statuses?: string[];
-  /** ISO string; adds `createdAt >= createdAfter` (bounded window). */
-  createdAfter?: string;
   /** caps results with `.limit()`. */
   limitTo?: number;
 };
@@ -56,13 +54,20 @@ const isPatchSatisfied = (doc: any, data: Record<string, any>): boolean =>
   });
 
 /**
- * Live orders for the active provider. Composes the three distinct queries the
- * FoodyzzHQ screens use, with identical semantics + indexes:
- *  - Dispatch:  { statuses:[…] }
+ * Live orders for FoodyzzHQ. Composes the two distinct queries its screens use,
+ * with identical semantics + indexes:
+ *  - Dispatch:  { statuses:[…], limitTo:100 }
  *  - Logistics: { statuses:[…], limitTo:100 }
- *  - Deposits:  { createdAfter: windowStartISO }
- * Every order is directed at exactly one store — there is no broadcast feed.
- * Always ordered by createdAt desc. No-op until `providerId` is known.
+ * Always ordered by createdAt desc.
+ *
+ * PLATFORM-WIDE, not scoped to the active store — the same call the Chat Center
+ * already makes. FoodyzzHQ is the admin app: everyone holding it is staff, and
+ * Foodyzz owns the whole fleet, so "orders my currently-selected store was sent"
+ * is not a boundary anyone wants. Scoping it meant an admin switched into store B
+ * got the push for an order placed to store A (the push goes to every device token
+ * on the store doc) and then found an empty feed, with no way to tell that from a
+ * quiet day. firestore.rules already agrees: isHqStaff may read every mirror doc
+ * and drive the workflow fields on every order, with no membership check.
  *
  * Providers read the provider-safe MIRROR (`providerOrders`), which a Cloud Function
  * rebuilds after each write to `orders`. That mirror hop adds latency, so the hook
@@ -72,10 +77,15 @@ const isPatchSatisfied = (doc: any, data: Record<string, any>): boolean =>
  * explicit rollback). The listener also re-subscribes on transient stream drops so a
  * wedged snapshot no longer forces an app restart.
  */
-export function useProviderOrders(providerId: string | undefined, opts: ProviderOrdersOpts = {}) {
-  const { statuses, createdAfter, limitTo } = opts;
+export function useProviderOrders(opts: ProviderOrdersOpts = {}) {
+  const { statuses, limitTo } = opts;
   const [orders, setOrders] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  // Set when the listener died on a TERMINAL error (permission-denied on a stale
+  // hqStaff claim, failed-precondition on a missing index). Without it every such
+  // failure rendered as the ordinary "nothing here" empty state, so a broken feed
+  // and a quiet day looked identical on the device.
+  const [error, setError] = useState<string | null>(null);
   const [patches, setPatches] = useState<Record<string, Patch>>({});
 
   // Stable primitive dep for the statuses array.
@@ -98,8 +108,6 @@ export function useProviderOrders(providerId: string | undefined, opts: Provider
   }, []);
 
   useEffect(() => {
-    if (!providerId) return;
-
     let cancelled = false;
     let unsub: () => void = () => {};
     let retry: ReturnType<typeof setTimeout> | undefined;
@@ -108,18 +116,21 @@ export function useProviderOrders(providerId: string | undefined, opts: Provider
     const subscribe = () => {
       // Read the provider-safe mirror (charge/authorization fields stripped server-side),
       // never the raw `orders` collection — providers must not see customer charges.
-      let query: any = db.collection('providerOrders').where('providerId', '==', providerId);
+      let query: any = db.collection('providerOrders');
       if (statuses && statuses.length) query = query.where('status', 'in', statuses);
-      if (createdAfter) query = query.where('createdAt', '>=', createdAfter);
       query = query.orderBy('createdAt', 'desc');
       if (limitTo) query = query.limit(limitTo);
 
       unsub = query.onSnapshot(
         (snap: any) => {
+          // Same reason as the error path: a snapshot from the listener this effect
+          // is replacing must not overwrite the new one's results.
+          if (cancelled) return;
           attempt = 0; // a healthy snapshot resets the resubscribe backoff
           const docs = snap.docs.map((d: any) => ({ id: d.id, ...d.data() }));
           setOrders(docs);
           setLoading(false);
+          setError(null);
           // Retire optimistic overlays the authoritative mirror now satisfies (status
           // caught up or advanced past), that have expired, or whose order left this
           // query — so overlays self-heal.
@@ -138,18 +149,29 @@ export function useProviderOrders(providerId: string | undefined, opts: Provider
             return changed ? next : prev;
           });
         },
-        (error: any) => {
+        // Named `err` rather than `error`: the hook's own error STATE is in scope
+        // here, and shadowing it makes the setError calls below hard to read.
+        (err: any) => {
+          // A torn-down listener must not write state. unsub() does not retract a
+          // callback already in flight, so without this a dying listener's terminal
+          // error could land after the replacement listener's first good snapshot
+          // and pin an error banner describing a subscription that no longer exists.
+          if (cancelled) return;
           setLoading(false);
           // Only known-transient failures (dropped/wedged streams: unavailable,
           // deadline-exceeded, cancelled, internal, network) are worth re-subscribing.
           // Terminal errors — permission-denied (signed out), failed-precondition
           // (missing index), invalid-argument, resource-exhausted (quota) — would just
           // reconnect a doomed listener forever, so we surface them and stop.
-          if (!isTransient(error)) {
-            console.error('useProviderOrders listener error (terminal):', error);
+          if (!isTransient(err)) {
+            console.error('useProviderOrders listener error (terminal):', err);
+            // Say which of the two it is: "sign out and back in" fixes a stale claim,
+            // and nothing the person on the device can do fixes a missing index.
+            setError(String(err?.code || '').includes('permission-denied')
+              ? 'No access to the order feed — sign out and back in to refresh your staff permissions.'
+              : `Order feed unavailable (${err?.code || 'unknown error'}).`);
             return;
           }
-          if (cancelled) return;
           attempt += 1;
           // A persistently-unavailable client is usually a wedged gRPC stream; toggling
           // the network once unsticks it without wiping the cache.
@@ -171,7 +193,7 @@ export function useProviderOrders(providerId: string | undefined, opts: Provider
       clearTimeout(retry);
       try { unsub(); } catch { /* already torn down */ }
     };
-  }, [providerId, statusesKey, createdAfter, limitTo]);
+  }, [statusesKey, limitTo]);
 
   // Orders with any live optimistic overlay applied (skipping ones the snapshot has
   // already caught up to, which are also pruned above).
@@ -184,5 +206,5 @@ export function useProviderOrders(providerId: string | undefined, opts: Provider
     });
   }, [orders, patches]);
 
-  return { orders: merged, loading, applyOptimistic, clearOptimistic };
+  return { orders: merged, loading, error, applyOptimistic, clearOptimistic };
 }
