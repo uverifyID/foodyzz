@@ -11,6 +11,8 @@
       "./withAndroidPathFix",
       "./withNotificationSounds",
       "./withFmtConstevalFix",
+      "./withPodsMinDeploymentTarget",
+      "./withUISceneLifecycle",
       "./withFirebaseAuthSwiftOptFix",
       [
         "expo-image-picker",
