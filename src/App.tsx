@@ -1,10 +1,10 @@
 import React, { useState, useEffect, Suspense, lazy } from 'react';
-import { BarChart3, Users, Users2, LayoutDashboard, LogOut, Settings, MessageSquare, Menu, X, Bike, Contact } from 'lucide-react';
+import { BarChart3, Users, Users2, LayoutDashboard, LogOut, Settings, MessageSquare, Menu, X, Bike, Contact, ShieldCheck } from 'lucide-react';
 import { onAuthStateChanged, signOut, signInWithEmailAndPassword, getMultiFactorResolver, multiFactor, User, MultiFactorResolver, MultiFactorError } from 'firebase/auth';
 import { auth, db, subscribeToGlobalConfig } from './firebase';
 import MfaChallenge from './components/auth/MfaChallenge';
 import MfaEnroll from './components/auth/MfaEnroll';
-import { collection, onSnapshot, query, orderBy, limit, doc, updateDoc, addDoc, writeBatch } from 'firebase/firestore';
+import { collection, onSnapshot, query, where, orderBy, limit, doc, updateDoc, addDoc, writeBatch } from 'firebase/firestore';
 import { DailyStats, ProviderPerformance, UserProfile, ProviderProfile, GlobalConfig, SupportMessage, RentalOrder, LogisticsConfig } from './types';
 
 // Code-split each tab so the heavy AnalyticsTab (recharts) and the other tabs are
@@ -17,8 +17,9 @@ const ChatManagerTab = lazy(() => import('./components/admin/ChatManagerTab'));
 const BikesTab = lazy(() => import('./components/admin/BikesTab'));
 const LicensesTab = lazy(() => import('./components/admin/LicensesTab'));
 const StoreTeamTab = lazy(() => import('./components/admin/StoreTeamTab'));
+const VerificationsTab = lazy(() => import('./components/admin/VerificationsTab'));
 
-type TabKey = 'analytics' | 'users' | 'ops' | 'bikes' | 'licenses' | 'teams' | 'settings' | 'chat';
+type TabKey = 'analytics' | 'users' | 'ops' | 'bikes' | 'verify' | 'licenses' | 'teams' | 'settings' | 'chat';
 
 // Shape of stats/platformCounts, maintained server-side by the Cloud Functions
 // order/user/provider triggers. All fields optional — the doc is built up by
@@ -352,6 +353,15 @@ export default function App() {
     ? Math.max(0, platformCounts.pendingLicenses)
     : customers.filter(c => c.driverLicense?.frontPath && !c.driverLicense?.reviewedAt).length;
 
+  // Customers waiting on a verification decision — the Verification nav badge. A
+  // small capped listener on a server-written field; only while signed in.
+  const [verifyQueueCount, setVerifyQueueCount] = useState(0);
+  useEffect(() => {
+    if (!user) return;
+    const q = query(collection(db, 'users'), where('verification.status', '==', 'in_review'), limit(10));
+    return onSnapshot(q, (snap) => setVerifyQueueCount(snap.size), () => setVerifyQueueCount(0));
+  }, [user]);
+
   // Active orders (not delivered/cancelled) from the aggregate, falling back to the
   // count derived from the orders listener when it's loaded / the doc is absent.
   const activeOrders = platformCounts?.ordersByStatus
@@ -478,6 +488,7 @@ export default function App() {
               { key: 'users'     as const, icon: <Users size={18}/>,    label: 'Customers' },
               { key: 'ops'       as const, icon: <LayoutDashboard size={18}/>, label: 'Rentals' },
               { key: 'bikes'     as const, icon: <Bike size={18}/>, label: 'Bikes' },
+              { key: 'verify'    as const, icon: <ShieldCheck size={18}/>, label: 'Verification', badge: verifyQueueCount },
               { key: 'licenses'  as const, icon: <Contact size={18}/>, label: 'Licenses', badge: pendingLicenseCount },
               { key: 'teams'     as const, icon: <Users2 size={18}/>, label: 'Store Teams' },
               { key: 'chat'      as const, icon: <MessageSquare size={18}/>, label: 'Chat Manager', badge: chatUnreadCount },
@@ -520,6 +531,7 @@ export default function App() {
         )}
         {activeTab === 'ops' && <OperationsTab logistics={logistics} />}
         {activeTab === 'bikes' && <BikesTab logistics={logistics} orders={orders} />}
+        {activeTab === 'verify' && <VerificationsTab />}
         {activeTab === 'licenses' && <LicensesTab customers={customers} />}
         {activeTab === 'teams' && <StoreTeamTab providers={providers} />}
         {activeTab === 'chat' && (

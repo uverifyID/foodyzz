@@ -58,6 +58,11 @@ export default function LicensesTab({ customers }: LicensesTabProps) {
         <p className="text-stone-500 text-sm font-bold uppercase font-mono">
           Manual review — approve a rider before their bike goes out
         </p>
+        <p className="text-stone-400 text-xs font-bold mt-1">
+          The fallback to the in-app ID check: approving a licence here also verifies the customer's identity, and an
+          approved proof of address verifies their current delivery address, for Rent and Rent to Buy. The sign-up
+          location is still checked in the Verification tab.
+        </p>
       </header>
 
       <div className="flex flex-wrap gap-2">

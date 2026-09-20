@@ -48,6 +48,7 @@ import {
 } from '../services/promos';
 import type { Bike, LogisticsConfig, PromoCampaign, RentalType } from '../types';
 import { useUserProfile } from '../context/UserProfileContext';
+import { rentalNeedsVerification, isVerificationRequired } from '../services/verification';
 import { useStripeReady } from '../context/StripeReadyContext';
 import { friendlyError, friendlyPaymentError, friendlyServerMessage, logHandledError } from '../services/errors';
 import {
@@ -482,6 +483,19 @@ export default function OrderWizard() {
   };
 
   // ── Submit ────────────────────────────────────────────────────────────────
+  const promptVerification = () => {
+    const inReview = userProfile?.verification?.status === 'in_review';
+    Alert.alert(
+      inReview ? 'Verification in review' : 'Verify your identity first',
+      inReview
+        ? 'Our team is reviewing your details. We will notify you as soon as you can rent — usually within a few hours.'
+        : 'Before we hand over a rental bike we confirm your ID, your address and that you signed up from your delivery address. It takes about 3 minutes.',
+      inReview
+        ? [{ text: 'OK' }, { text: 'View status', onPress: () => navigation.navigate('Verification') }]
+        : [{ text: 'Not now', style: 'cancel' }, { text: 'Verify now', onPress: () => navigation.navigate('Verification') }],
+    );
+  };
+
   const handleFinalize = async () => {
     // Never open a payment sheet before the real Stripe publishable key is live —
     // the StripeProvider mounts with a placeholder until it loads. The CTA is also
@@ -500,6 +514,14 @@ export default function OrderWizard() {
       return;
     }
     if (!selectedProviderId || !rentalType || !bikeModel || !quote) return;
+    // Rent and Rent to Buy need a verified identity, address and sign-up location.
+    // The server refuses the checkout regardless; this just sends the customer
+    // straight to the fix instead of a failed payment.
+    if (rentalNeedsVerification(rentalType) && config?.verification?.required === true
+        && userProfile?.verification?.status !== 'verified') {
+      promptVerification();
+      return;
+    }
     // Mirrors canProceed's step-6 gate — the disabled CTA is the real guard.
     if (!ackSafety || !ackTerms || !ackSafetyCourse || !completionIdValid) return;
 
@@ -678,6 +700,10 @@ export default function OrderWizard() {
       navigation.navigate('Main', { screen: 'My Rentals' });
     } catch (error: any) {
       logHandledError('checkout', error);
+      if (isVerificationRequired(error)) {
+        promptVerification();
+        return;
+      }
       // A code the backend refused (wrong type, expired, or already spent) has to come
       // off before a retry — otherwise every retry fails on the same coupon, and the
       // total on screen no longer matches what would be charged.

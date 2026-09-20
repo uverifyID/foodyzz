@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { View, Text, FlatList, TouchableOpacity, ActivityIndicator, Alert, Modal, TextInput, Linking, KeyboardAvoidingView, Platform, ScrollView, Keyboard, TouchableWithoutFeedback } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
-import { Building, Zap, Clock, MapPin, CheckCircle, X, Truck, RefreshCcw, Bike, Package, Phone, Power, Sun, User } from 'lucide-react-native';
+import { Building, Zap, Clock, MapPin, CheckCircle, X, Truck, RefreshCcw, Bike, Package, Phone, Power, Sun, User, ShieldCheck } from 'lucide-react-native';
 import { activateKeepAwakeAsync, deactivateKeepAwake } from 'expo-keep-awake';
 import { COLORS } from '../theme';
 import { db } from '../services/firebase';
@@ -20,6 +20,14 @@ export default function DispatchScreen() {
   const { top } = useSafeAreaInsets();
   const navigation = useNavigation();
   const functions = firebase.app().functions('us-central1');
+
+  // Customers waiting on a staff verification decision — badges the header shield.
+  // Server-written status, single-field equality, capped: usually reads nothing.
+  const [verifyQueue, setVerifyQueue] = useState(0);
+  useEffect(() => db.collection('users')
+    .where('verification.status', '==', 'in_review')
+    .limit(10)
+    .onSnapshot((snap) => setVerifyQueue(snap?.size ?? 0), () => setVerifyQueue(0)), []);
 
   // Shared hooks replace the per-screen config/provider/orders listener block.
   // Every Foodyzz order names its store at checkout, so the feed is simply this
@@ -223,6 +231,18 @@ export default function DispatchScreen() {
             </Text>
           </View>
           <View className="flex-row items-center gap-2">
+            <TouchableOpacity
+              onPress={() => (navigation as any).navigate('Verifications')}
+              className="p-2 bg-slate-950 border-2 border-slate-700 rounded-xl"
+              accessibilityLabel="Customer verifications"
+            >
+              <ShieldCheck size={14} color={verifyQueue > 0 ? '#86B54F' : '#94a3b8'} />
+              {verifyQueue > 0 && (
+                <View style={{ position: 'absolute', top: -6, right: -6, minWidth: 16, height: 16, borderRadius: 8, paddingHorizontal: 3, backgroundColor: '#ef4444', alignItems: 'center', justifyContent: 'center' }}>
+                  <Text style={{ color: '#fff', fontSize: 9, fontWeight: '900' }}>{verifyQueue > 9 ? '9+' : verifyQueue}</Text>
+                </View>
+              )}
+            </TouchableOpacity>
             <TouchableOpacity
               onPress={() => (navigation as any).navigate('Account')}
               className="p-2 bg-slate-950 border-2 border-slate-700 rounded-xl"

@@ -53,7 +53,14 @@
           "resizeMode": "contain",
           "backgroundColor": "#FFFFFF"
         }
-      ]
+      ],
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "Foodyzz checks your location once, while you are at your delivery address, to confirm where your bike will be delivered."
+        }
+      ],
+      "expo-web-browser"
     ],
     "newArchEnabled": false,
     "platforms": [

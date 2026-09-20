@@ -37,6 +37,9 @@ export interface UserProfile {
   selfie?: CustomerDocument;
   // NYC DeliverSafely bicycle safety course certificate id — see services/bikeSafety.
   bikeSafetyCompletionId?: string;
+  // Identity / address / sign-up location status that gates Rent and Rent to Buy.
+  // Server-derived (functions/src/customerVerification.ts); read-only to the app.
+  verification?: Verification;
   // Unique running number from "002", issued by the server once onboarded.
   // Read-only to the app (firestore.rules); printed on the worker ID badge.
   workerId?: string;
@@ -416,6 +419,15 @@ export interface CustomerDocument {
   reviewedAt?: string | null;
   reviewedBy?: string | null;
   rejectedReason?: string | null;
+}
+
+// users/{phone}.verification — each check's state and the overall one.
+export interface Verification {
+  status: 'action_required' | 'in_review' | 'verified';
+  identity: 'not_started' | 'in_progress' | 'failed' | 'in_review' | 'rejected' | 'verified';
+  address: 'waiting' | 'needs_document' | 'in_review' | 'rejected' | 'verified';
+  location: 'not_started' | 'too_far' | 'in_review' | 'rejected' | 'verified';
+  updatedAt?: string;
 }
 
 // Kept as an alias so existing driverLicense references stay valid.

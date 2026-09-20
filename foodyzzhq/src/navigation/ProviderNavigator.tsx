@@ -12,6 +12,7 @@ import AccountScreen from '../screens/AccountScreen';
 import ChatScreen from '../screens/ChatScreen';
 import HqChatScreen from '../screens/HqChatScreen';
 import SupportScreen from '../screens/SupportScreen';
+import VerificationsScreen from '../screens/VerificationsScreen';
 import { db } from '../services/firebase';
 import { COLORS } from '../theme';
 
@@ -118,6 +119,8 @@ export default function ProviderNavigator() {
       {/* Per-order 1:1 chat (order card → this) and the legacy provider↔HQ support thread. */}
       <Stack.Screen name="Chat" component={ChatScreen} />
       <Stack.Screen name="Support" component={SupportScreen} />
+      {/* Customer identity / address / location review queue (Dispatch header). */}
+      <Stack.Screen name="Verifications" component={VerificationsScreen} />
     </Stack.Navigator>
   );
 }

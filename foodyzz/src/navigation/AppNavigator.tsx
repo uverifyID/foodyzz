@@ -12,6 +12,7 @@ import OrdersScreen from '../screens/OrdersScreen';
 import ProfileScreen from '../screens/ProfileScreen';
 import OrderWizard from '../screens/OrderWizard';
 import ChatScreen from '../screens/ChatScreen';
+import VerificationScreen from '../screens/VerificationScreen';
 import { useUserProfile } from '../context/UserProfileContext';
 
 const Tab = createBottomTabNavigator();
@@ -115,6 +116,9 @@ export default function AppNavigator() {
           customer sees one chat design either way — only FoodyzzHQ sees the split. */}
       <Stack.Screen name="Support" component={ChatScreen} />
       <Stack.Screen name="OrderChat" component={ChatScreen} />
+      {/* Identity / address / sign-up location checks for Rent and Rent to Buy.
+          Opened from Account and from checkout when the server requires it. */}
+      <Stack.Screen name="Verification" component={VerificationScreen} />
     </Stack.Navigator>
   );
 }

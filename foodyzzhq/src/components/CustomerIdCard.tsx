@@ -16,7 +16,8 @@ import {
 } from 'react-native';
 import storage from '@react-native-firebase/storage';
 import * as Print from 'expo-print';
-import { CreditCard, CheckCircle, Clock, Send, Phone, MessageSquare, X, AlertTriangle, RefreshCw, XCircle, Printer } from 'lucide-react-native';
+import { CreditCard, CheckCircle, Clock, Send, Phone, MessageSquare, X, AlertTriangle, RefreshCw, XCircle, Printer, ShieldCheck, ChevronDown, ChevronUp } from 'lucide-react-native';
+import CustomerVerificationPanel from './CustomerVerificationPanel';
 import { db, auth, syncAdminClaim } from '../services/firebase';
 import {
   buildWorkerLabelHtml, imageAsDataUrl, isPrintCancelled, LABEL_WIDTH_PT, LABEL_HEIGHT_PT,
@@ -75,6 +76,7 @@ export default function CustomerIdCard({ order, onMessage }: Props) {
   // A second tap before the re-render would present a second print sheet.
   const printingRef = useRef(false);
   const [zoom, setZoom] = useState<string | null>(null);
+  const [showKyc, setShowKyc] = useState(false);
 
   useEffect(() => {
     if (!order?.customerPhone) return;
@@ -101,7 +103,11 @@ export default function CustomerIdCard({ order, onMessage }: Props) {
   //
   // The selfie is NOT required here: an order verified before the selfie was asked
   // for stays verified rather than falling back to "request documents".
-  const allVerified = licenseReady && addressReady && !!order.docsVerifiedAt;
+  // Verified in the customer app (Didit ID + address + sign-up location, see
+  // CustomerVerificationPanel). Server-written, so it can stand in for the
+  // uploaded pair: staff still confirm it per order, with one tap.
+  const kycVerified = profile?.verification?.status === 'verified';
+  const allVerified = !!order.docsVerifiedAt && ((licenseReady && addressReady) || kycVerified);
   // Rejected until the customer submits again — every submission clears
   // rejectedReason, so this flips back off by itself.
   const rejected = !allVerified && !!(license?.rejectedReason || address?.rejectedReason || selfie?.rejectedReason);
@@ -253,6 +259,22 @@ export default function CustomerIdCard({ order, onMessage }: Props) {
       setVerifying(false);
     }
     if (approved) await printLabel();
+  };
+
+  // A customer verified in-app has nothing to eyeball here; confirming stamps the
+  // same docsVerifiedAt the document approval does, then prints the badge.
+  const confirmVerifiedCustomer = async () => {
+    setVerifying(true);
+    let ok = false;
+    try {
+      await db.collection('orders').doc(order.id).update({ docsVerifiedAt: new Date().toISOString() });
+      ok = true;
+    } catch (e: any) {
+      Alert.alert('Could not confirm', e?.message || 'Please try again.');
+    } finally {
+      setVerifying(false);
+    }
+    if (ok && selfieReady) await printLabel();
   };
 
   // Rejecting is the mirror of approving: it clears the review stamps and writes the
@@ -511,6 +533,26 @@ export default function CustomerIdCard({ order, onMessage }: Props) {
         </View>
       ) : (
         <View>
+          {kycVerified && (
+            <View className="mb-3">
+              <View className="bg-emerald-50 border border-emerald-200 rounded-xl px-3 py-2 mb-2 flex-row items-center">
+                <ShieldCheck size={13} color="#059669" />
+                <Text className="ml-2 flex-1 text-[10px] font-bold text-emerald-700">
+                  Verified in the Foodyzz app — ID, address and sign-up location. No documents needed.
+                </Text>
+              </View>
+              <TouchableOpacity
+                onPress={confirmVerifiedCustomer}
+                disabled={verifying}
+                className="bg-[#86B54F] py-3 rounded-xl items-center justify-center border-2 border-black"
+                style={{ opacity: verifying ? 0.6 : 1 }}
+              >
+                {verifying ? <ActivityIndicator size="small" color="black" /> : (
+                  <Text className="text-black font-black uppercase text-[10px] tracking-widest">Confirm identity for this order</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          )}
           <Text className="text-[10px] font-bold text-slate-400 mb-3">
             {order.idRequestedAt
               ? 'Waiting for the customer to upload their driver license, proof of address and selfie. This card updates automatically.'
@@ -562,6 +604,19 @@ export default function CustomerIdCard({ order, onMessage }: Props) {
               </View>
             )}
           </TouchableOpacity>
+        </View>
+      )}
+
+      {/* In-app verification record (Didit result, IP, GPS distance) and its review. */}
+      {!!profile?.verification && (
+        <View className="mt-3 border-t border-slate-100 pt-3">
+          <TouchableOpacity onPress={() => setShowKyc((x) => !x)} className="flex-row items-center justify-between">
+            <Text className="text-[9px] font-black text-slate-500 uppercase tracking-widest">
+              App verification · {String(profile.verification.status).replace(/_/g, ' ')}
+            </Text>
+            {showKyc ? <ChevronUp size={14} color="#64748b" /> : <ChevronDown size={14} color="#64748b" />}
+          </TouchableOpacity>
+          {showKyc && <View className="mt-3"><CustomerVerificationPanel phone={order.customerPhone} /></View>}
         </View>
       )}
 

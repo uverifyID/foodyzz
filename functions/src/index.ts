@@ -24,6 +24,7 @@ import {Logging} from "@google-cloud/logging";
 import * as path from "path";
 import * as fs from "fs";
 import {setGlobalOptions} from "firebase-functions/v2";
+import {installVerificationHooks, assertVerifiedForRental, recomputeVerification, syncDocumentReviews} from "./customerVerification";
 
 initializeApp();
 const db = getFirestore();
@@ -1249,6 +1250,11 @@ export const createPaymentIntent = onCall(async (request) => {
   if (!["rent", "rentToBuy", "buy"].includes(rentalType)) {
     throw new HttpsError("invalid-argument", "Invalid rental type.");
   }
+  // Rent and Rent to Buy hand a bike to someone who pays over time, so they need a
+  // verified identity, address and sign-up location first (customerVerification.ts).
+  // Buy is paid in full up front and is not gated. A no-op until
+  // apiConfig/global.verification.required is switched on.
+  if (rentalType !== "buy") await assertVerifiedForRental(String(request.auth.token.phone_number || ""));
 
   try {
     const [config, logistics] = await Promise.all([getConfig(), getLogistics()]);
@@ -3043,6 +3049,13 @@ function escapeHtml(s: string): string {
   return s.replace(/[&<>"']/g, (c) => (
     {"&": "&amp;", "<": "&lt;", ">": "&gt;", "\"": "&quot;", "'": "&#39;"}[c] as string
   ));
+}
+
+// Label/value rows for an admin notice, escaped (values are customer-entered).
+function adminRowsTable(rows: [string, string][]): string {
+  return `<table style="width:100%;border-collapse:collapse;font-size:13px;color:#0f172a">${rows.map(([k, v]) =>
+    `<tr><td style="padding:6px 0;color:#64748b;vertical-align:top">${escapeHtml(k)}</td>` +
+    `<td style="padding:6px 0 6px 12px;text-align:right">${escapeHtml(v || "—")}</td></tr>`).join("")}</table>`;
 }
 
 // Sends a branded email to the order's customer, looked up from their profile.
@@ -5379,6 +5392,10 @@ export const onUserWriteLifecycleEmails = onDocumentWritten("users/{phone}", asy
   // with the above in practice — an upload clears rejectedReason, a rejection leaves
   // uploadedAt untouched — so a single write can never fire both.
   await notifyDocsRejected(event.params.phone, before, after);
+  // And the same review loop feeds the Rent / Rent to Buy verification record: the
+  // manual document process is the fallback to the Didit check.
+  await syncDocumentReviews(event.params.phone, before, after)
+    .catch((e) => console.error("verification sync from documents failed", e));
 
   // Worker ID — issued as soon as the rider is onboarded, and to anyone onboarded
   // before it existed on their next profile write. Gated on a plain field check, so
@@ -5387,6 +5404,45 @@ export const onUserWriteLifecycleEmails = onDocumentWritten("users/{phone}", asy
   if (after.onboarded === true && !WORKER_ID_PATTERN.test(String(after.workerId || ""))) {
     await ensureWorkerId(event.params.phone, event.data!.after.ref)
       .catch((e) => console.error("worker ID issue failed", e));
+  }
+
+  // A delivery address change moves address and location verification back to the
+  // customer (both are tied to the address they were checked for). Plain field
+  // comparison first; the hot-path write (badges, tokens) never gets past it.
+  if (before && after.verification &&
+      (before.address !== after.address || before.zipCode !== after.zipCode ||
+       before.lat !== after.lat || before.lng !== after.lng)) {
+    await recomputeVerification(event.params.phone)
+      .catch((e) => console.error("verification recompute on address change failed", e));
+  }
+
+  // Admin notice: a new customer finished onboarding. Same transition gate as the
+  // welcome below; newCustomerAlertSent guards a re-transition.
+  if (after.onboarded === true && before?.onboarded !== true && after.newCustomerAlertSent !== true && after.isAdmin !== true) {
+    try {
+      await sendEmail(
+        await getAdminNotifyEmail(),
+        `New Foodyzz customer: ${after.name || event.params.phone}`,
+        emailLayout({
+          brand: "Foodyzz Admin",
+          accent: "#0f172a",
+          title: "New customer onboarded",
+          intro: "A new customer just finished setting up their Foodyzz profile. They will verify their identity, " +
+            "address and location before their first Rent or Rent to Buy order.",
+          bodyHtml: adminRowsTable([
+            ["Name", String(after.name || "")],
+            ["Phone", event.params.phone],
+            ["Email", String(after.email || "")],
+            ["Delivery address", String(after.address || "")],
+            ["Zip", String(after.zipCode || "")],
+            ["Referred by", String(after.referredByManagerId || "")],
+          ]),
+        }),
+      );
+      await event.data!.after.ref.update({newCustomerAlertSent: true});
+    } catch (err) {
+      console.error("onUserWriteLifecycleEmails new-customer admin notice error:", err);
+    }
   }
 
   // Welcome to Foodyzz — fire only as onboarding COMPLETES (onboarded flips to
@@ -6222,3 +6278,24 @@ export const monitorFunctionErrors = onSchedule(
     }
   },
 );
+
+// ── Customer verification (Didit KYC, proof of address, sign-up location) ────
+// The module lives in ./customerVerification; it reaches mail and push through
+// these hooks rather than importing this file back.
+installVerificationHooks({
+  notifyCustomer: (phone, title, body, type) => notifyCustomer(phone, "", title, body, type),
+  emailAdmin: async (subject, title, intro, rows) => {
+    await sendEmail(await getAdminNotifyEmail(), subject, emailLayout({
+      brand: "FoodyzzHQ Admin",
+      accent: "#0f172a",
+      title: escapeHtml(title),
+      intro: escapeHtml(intro),
+      bodyHtml: adminRowsTable(rows),
+    }));
+  },
+});
+
+export {
+  startIdentityVerification, getVerificationStatus, recordVerificationLocation, submitVerificationDocuments,
+  diditWebhook, onDiditEventCreated, adminGetCustomerVerification, adminReviewCustomerVerification,
+} from "./customerVerification";

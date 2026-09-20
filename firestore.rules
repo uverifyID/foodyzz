@@ -126,11 +126,26 @@ service cloud.firestore {
     // Split out of a single `write` so the document-review carve-out below can use
     // diff(), which needs an existing resource.data and so is meaningless on create.
     match /users/{userId} {
+      // An identity document the customer writes is always a fresh, unreviewed
+      // submission (or left exactly as it was). Staff approval — reviewedAt — now
+      // also counts towards the Rent / Rent to Buy verification gate
+      // (customerVerification.ts syncDocumentReviews), so a customer must never be
+      // able to stamp it on their own documents.
+      function ownDocWriteOk(k) {
+        return !(k in request.resource.data)
+          || request.resource.data[k].get('reviewedAt', null) == null
+          || (k in resource.data && request.resource.data[k] == resource.data[k]);
+      }
+      function ownDocsOk() {
+        return ownDocWriteOk('driverLicense') && ownDocWriteOk('addressProof') && ownDocWriteOk('selfie');
+      }
       allow read: if request.auth != null;
       // workerId is issued by the server (onUserWriteLifecycleEmails) and printed on
       // the rider's badge, so the rider can never set or change it themselves.
+      // `verification` is the server-derived identity/address/location status that
+      // gates Rent and Rent to Buy (functions/src/customerVerification.ts) — same rule.
       allow create: if (request.auth != null && request.auth.token.phone_number == userId
-                        && !('workerId' in request.resource.data))
+                        && !request.resource.data.keys().hasAny(['workerId', 'verification']))
                     || isAdmin();
       allow delete: if (request.auth != null && request.auth.token.phone_number == userId)
                     || isAdmin();
@@ -144,7 +159,8 @@ service cloud.firestore {
       // Platform-wide rather than per-store: scoping to "a customer my store is
       // serving" would mean querying orders, and rules can only get() a known path.
       allow update: if (request.auth != null && request.auth.token.phone_number == userId
-                        && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['workerId']))
+                        && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['workerId', 'verification'])
+                        && ownDocsOk())
                     || isAdmin()
                     || (isHqStaff()
                         && request.resource.data.diff(resource.data).affectedKeys()

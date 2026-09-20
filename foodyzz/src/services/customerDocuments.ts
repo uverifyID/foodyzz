@@ -186,6 +186,32 @@ export const saveIdentitySetToProfile = async (paths: {
 };
 
 /**
+ * Record any subset of the documents in ONE write, each as a fresh unreviewed
+ * submission. Used by the verification screen, where the licence + selfie and the
+ * proof of address are submitted separately (see services/verification).
+ */
+export const saveDocumentsToProfile = async (
+  docs: Partial<Record<DocKind, { frontPath: string; backPath?: string }>>,
+): Promise<void> => {
+  const phone = auth().currentUser?.phoneNumber;
+  if (!phone) throw new Error('You must be signed in.');
+  const uploadedAt = new Date().toISOString();
+  const update: Record<string, CustomerDocument> = {};
+  for (const [kind, d] of Object.entries(docs)) {
+    if (!d) continue;
+    update[kind] = {
+      frontPath: d.frontPath,
+      ...(d.backPath ? { backPath: d.backPath } : {}),
+      uploadedAt,
+      reviewedAt: null,
+      reviewedBy: null,
+      rejectedReason: null,
+    };
+  }
+  await db.collection('users').doc(phone).set(update, { merge: true });
+};
+
+/**
  * Best-effort removal of document images that nothing points at any more — the
  * ones a submission replaced, or the uploads of a submission that failed. Never
  * throws: a leftover file costs a few hundred KB, a thrown error here would turn a

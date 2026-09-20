@@ -134,13 +134,17 @@ export default function ProfileScreen() {
     // Worker ID label (Zebra 3.5" × 2.25"). Only once FoodyzzHQ has verified the
     // licence, address and selfie — otherwise anyone could print a Foodyzz badge
     // carrying an unchecked photo — and the server has issued the worker ID.
-    const labelReady = areDocumentsVerified(profile) && !!profile?.workerId;
+    // A customer verified in-app (Didit) has a reviewed selfie but may have no
+    // licence photos on file — that counts too.
+    const idVerified = areDocumentsVerified(profile)
+        || (profile?.verification?.status === 'verified' && !!profile?.selfie?.reviewedAt);
+    const labelReady = idVerified && !!profile?.workerId;
     const handlePrintLabel = async () => {
         if (printingLabelRef.current) return;
         if (!labelReady) {
             Alert.alert(
                 'Not ready to print',
-                areDocumentsVerified(profile)
+                idVerified
                     ? 'Your worker ID is still being issued. Try again in a moment.'
                     : 'You can print your worker ID label once FoodyzzHQ has verified your driver license, proof of address and selfie.',
             );
@@ -420,6 +424,31 @@ export default function ProfileScreen() {
                         </View>
                     </View>
                 </View>
+
+                {/* Verification for Rent / Rent to Buy — live status from the server. */}
+                {(() => {
+                    const vs = profile?.verification?.status;
+                    const label = vs === 'verified' ? 'Verified' : vs === 'in_review' ? 'In review' : 'Action needed';
+                    const tone = vs === 'verified' ? 'text-emerald-600' : vs === 'in_review' ? 'text-amber-600' : 'text-red-600';
+                    return (
+                        <TouchableOpacity
+                            onPress={() => navigation.navigate('Verification')}
+                            className="bg-white border-2 border-black rounded-3xl p-5 mb-6 flex-row items-center"
+                            accessibilityRole="button"
+                            accessibilityLabel="Identity verification"
+                        >
+                            <ShieldCheck size={22} color="#000000" />
+                            <View className="ml-3 flex-1">
+                                <Text className="text-sm font-black text-black uppercase">Identity verification</Text>
+                                <Text className="text-[10px] font-bold text-slate-500 mt-0.5">
+                                    ID, address and sign-up location — needed to Rent or Rent to Buy
+                                </Text>
+                            </View>
+                            <Text className={`text-[10px] font-black uppercase mr-1 ${tone}`}>{label}</Text>
+                            <ChevronRight size={16} color="#94a3b8" />
+                        </TouchableOpacity>
+                    );
+                })()}
 
                 {/* Driver license, proof of address and selfie — scan ahead of time to
                     skip the ID check at rental. */}

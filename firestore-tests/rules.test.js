@@ -288,6 +288,25 @@ function ctx(env, phone) {
   await check("store staff CANNOT set a customer's workerId",
     assertFails(hqStaffCtx.doc(`users/${OTHER_PHONE}`).set({ workerId: "001" }, { merge: true })));
 
+  await check("owner CANNOT set their own verification status (server-derived)",
+    assertFails(owner.doc(`users/${OWNER_PHONE}`).set({ verification: { status: "verified" } }, { merge: true })));
+  await check("owner CANNOT create their doc carrying a verification status",
+    assertFails(env.authenticatedContext("new", { phone_number: "+15550009999" }).firestore()
+      .doc("users/+15550009999").set({ name: "Me", verification: { status: "verified" } })));
+  await check("store staff CANNOT set a customer's verification status",
+    assertFails(hqStaffCtx.doc(`users/${OTHER_PHONE}`).set({ verification: { status: "verified" } }, { merge: true })));
+  await check("owner can submit a fresh, unreviewed licence",
+    assertSucceeds(owner.doc(`users/${OWNER_PHONE}`).set(
+      { driverLicense: { frontPath: "f", backPath: "b", uploadedAt: "t", reviewedAt: null } }, { merge: true })));
+  await check("owner CANNOT approve their own licence (reviewedAt)",
+    assertFails(owner.doc(`users/${OWNER_PHONE}`).set(
+      { driverLicense: { frontPath: "f", backPath: "b", reviewedAt: "now" } }, { merge: true })));
+  await check("owner CANNOT approve their own proof of address or selfie",
+    assertFails(owner.doc(`users/${OWNER_PHONE}`).set(
+      { addressProof: { frontPath: "a", reviewedAt: "now" }, selfie: { frontPath: "s", reviewedAt: "now" } }, { merge: true })));
+  await check("nobody reads customerKyc from a client",
+    assertFails(owner.doc(`customerKyc/${OWNER_PHONE}`).get()));
+
   console.log("providers (cannot spoof another phone):");
   await check("cannot create a provider doc carrying ANOTHER phone",
     assertFails(owner.doc(`providers/14999999999_10001`).set({ phoneNumber: "14999999999", zipCode: "10001", onboarded: false })));
