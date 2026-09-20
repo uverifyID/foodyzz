@@ -327,6 +327,11 @@ function ctx(env, phone) {
     assertFails(anon.doc("messages/msg_2").set({ text: "x" })));
   await check("owner can archive ONLY their own user record",
     assertSucceeds(owner.doc(`archivedUsers/${OWNER_PHONE}`).set({ phoneNumber: OWNER_PHONE })));
+  // The delete flow archives then deletes. If anything after the archive fails —
+  // or the customer simply taps Delete again — the second run rewrites a doc that
+  // now exists, which is an update, not a create.
+  await check("owner can re-archive their own record (a retried deletion)",
+    assertSucceeds(owner.doc(`archivedUsers/${OWNER_PHONE}`).set({ phoneNumber: OWNER_PHONE, archivedAt: "again" })));
   await check("user CANNOT archive someone else's record",
     assertFails(other.doc(`archivedUsers/${OWNER_PHONE}`).set({ phoneNumber: OWNER_PHONE })));
 

@@ -17,7 +17,7 @@ import AddressAutocomplete from '../components/AddressAutocomplete';
 import IdentityDocumentsCard from '../components/IdentityDocumentsCard';
 import EmailConfirmField from '../components/EmailConfirmField';
 import { useUserProfile } from '../context/UserProfileContext';
-import { friendlyError, friendlyPaymentError } from '../services/errors';
+import { friendlyError, friendlyPaymentError, logHandledError } from '../services/errors';
 import { normalizeEmail } from '../services/emailVerification';
 import { pickDocumentImage, documentImageUrl, areDocumentsVerified } from '../services/customerDocuments';
 import { buildWorkerLabelHtml, imageAsDataUrl, isPrintCancelled, LABEL_WIDTH_PT, LABEL_HEIGHT_PT } from '../services/workerLabel';
@@ -333,7 +333,11 @@ export default function ProfileScreen() {
             // Sign out (+ reset Firestore so a fresh sign-in starts clean)
             await signOutClean();
         } catch (error) {
-            Alert.alert("Error", "Archive sequence failed.");
+            // This used to swallow the cause behind one fixed sentence, which is why
+            // a rules rejection on the archive write looked like an unexplained
+            // failure. Keep the reason.
+            logHandledError('deleteAccount', error);
+            Alert.alert('Could Not Delete Profile', friendlyError(error, 'We could not delete your profile. Please try again, or message support.'));
         }
     };
 

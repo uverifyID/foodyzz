@@ -290,9 +290,14 @@ service cloud.firestore {
     }
 
     // Archived users - self-only (account-deletion flow).
+    // update as well as create: the flow archives the profile and then deletes it,
+    // so a run that fails after the archive — or a customer who simply taps Delete
+    // twice — rewrites a doc that now exists. Create-only sent that second attempt
+    // to the default-deny below, and it surfaced as "Archive sequence failed" with
+    // the account still there. Same fix as archivedProviders below.
     match /archivedUsers/{userId} {
-      allow create: if request.auth != null
-                    && request.auth.token.phone_number == userId;
+      allow create, update: if request.auth != null
+                            && request.auth.token.phone_number == userId;
     }
 
     // Archived providers - self-only (provider account-deletion / "Purge HQ Record"
