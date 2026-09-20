@@ -301,7 +301,14 @@ export function deriveVerification(kyc: any, user: any, radiusMiles: number): Ve
   else if (ipNeedsReview(loc.ipLocation)) location = "in_review";
   else location = "verified";
 
-  const parts: string[] = [identity, address, location];
+  // Identity and sign-up location are the gate. Proof of address is advisory: it
+  // is only ever asked for when the ID and the delivery address disagree, and by
+  // then we already know who the customer is and that they are standing at the
+  // address the bike goes to. Blocking the rental on it stranded customers who
+  // had passed both real checks, so `address` is still derived and shown — staff
+  // can chase a document, and the panel reports it — but it does not hold up the
+  // hand-over either way.
+  const parts: string[] = [identity, location];
   let status: OverallState;
   if (parts.every((p) => p === "verified")) status = "verified";
   else if (parts.some((p) => ["not_started", "in_progress", "failed", "rejected", "needs_document", "too_far"].includes(p))) {

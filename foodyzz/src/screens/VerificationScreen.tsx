@@ -245,10 +245,10 @@ export default function VerificationScreen() {
     verified: ['ok', 'Identity verified.'],
   };
   const addrText: Record<string, [Tone, string]> = {
-    waiting: ['todo', "Once your ID is verified we check its address against your delivery address. If they don't match, you'll upload a proof of address."],
-    needs_document: ['todo', "The address on your ID doesn't match your delivery address. Upload a utility bill, bank statement or lease from the last 90 days showing your name and delivery address."],
-    in_review: ['wait', 'Our team is reviewing your proof of address.'],
-    rejected: ['warn', `Your proof of address was not accepted.${notes.address ? ` ${notes.address}` : ''} Please upload a different document.`],
+    waiting: ['todo', "Once your ID is verified we check its address against your delivery address. If they don't match we'll ask for a proof of address — optional, and it won't hold up your rental."],
+    needs_document: ['todo', "The address on your ID doesn't match your delivery address. You can send a utility bill, bank statement or lease from the last 90 days showing your name and delivery address. This one is optional — you can rent without it."],
+    in_review: ['wait', 'Our team is reviewing your proof of address. You can rent while it is with them.'],
+    rejected: ['warn', `Your proof of address was not accepted.${notes.address ? ` ${notes.address}` : ''} You can send a different document, or leave it — it won't hold up your rental.`],
     verified: ['ok', 'Address verified.'],
   };
   const locText: Record<string, [Tone, string]> = {

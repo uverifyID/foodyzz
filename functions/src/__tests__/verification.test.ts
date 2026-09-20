@@ -55,7 +55,21 @@ describe('deriveVerification', () => {
     }, user, 0.25);
     expect(v.address).toBe('needs_document');
     expect(v.location).toBe('in_review');
-    expect(v.status).toBe('action_required');
+    // The foreign IP is what holds this one, not the address: a document the
+    // customer has not been asked for never decides the overall status.
+    expect(v.status).toBe('in_review');
+  });
+
+  test('proof of address never holds up the rental', () => {
+    // The ID is from another ZIP, so a document is asked for. Identity and the
+    // sign-up location are both settled, which is the whole gate — the customer
+    // can take the bike, and staff can still chase the document afterwards.
+    const v = cv.deriveVerification({
+      didit: { status: 'Approved', idZip: '07030' },
+      location: { forAddress: key, distanceMiles: 0.1 },
+    }, user, 0.25);
+    expect(v).toMatchObject({ identity: 'verified', location: 'verified', address: 'needs_document' });
+    expect(v.status).toBe('verified');
   });
 
   test('results recorded for an older address stop applying', () => {
@@ -75,10 +89,12 @@ describe('deriveVerification', () => {
     };
     expect(cv.deriveVerification(k, user, 0.25)).toMatchObject({ identity: 'verified', address: 'verified' });
 
-    // Asking for a proof of address: the ID's matching ZIP is no longer an answer.
+    // Asking for a proof of address: the ID's matching ZIP is no longer an answer,
+    // so the customer is asked for a document — but the rental is not held for it.
+    // Identity and sign-up location are both settled, so the status stays verified.
     const askedAddr = { ...k, requests: { address: { requestedAt: '2026-09-10T00:00:00.000Z' } } };
     expect(cv.deriveVerification(askedAddr, user, 0.25))
-      .toMatchObject({ identity: 'verified', address: 'needs_document', status: 'action_required' });
+      .toMatchObject({ identity: 'verified', address: 'needs_document', status: 'verified' });
 
     // Asking for the ID again puts the whole ID check back on the customer — and
     // with it the address, which that ID was what proved.
@@ -352,7 +368,9 @@ describe('customer verification flow', () => {
 
     const r: any = await callable(fns.adminRequestCustomerVerification,
       { phone: PHONE, target: 'address', orderId: 'order_v1', note: 'The ID is from another ZIP.' }, staffAuth());
-    expect(r.verification).toMatchObject({ address: 'needs_document', status: 'action_required' });
+    // The document is now on the customer's list, but it does not un-verify them:
+    // the ID and the sign-up location are what the hand-over is gated on.
+    expect(r.verification).toMatchObject({ address: 'needs_document', status: 'verified' });
     expect(notify).toHaveBeenCalledWith(PHONE, expect.stringMatching(/proof of address/i),
       expect.stringContaining('another ZIP'), 'ID_DOCS_REQUESTED');
     // Stamped on the rental the operator was looking at.
