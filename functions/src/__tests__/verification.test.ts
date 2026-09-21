@@ -149,7 +149,7 @@ describe('customer verification flow', () => {
   beforeEach(async () => {
     await clearFirestore();
     resetDiditConfigCache();
-    await seedConfig({ verification: { required: true, radiusMiles: 0.25, legacy: false } });
+    await seedConfig({ verification: { required: true, radiusMiles: 0.25 } });
     await db.doc('apiConfigSecret/didit').set({ apiKey: 'k', workflowId: WORKFLOW, webhookSecret: 'whsec' });
     await seedCustomer();
     notify = jest.spyOn(cv.verificationHooks, 'notifyCustomer').mockResolvedValue(undefined);
@@ -218,88 +218,6 @@ describe('customer verification flow', () => {
       expect(cv.versionAtLeast('2.9.9', '3.0.0')).toBe(false);
       expect(cv.versionAtLeast('10.0.0', '3.0.0')).toBe(true);
     });
-  });
-
-  // TEMPORARY — delete with the `legacy` block in customerVerification.ts.
-  describe('while the old app is still in production (legacy)', () => {
-    const OTHER = '+14025559999';
-
-    test('a pilot number matches however it was typed into the console', async () => {
-      for (const typed of ['+14025550000', ' +1 402 555 0000', '1-402-555-0000', 14025550000]) {
-        await db.doc('apiConfig/global').set(
-          { verification: { required: true, legacy: true, pilotPhones: [typed] } }, { merge: true });
-        await expect(cv.assertVerifiedForRental(PHONE, '3.0.0'))
-          .rejects.toThrow(/verification_required/);
-      }
-    });
-
-    test('an unlisted customer checks out as before, a pilot phone is gated', async () => {
-      await db.doc('apiConfig/global').set(
-        { verification: { required: true, legacy: true, pilotPhones: [PHONE] } }, { merge: true });
-      await expect(cv.assertVerifiedForRental(OTHER, '3.0.0')).resolves.toBeUndefined();
-      await expect(cv.assertVerifiedForRental(PHONE, '3.0.0')).rejects.toThrow(/verification_required/);
-    });
-
-    test('an old client is not told to update either - it just checks out', async () => {
-      await db.doc('apiConfig/global').set(
-        { verification: { required: true, legacy: true, pilotPhones: [PHONE] } }, { merge: true });
-      await expect(cv.assertVerifiedForRental(OTHER, '2.1.0')).resolves.toBeUndefined();
-    });
-
-    test('legacy is assumed until it is explicitly cleared', async () => {
-      // update() replaces the whole map; a merged set() would keep the seeded flag.
-      await db.doc('apiConfig/global').update({ verification: { required: true } });
-      await expect(cv.assertVerifiedForRental(PHONE)).resolves.toBeUndefined();
-    });
-
-    test('clearing legacy gates everyone, pilot list or not', async () => {
-      await db.doc('apiConfig/global').set(
-        { verification: { required: true, legacy: false, pilotPhones: [] } }, { merge: true });
-      await expect(cv.assertVerifiedForRental(OTHER, '3.0.0')).rejects.toThrow(/verification_required/);
-      await expect(cv.assertVerifiedForRental(PHONE, '3.0.0')).rejects.toThrow(/verification_required/);
-    });
-
-    test('the app is told whether the gate applies to this caller', async () => {
-      await db.doc('apiConfig/global').set(
-        { verification: { required: true, legacy: true, pilotPhones: [PHONE] } }, { merge: true });
-      const mine: any = await callable(fns.getVerificationStatus, {}, phoneAuth(PHONE));
-      expect(mine.required).toBe(true);
-      const theirs: any = await callable(fns.getVerificationStatus, {}, phoneAuth(OTHER));
-      expect(theirs.required).toBe(false);
-    });
-  });
-
-  test('Didit approval + matching ID ZIP + GPS at the address → verified', async () => {
-    const start: any = await callable(fns.startIdentityVerification, {}, phoneAuth(PHONE));
-    expect(start).toMatchObject({ sessionId: 'sess-1', sessionToken: 'tok' });
-    expect(createSession).toHaveBeenCalledWith(expect.anything(), PHONE);
-    expect((await getDoc(`users/${PHONE}`)).verification.identity).toBe('in_progress');
-
-    // Webhook: records the delivery; the trigger re-reads the decision.
-    const body = { event_id: 'evt-1', session_id: 'sess-1', status: 'Approved', vendor_data: PHONE, webhook_type: 'status.updated' };
-    const res: any = { statusCode: 0, status(c: number) { this.statusCode = c; return this; }, send() { return this; }, json() { return this; } };
-    await (fns.diditWebhook as any)({
-      method: 'POST', rawBody: Buffer.from(JSON.stringify(body)),
-      headers: { 'x-signature-v2': diditSignature(body, 'whsec'), 'x-timestamp': String(Math.floor(Date.now() / 1000)) },
-    }, res);
-    expect(res.statusCode).toBe(200);
-    await cv.processDiditEvent('evt-1', await getDoc('diditEvents/evt-1'));
-
-    const kyc = await getDoc(`customerKyc/${PHONE}`);
-    expect(kyc.didit).toMatchObject({ status: 'Approved', idZip: '10118', firstName: 'Ada', portraitPath: `customerKyc/${PHONE}/portrait.jpg` });
-    // The liveness selfie becomes the (pre-reviewed) selfie the worker badge prints.
-    expect((await getDoc(`users/${PHONE}`)).selfie).toMatchObject({
-      frontPath: expect.stringMatching(new RegExp(`^selfies/\\${PHONE}/didit-`)), reviewedBy: 'didit',
-    });
-    let v = (await getDoc(`users/${PHONE}`)).verification;
-    expect(v).toMatchObject({ identity: 'verified', address: 'verified', location: 'not_started', status: 'action_required' });
-
-    const loc: any = await callable(fns.recordVerificationLocation, { ...NEARBY, accuracyM: 12 }, phoneAuth(PHONE));
-    expect(loc).toEqual({ location: 'verified', status: 'verified' });
-    v = (await getDoc(`users/${PHONE}`)).verification;
-    expect(v.status).toBe('verified');
-    expect(notify).toHaveBeenCalledWith(PHONE, expect.stringMatching(/verified/i), expect.any(String), 'VERIFICATION_COMPLETE');
-    await expect(cv.assertVerifiedForRental(PHONE)).resolves.toBeUndefined();
   });
 
   test('too far from the address blocks until staff override it', async () => {

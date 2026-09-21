@@ -8,9 +8,8 @@
 // The result lands on users/{phone}.emailVerified, which firestore.rules keeps in
 // the same server-only set as `workerId` and `verification` — so a confirmed email
 // means the code really was received at that address. The plain `email` field
-// stays client-writable: the app in the stores writes it during onboarding, and
-// locking it now would break that build (see the `legacy` note in
-// customerVerification.ts).
+// stays client-writable: the app writes it itself during onboarding and on a
+// profile edit, after the code for it has been confirmed here.
 import {onCall, HttpsError, CallableRequest} from "firebase-functions/v2/https";
 import {getFirestore} from "firebase-admin/firestore";
 import * as crypto from "crypto";

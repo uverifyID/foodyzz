@@ -82,10 +82,8 @@ export interface Verification {
 }
 
 // ── Config ──────────────────────────────────────────────────────────────────
-// apiConfig/global.verification = { required?: boolean, radiusMiles?: number }.
-// `required` is OFF until set: the checkout gate must not go live before a customer
-// app that can complete verification is in the stores, or every Rent checkout on
-// the old build would be refused with no way forward.
+// apiConfig/global.verification = { required?: boolean, radiusMiles?: number,
+// minAppVersion?: string }. `required` is OFF unless explicitly true.
 export const DEFAULT_RADIUS_MILES = 0.25;
 export const MAX_DIDIT_SESSIONS_PER_DAY = 5;
 export const MAX_LOCATION_CHECKS_PER_DAY = 20;
@@ -129,32 +127,13 @@ export function versionAtLeast(a: unknown, b: string): boolean {
   return true;
 }
 
-/** Digits only, so a number typed into the console with spaces, dashes or no `+` still matches. */
-const phoneKey = (v: unknown) => String(v ?? "").replace(/\D/g, "");
-
-// ── TEMPORARY: while the old app is still in production ─────────────────────
-// `legacy: true` means 2.1.0 is still out there. That build has no Verification
-// screen, so a `verification_required` refusal dead-ends it — the customer sees a
-// raw "verification_required" alert and has no way to resolve it. While legacy is
-// set, the gate therefore applies ONLY to `pilotPhones`, so the feature can be
-// tested end to end against real production data without touching anyone else.
-//
-// It defaults to ON: a missing flag means nobody has confirmed the old build is
-// gone, and the safe reading of that is to leave existing customers alone.
-//
-// Setting `legacy: false` is the go-live switch — and the cue to DELETE this
-// block: drop `legacy` and `pilotPhones` from apiConfig/global.verification,
-// drop the `phone` parameter here and at its four call sites, and restore
-// `required: c.required === true`.
-export async function verificationConfig(phone?: string):
+/** Checkout gate settings from apiConfig/global.verification. */
+export async function verificationConfig():
   Promise<{ required: boolean; radiusMiles: number; minAppVersion: string }> {
   const c: any = (await db().doc("apiConfig/global").get()).data()?.verification ?? {};
   const r = Number(c.radiusMiles);
-  const legacy = c.legacy !== false;
-  const pilot: string[] = Array.isArray(c.pilotPhones) ? c.pilotPhones.map(phoneKey) : [];
-  const caller = phoneKey(phone);
   return {
-    required: c.required === true && (!legacy || (!!caller && pilot.includes(caller))),
+    required: c.required === true,
     radiusMiles: Number.isFinite(r) && r > 0 ? r : DEFAULT_RADIUS_MILES,
     minAppVersion: parseVersion(c.minAppVersion) ? String(c.minAppVersion) : MIN_VERIFIED_APP_VERSION,
   };
@@ -378,7 +357,7 @@ const LABEL: Record<string, string> = {identity: "Identity", address: "Proof of 
 export async function recomputeVerification(
   phone: string, opts: { quietRejections?: boolean } = {},
 ): Promise<Verification | null> {
-  const [kSnap, uSnap, cfg] = await Promise.all([kycRef(phone).get(), userRef(phone).get(), verificationConfig(phone)]);
+  const [kSnap, uSnap, cfg] = await Promise.all([kycRef(phone).get(), userRef(phone).get(), verificationConfig()]);
   const user = uSnap.data();
   if (!user) return null;
   if (!kSnap.exists && !user.verification) return null;
@@ -435,7 +414,7 @@ export async function recomputeVerification(
  * build too old to show the Verification screen is told to update instead.
  */
 export async function assertVerifiedForRental(phone: string, appVersion?: unknown): Promise<void> {
-  const cfg = await verificationConfig(phone);
+  const cfg = await verificationConfig();
   if (!cfg.required) return;
   const v = await recomputeVerification(phone);
   if (v?.status !== "verified") {
@@ -568,7 +547,7 @@ export const getVerificationStatus = onCall(async (request) => {
     }
   }
   const v = await recomputeVerification(phone);
-  const cfg = await verificationConfig(phone);
+  const cfg = await verificationConfig();
   return {
     verification: v ?? {status: "action_required", identity: "not_started", address: "waiting", location: "not_started"},
     required: cfg.required,
@@ -859,7 +838,7 @@ export async function syncDocumentReviews(phone: string, before: any, after: any
 export const adminGetCustomerVerification = onCall(async (request) => {
   assertStaff(request);
   const phone = phoneArg(request.data);
-  const [kSnap, uSnap, cfg] = await Promise.all([kycRef(phone).get(), userRef(phone).get(), verificationConfig(phone)]);
+  const [kSnap, uSnap, cfg] = await Promise.all([kycRef(phone).get(), userRef(phone).get(), verificationConfig()]);
   const user: any = uSnap.data();
   if (!user) throw new HttpsError("not-found", "Customer not found.");
   const k: any = kSnap.data() ?? {};

@@ -154,7 +154,8 @@ service cloud.firestore {
       // gates Rent and Rent to Buy (functions/src/customerVerification.ts) — same rule.
       // `emailVerified` says a confirmation code really was received at that address
       // (functions/src/emailVerification.ts); self-stamping it would void the check.
-      // The plain `email` field stays writable — the build in the stores sets it.
+      // The plain `email` field stays writable — the app sets it on onboarding and
+      // profile edit, once emailVerification.ts has confirmed the code for it.
       allow create: if (request.auth != null && request.auth.token.phone_number == userId
                         && !request.resource.data.keys().hasAny(['workerId', 'verification', 'emailVerified']))
                     || isAdmin();

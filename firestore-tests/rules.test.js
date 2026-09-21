@@ -23,10 +23,10 @@ const OTHER_PHONE = "+14155550000";
 // store's doc id — which is exactly the case the old ownsPhoneField-only rules
 // could not express.
 const MEMBER_PHONE = "+14155559999";
-// A customer on the build that is live in the stores (2.1.0), with documents staff
+// A customer on the build that is live in the stores (3.0.0), with documents staff
 // have already approved. Rules deploy to everyone at once, so every write that
-// build makes has to keep working against them — see the 2.1.0 section below.
-const LEGACY_PHONE = "+14025551990";
+// build makes has to keep working against them — see the 3.0.0 section below.
+const LIVE_PHONE = "+14025551990";
 const ZIP = "11743";
 const PROVIDER_ID = `${OWNER_DIGITS}_${ZIP}`;
 
@@ -82,12 +82,12 @@ function ctx(env, phone) {
       phoneNumber: OTHER_PHONE, name: "Cust", address: "1 Main St",
       driverLicense: { frontPath: "dl.jpg" }, addressProof: { frontPath: "ap.jpg" },
     });
-    // A 2.1.0 customer whose documents staff have ALREADY approved. reviewedAt is
+    // A 3.0.0 customer whose documents staff have ALREADY approved. reviewedAt is
     // set, which is what makes this the interesting case: request.resource.data on
     // an update is the post-merge document, so every write this build makes now
     // carries a non-null reviewedAt past ownDocsOk().
-    await db.doc(`users/${LEGACY_PHONE}`).set({
-      phoneNumber: LEGACY_PHONE, name: "Legacy", address: "9 Old Rd", zipCode: ZIP, onboarded: true,
+    await db.doc(`users/${LIVE_PHONE}`).set({
+      phoneNumber: LIVE_PHONE, name: "Live", address: "9 Old Rd", zipCode: ZIP, onboarded: true,
       driverLicense: { frontPath: "dl.jpg", backPath: "dlb.jpg", uploadedAt: "t", reviewedAt: "2026-09-01T00:00:00.000Z", reviewedBy: "staff", rejectedReason: null },
       addressProof: { frontPath: "ap.jpg", uploadedAt: "t", reviewedAt: "2026-09-01T00:00:00.000Z", reviewedBy: "staff", rejectedReason: null },
       selfie: { frontPath: "sf.jpg", uploadedAt: "t", reviewedAt: "2026-09-01T00:00:00.000Z", reviewedBy: "staff", rejectedReason: null },
@@ -349,43 +349,53 @@ function ctx(env, phone) {
   await check("user CANNOT archive someone else's record",
     assertFails(other.doc(`archivedUsers/${OWNER_PHONE}`).set({ phoneNumber: OWNER_PHONE })));
 
-  console.log("2.1.0 — the build live in the stores, against the new rules:");
-  const legacy = ctx(env, LEGACY_PHONE);
+  console.log("3.0.0 — the build live in the stores, against the new rules:");
+  const live = ctx(env, LIVE_PHONE);
   const newSignup = ctx(env, "+14025551991");
   // AuthScreen: first sign-in creates the profile.
-  await check("2.1.0 can still create its profile on first sign-in",
+  await check("3.0.0 can still create its profile on first sign-in",
     assertSucceeds(newSignup.doc("users/+14025551991")
       .set({ phoneNumber: "+14025551991", onboarded: false, createdAt: "now" })));
   // OnboardingWizard: merge of the profile fields it collects.
-  await check("2.1.0 can still finish onboarding",
-    assertSucceeds(legacy.doc(`users/${LEGACY_PHONE}`).set(
-      { phoneNumber: LEGACY_PHONE, name: "Legacy", email: "a@b.co", address: "9 Old Rd", zipCode: ZIP, lat: 1, lng: 2, onboarded: true },
+  await check("3.0.0 can still finish onboarding",
+    assertSucceeds(live.doc(`users/${LIVE_PHONE}`).set(
+      { phoneNumber: LIVE_PHONE, name: "Live", email: "a@b.co", address: "9 Old Rd", zipCode: ZIP, lat: 1, lng: 2, onboarded: true },
       { merge: true })));
   // ProfileScreen edit — the case ownDocsOk has to let through: approved documents
   // are untouched by this write, but they are still in the post-merge document.
-  await check("2.1.0 can still edit a profile whose documents are approved",
-    assertSucceeds(legacy.doc(`users/${LEGACY_PHONE}`).update(
-      { name: "Legacy Two", email: "c@d.co", address: "10 Old Rd", zipCode: ZIP, bikeSafetyCompletionId: "123456-234555" })));
+  await check("3.0.0 can still edit a profile whose documents are approved",
+    assertSucceeds(live.doc(`users/${LIVE_PHONE}`).update(
+      { name: "Live Two", email: "c@d.co", address: "10 Old Rd", zipCode: ZIP, bikeSafetyCompletionId: "123456-234555" })));
   // Background writes: badge count, push token, sound preference, support read stamp.
-  await check("2.1.0 can still write its badge count and push token",
-    assertSucceeds(legacy.doc(`users/${LEGACY_PHONE}`).update({ badgeCount: 0, fcmToken: "tok" })));
+  await check("3.0.0 can still write its badge count and push token",
+    assertSucceeds(live.doc(`users/${LIVE_PHONE}`).update({ badgeCount: 0, fcmToken: "tok" })));
+  await check("3.0.0 can still write its sound preference, support read stamp and Completion ID",
+    assertSucceeds(live.doc(`users/${LIVE_PHONE}`).set(
+      { notificationSoundEnabled: false, supportLastReadAt: "now", bikeSafetyCompletionId: "123456-234556" },
+      { merge: true })));
+  // VerificationScreen: licence + selfie submitted together, proof of address apart.
+  await check("3.0.0 can submit licence and selfie without proof of address",
+    assertSucceeds(live.doc(`users/${LIVE_PHONE}`).set({
+      driverLicense: { frontPath: "f2", backPath: "b2", uploadedAt: "t3", reviewedAt: null, reviewedBy: null, rejectedReason: null },
+      selfie: { frontPath: "s2", uploadedAt: "t3", reviewedAt: null, reviewedBy: null, rejectedReason: null },
+    }, { merge: true })));
   // customerDocuments: a re-upload of one document, always unreviewed.
-  await check("2.1.0 can still re-upload a single document",
-    assertSucceeds(legacy.doc(`users/${LEGACY_PHONE}`).set(
+  await check("3.0.0 can still re-upload a single document",
+    assertSucceeds(live.doc(`users/${LIVE_PHONE}`).set(
       { driverLicense: { frontPath: "dl2.jpg", uploadedAt: "t2", reviewedAt: null, reviewedBy: null, rejectedReason: null } },
       { merge: true })));
   // ...and the full identity set, which is what its ID card submits.
-  await check("2.1.0 can still submit the whole identity set",
-    assertSucceeds(legacy.doc(`users/${LEGACY_PHONE}`).set({
+  await check("3.0.0 can still submit the whole identity set",
+    assertSucceeds(live.doc(`users/${LIVE_PHONE}`).set({
       driverLicense: { frontPath: "f", backPath: "b", uploadedAt: "t", reviewedAt: null, reviewedBy: null, rejectedReason: null },
       addressProof: { frontPath: "a", uploadedAt: "t", reviewedAt: null, reviewedBy: null, rejectedReason: null },
       selfie: { frontPath: "s", uploadedAt: "t", reviewedAt: null, reviewedBy: null, rejectedReason: null },
     }, { merge: true })));
   // ProfileScreen delete: archive, then delete. Both halves, in order.
-  await check("2.1.0 can still archive and delete its own profile",
-    assertSucceeds(legacy.doc(`archivedUsers/${LEGACY_PHONE}`).set({ phoneNumber: LEGACY_PHONE, archivedAt: "now" })));
-  await check("2.1.0 can still delete its user record",
-    assertSucceeds(legacy.doc(`users/${LEGACY_PHONE}`).delete()));
+  await check("3.0.0 can still archive and delete its own profile",
+    assertSucceeds(live.doc(`archivedUsers/${LIVE_PHONE}`).set({ phoneNumber: LIVE_PHONE, archivedAt: "now" })));
+  await check("3.0.0 can still delete its user record",
+    assertSucceeds(live.doc(`users/${LIVE_PHONE}`).delete()));
 
   console.log("default-deny (unlisted server-only collections):");
   await check("providerPerformance is denied to clients",
