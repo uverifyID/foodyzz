@@ -246,25 +246,30 @@ function isExpoToken(token: unknown): token is string {
   return typeof token === "string" && token.startsWith("ExponentPushToken[");
 }
 
-// Every device to notify for a store. A store can now have several members (see
-// StoreMember), each signed in on their own phone, so a single token field would
-// silently deliver a new-order alert to whichever device registered last. The
-// apps write `fcmTokens` (arrayUnion); the legacy scalar `fcmToken` is still
-// included so a member who has not updated the app yet keeps getting pushes.
-// Deduped — during the transition one device writes BOTH fields.
+// Every device to notify for a store. A store can have several members (see
+// StoreMember), each signed in on their own phone, and FoodyzzHQ registers each
+// one in `fcmTokens` (arrayUnion). Deduped in case a token was added twice.
 function providerPushTokens(data: any): string[] {
-  const all = [
-    ...(Array.isArray(data?.fcmTokens) ? data.fcmTokens : []),
-    data?.fcmToken,
-  ].filter(isExpoToken);
+  const all: string[] = (Array.isArray(data?.fcmTokens) ? data.fcmTokens : []).filter(isExpoToken);
   return [...new Set(all)];
+}
+
+/**
+ * A customer is one account on one device: the Foodyzz app keeps its token in
+ * the scalar `fcmToken` on users/{phone}.
+ * @param {any} data users/{phone} document data.
+ * @return {string[]} Zero or one Expo push token.
+ */
+function customerPushTokens(data: any): string[] {
+  return isExpoToken(data?.fcmToken) ? [data.fcmToken] : [];
 }
 
 // Removes tokens Expo rejected from the docs that hold them. Grouped by document
 // so a store with several dead devices costs one read + one write, not N of each.
-// The read is needed to know whether the legacy scalar `fcmToken` is one of the
-// dead tokens — blindly deleting it would unregister a LIVE device belonging to
-// another member of the same store. Never throws; cleanup is best-effort.
+// Handles both shapes: a store's `fcmTokens` array and a customer's scalar
+// `fcmToken`. The read is needed to know whether the scalar is one of the dead
+// tokens — the app may have registered a new one since the send, and blindly
+// deleting it would silence a live device. Never throws; cleanup is best-effort.
 async function clearDeadTokens(dead: Array<{ ref: DocumentReference; token: string }>): Promise<void> {
   const byPath = new Map<string, { ref: DocumentReference; tokens: Set<string> }>();
   dead.forEach(({ref, token}) => {
@@ -484,9 +489,7 @@ async function notifySupportUser(userPhone: string, userRole: "customer" | "prov
       ref = db.collection("users").doc(userPhone);
       const userSnap = await ref.get();
       refData = userSnap.data();
-      // Customers are single-account; providerPushTokens still applies because it
-      // just unions the (absent) array with the scalar token.
-      tokens = providerPushTokens(refData);
+      tokens = customerPushTokens(refData);
       soundName = customerSoundName(refData);
     } else if (userRole === "provider") {
       // providers.phoneNumber is stored DIGITS-ONLY (e.g. "15551234567"), but a
@@ -5020,7 +5023,7 @@ export const bulkBroadcast = onCall({memory: "512MiB", timeoutSeconds: 300}, asy
     snap.forEach((d: any) => {
       scanned++;
       // A provider store can hold several member devices; reach all of them.
-      const toks = providerPushTokens(d.data());
+      const toks = col === "users" ? customerPushTokens(d.data()) : providerPushTokens(d.data());
       if (toks.length) {
         withToken++;
         toks.forEach((tok) => messages.push({to: tok, title, body, data: {...data, type: "BULK", target, timestamp: Date.now().toString()}, ref: d.ref}));

@@ -20,10 +20,10 @@ beforeEach(async () => {
 
 describe('onOrderCreatedNotify (broadcast fan-out)', () => {
   test('notifies only onboarded, active, in-zip providers', async () => {
-    await seedProvider('14025551111_11743', { fcmToken: 'ExponentPushToken[A]' });                         // eligible
-    await seedProvider('14025552222_11743', { fcmToken: 'ExponentPushToken[B]', isBlocked: true });        // blocked
-    await seedProvider('14025553333_11743', { fcmToken: 'ExponentPushToken[C]', servicesActive: false });  // paused
-    await seedProvider('14025554444_10001', { fcmToken: 'ExponentPushToken[D]', zipCode: '10001' });       // other zip
+    await seedProvider('14025551111_11743', { fcmTokens: ['ExponentPushToken[A]'] });                         // eligible
+    await seedProvider('14025552222_11743', { fcmTokens: ['ExponentPushToken[B]'], isBlocked: true });        // blocked
+    await seedProvider('14025553333_11743', { fcmTokens: ['ExponentPushToken[C]'], servicesActive: false });  // paused
+    await seedProvider('14025554444_10001', { fcmTokens: ['ExponentPushToken[D]'], zipCode: '10001' });       // other zip
 
     const expo = spyExpo();
     const order = { id: 'b1', providerId: 'broadcast', zipCode: ZIP, status: 'requested', createdAt: new Date().toISOString() };
@@ -36,7 +36,7 @@ describe('onOrderCreatedNotify (broadcast fan-out)', () => {
   });
 
   test('direct order pings only the assigned provider with DIRECT_ORDER', async () => {
-    await seedProvider('14025551111_11743', { fcmToken: 'ExponentPushToken[A]' });
+    await seedProvider('14025551111_11743', { fcmTokens: ['ExponentPushToken[A]'] });
     const expo = spyExpo();
     const order = { id: 'd1', providerId: '14025551111_11743', zipCode: ZIP, status: 'requested', createdAt: new Date().toISOString() };
     await triggerCreated(fns.onOrderCreatedNotify, 'orders/d1', order, { orderId: 'd1' });
@@ -54,7 +54,7 @@ describe('onOrderCreatedNotify (broadcast fan-out)', () => {
     const anchorLat = 40.0, anchorLng = -73.0;
     for (let i = 1; i <= 30; i++) {
       await seedProvider(`1402555${1000 + i}_11743`, {
-        fcmToken: `ExponentPushToken[P${i}]`,
+        fcmTokens: [`ExponentPushToken[P${i}]`],
         lat: anchorLat + i * 0.01,
         lng: anchorLng,
       });
@@ -81,7 +81,7 @@ describe('onOrderCreatedNotify (broadcast fan-out)', () => {
 
 describe('onCustomerMessageSent', () => {
   test('customer message notifies the assigned provider', async () => {
-    await seedProvider('14025551111_11743', { fcmToken: 'ExponentPushToken[A]' });
+    await seedProvider('14025551111_11743', { fcmTokens: ['ExponentPushToken[A]'] });
     await seedOrder('o1', { providerId: '14025551111_11743', customerName: 'Cust' });
     const expo = spyExpo();
 
@@ -97,7 +97,7 @@ describe('onCustomerMessageSent', () => {
   });
 
   test('provider-role message does not fire this trigger', async () => {
-    await seedProvider('14025551111_11743', { fcmToken: 'ExponentPushToken[A]' });
+    await seedProvider('14025551111_11743', { fcmTokens: ['ExponentPushToken[A]'] });
     await seedOrder('o2', { providerId: '14025551111_11743' });
     const expo = spyExpo();
     await triggerCreated(fns.onCustomerMessageSent, 'messages/m2', { senderRole: 'provider', orderId: 'o2', text: 'hi' }, { messageId: 'm2' });
@@ -107,9 +107,34 @@ describe('onCustomerMessageSent', () => {
   });
 });
 
+describe('autoSupportResponder reply push', () => {
+  const ask = (userPhone: string, userRole: string) => ({
+    userPhone, userRole, userName: 'X', senderPhone: userPhone, text: 'how do I cancel?', timestamp: new Date().toISOString(),
+  });
+
+  test('a customer is reached on the fcmToken the Foodyzz app writes', async () => {
+    await seedUser('+15550000011', { fcmToken: 'ExponentPushToken[cust]' });
+    const expo = spyExpo();
+    await triggerCreated(fns.autoSupportResponder, 'supportMessages/s1', ask('+15550000011', 'customer'), { messageId: 's1' });
+    const msgs = expo.messages();
+    expo.restore();
+    expect(msgs.filter(m => m.data?.type === 'ADMIN_SUPPORT_REPLY').map(m => m.to)).toEqual(['ExponentPushToken[cust]']);
+  });
+
+  test('a store is reached on every device in fcmTokens', async () => {
+    await seedProvider('14025551111_11743', { fcmTokens: ['ExponentPushToken[A]', 'ExponentPushToken[B]'] });
+    const expo = spyExpo();
+    await triggerCreated(fns.autoSupportResponder, 'supportMessages/s2', ask('+14025551111', 'provider'), { messageId: 's2' });
+    const msgs = expo.messages();
+    expo.restore();
+    expect(msgs.filter(m => m.data?.type === 'ADMIN_SUPPORT_REPLY').map(m => m.to).sort())
+      .toEqual(['ExponentPushToken[A]', 'ExponentPushToken[B]']);
+  });
+});
+
 describe('onOrderCancelledNotifyProvider', () => {
   test('status → cancelled notifies the assigned provider', async () => {
-    await seedProvider('14025551111_11743', { fcmToken: 'ExponentPushToken[A]' });
+    await seedProvider('14025551111_11743', { fcmTokens: ['ExponentPushToken[A]'] });
     const expo = spyExpo();
     const before = { providerId: '14025551111_11743', status: 'confirmed' };
     const after = { providerId: '14025551111_11743', status: 'cancelled' };
@@ -228,7 +253,7 @@ describe('notifyDocsRejected (piggybacked on onUserWriteLifecycleEmails)', () =>
 
   test('re-uploading after a rejection notifies the store, not the customer', async () => {
     await seedUser(phone, { fcmToken: 'ExponentPushToken[cust]', name: 'Cust' });
-    await seedProvider('14025551111_11743', { fcmToken: 'ExponentPushToken[store]' });
+    await seedProvider('14025551111_11743', { fcmTokens: ['ExponentPushToken[store]'] });
     await seedOrder('order_r1', { customerPhone: phone, providerId: '14025551111_11743', status: 'confirmed', idRequestedAt: '2026-07-01T00:00:00.000Z' });
     const expo = spyExpo();
     await triggerWritten(fns.onUserWriteLifecycleEmails, `users/${phone}`,

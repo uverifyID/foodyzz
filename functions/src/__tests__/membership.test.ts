@@ -293,11 +293,12 @@ describe('multi-device push (one store, several members)', () => {
     expect((await getDoc(`providers/${STORE}`)).badgeCount).toBe(4);
   });
 
-  test('a device still on the old build keeps receiving, and is not double-sent', async () => {
-    // During rollout one device writes both fields; the union must dedupe.
+  test('a store is reached through fcmTokens only, each device once', async () => {
+    // Registration uses arrayUnion, but a stray duplicate must still send once, and
+    // a scalar left on a store doc is not a registration.
     await seedProvider(STORE, {
-      fcmToken: 'ExponentPushToken[LEGACY]',
-      fcmTokens: ['ExponentPushToken[LEGACY]', 'ExponentPushToken[NEW]'],
+      fcmToken: 'ExponentPushToken[STALE]',
+      fcmTokens: ['ExponentPushToken[NEW]', 'ExponentPushToken[NEW]'],
     });
     const expo = spyExpo();
     await triggerCreated(fns.onOrderCreatedNotify, 'orders/d2',
@@ -306,13 +307,11 @@ describe('multi-device push (one store, several members)', () => {
     const msgs = expo.messages();
     expo.restore();
 
-    expect(msgs.map((m) => m.to).sort())
-      .toEqual(['ExponentPushToken[LEGACY]', 'ExponentPushToken[NEW]']);
+    expect(msgs.map((m) => m.to)).toEqual(['ExponentPushToken[NEW]']);
   });
 
   test('a dead token is pruned without unregistering the store\'s other devices', async () => {
     await seedProvider(STORE, {
-      fcmToken: 'ExponentPushToken[LIVE]',
       fcmTokens: ['ExponentPushToken[LIVE]', 'ExponentPushToken[DEAD]'],
     });
     const spy = jest.spyOn(global as any, 'fetch').mockImplementation(async (_url: any, init: any) => {
@@ -333,9 +332,6 @@ describe('multi-device push (one store, several members)', () => {
 
     const after = await getDoc(`providers/${STORE}`);
     expect(after.fcmTokens).toEqual(['ExponentPushToken[LIVE]']);
-    // The legacy scalar belongs to the LIVE device here — clearing it (as the old
-    // blunt cleanup did) would have silenced a working phone.
-    expect(after.fcmToken).toBe('ExponentPushToken[LIVE]');
   });
 });
 

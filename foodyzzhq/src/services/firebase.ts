@@ -33,7 +33,6 @@ if (process.env.EXPO_PUBLIC_USE_EMULATOR === '1') {
 }
 
 export const ACTIVE_PROVIDER_ID_KEY = 'active_provider_id';
-const LEGACY_ACTIVE_ZIP_KEY = 'active_provider_zip';
 
 /**
  * Resolve the active store's document id.
@@ -47,45 +46,16 @@ const LEGACY_ACTIVE_ZIP_KEY = 'active_provider_zip';
  * Kept as a bare AsyncStorage read: it is called on every screen mount and on
  * every foreground, so it must not touch the network or the auth SDK.
  */
-export const getActiveProviderId = async (): Promise<string | null> => {
-  const stored = await ReactNativeAsyncStorage.getItem(ACTIVE_PROVIDER_ID_KEY);
-  if (stored) return stored;
-  return migrateLegacyActiveStore();
-};
+export const getActiveProviderId = (): Promise<string | null> =>
+  ReactNativeAsyncStorage.getItem(ACTIVE_PROVIDER_ID_KEY);
 
-/**
- * One-shot upgrade path for installs that predate ACTIVE_PROVIDER_ID_KEY.
- *
- * Those devices hold only the doc-key SUFFIX under `active_provider_zip`, which
- * is meaningless without the phone that was signed in. Recompose the id the old
- * way, persist it, and drop the legacy key. Without this every already-signed-in
- * provider would look store-less on first launch after the update and be signed
- * out by App's reinstall guard.
- *
- * Purely local — no network, no writes beyond AsyncStorage.
- */
-const migrateLegacyActiveStore = async (): Promise<string | null> => {
-  const zip = await ReactNativeAsyncStorage.getItem(LEGACY_ACTIVE_ZIP_KEY);
-  if (!zip) return null;
-  const user = auth().currentUser;
-  const cleanPhone = user?.phoneNumber?.replace(/\D/g, '') || user?.email?.split('@')[0] || '';
-  if (!cleanPhone) return null; // auth not resolved yet; retry on the next call
-  const providerId = `${cleanPhone}_${zip}`;
-  await setActiveProviderId(providerId);
-  return providerId;
-};
-
-/**
- * Persist the active store. Always removes the legacy zip key so a later call to
- * migrateLegacyActiveStore can't resurrect a stale store after a switch.
- */
+/** Persist the active store. */
 export const setActiveProviderId = async (providerId: string): Promise<void> => {
   await ReactNativeAsyncStorage.setItem(ACTIVE_PROVIDER_ID_KEY, providerId);
-  await ReactNativeAsyncStorage.removeItem(LEGACY_ACTIVE_ZIP_KEY);
 };
 
 export const clearActiveProviderId = async (): Promise<void> => {
-  await ReactNativeAsyncStorage.multiRemove([ACTIVE_PROVIDER_ID_KEY, LEGACY_ACTIVE_ZIP_KEY]);
+  await ReactNativeAsyncStorage.removeItem(ACTIVE_PROVIDER_ID_KEY);
 };
 
 /**
@@ -253,11 +223,9 @@ const PUSH_TOKEN_KEY = 'expo_push_token';
 /**
  * Register this device to receive the active store's pushes.
  *
- * Writes to `fcmTokens` (arrayUnion) rather than the old scalar `fcmToken`,
- * because a store can now have several members: a single field meant whichever
- * device registered last silently became the only one receiving order alerts.
- * The server sends to the union of both fields, so devices still on the old
- * build keep working (see providerPushTokens in functions/src/index.ts).
+ * Writes to `fcmTokens` (arrayUnion), because a store can have several members,
+ * each on their own device. The server sends to every token in it (see
+ * providerPushTokens in functions/src/index.ts).
  *
  * Only ever an UPDATE: a merge-set onto a missing doc is a CREATE, which the
  * providers rule rejects (nothing to authorize against), so a missing store is
@@ -321,11 +289,7 @@ export const releaseProviderDevice = async (providerId?: string | null): Promise
     const work = (async () => {
       const snap = await ref.get();
       if (!snap.exists) return;
-      const update: Record<string, any> = { fcmTokens: firestore.FieldValue.arrayRemove(token) };
-      // Clear the legacy scalar too, but only when it is THIS device's token — on
-      // a store shared with someone still on the old build it may well be theirs.
-      if (snap.data()?.fcmToken === token) update.fcmToken = firestore.FieldValue.delete();
-      await ref.update(update);
+      await ref.update({ fcmTokens: firestore.FieldValue.arrayRemove(token) });
     })().catch((e) => { if (__DEV__) console.warn('releaseProviderDevice write failed:', e?.message); });
     await Promise.race([work, new Promise((resolve) => setTimeout(resolve, 4000))]);
   } catch (error) {

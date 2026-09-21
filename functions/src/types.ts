@@ -60,11 +60,6 @@ export interface ProviderProfile {
   // the provider is the merchant of record and remits it. 0 / unset = no tax.
   chargesSalesTax?: boolean;
   salesTaxRate?: number;
-  // LEGACY single-device push token. A store can now have several members, each
-  // on their own device, so the current apps write `fcmTokens` instead. Kept and
-  // still delivered to so devices running an older build keep receiving pushes;
-  // see providerPushTokens().
-  fcmToken?: string;
   // Every registered device for this store (one per signed-in member). Written
   // with arrayUnion by the client; dead tokens are pruned with arrayRemove when
   // Expo reports DeviceNotRegistered.

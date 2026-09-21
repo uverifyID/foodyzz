@@ -85,11 +85,7 @@ export interface ProviderProfile {
   // (faster) window. chargesPriorityFee=false / priorityPrice=0 → no surcharge.
   chargesPriorityFee?: boolean;
   priorityPrice?: number | null;
-  // LEGACY single-device push token, still delivered to for devices on an older
-  // build. A store can have several members now, so this app writes fcmTokens.
-  fcmToken?: string;
-  // One push token per signed-in member device. The server sends to the union of
-  // this and the legacy fcmToken.
+  // One push token per signed-in member device. The server sends to all of them.
   fcmTokens?: string[];
   slotCapacity?: number; // Max concurrent orders per time slot
   isBlocked?: boolean; // Administrative block flag
